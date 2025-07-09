@@ -1,0 +1,74 @@
+name: api
+services:
+  enggine:
+    build:
+      dockerfile: Dockerfile
+      context: ./enggine
+    env_file:
+      - .env
+    restart: always
+    networks:
+      - backend
+    volumes:
+        - ./maxapp-logs:/www/nodeapp/logs/
+    expose:
+      - "3000"
+      - "8081"
+    ports:
+      - "0.0.0.0:3000:3000"
+      - "0.0.0.0:8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    volumes:
+      - "./db:/var/lib/mysql"
+    environment:
+      - MYSQL_ROOT_PASSWORD=DiGaspol@1234
+      - MYSQL_USER=api
+      - MYSQL_PASSWORD=Gaspol@1234
+      - MYSQL_DATABASE=api
+    image: mysql:8.4
+    restart: always
+    networks:
+      - backend
+    ports:
+      - "0.0.0.0:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 3s
+      retries: 10
+  web:
+    image: caddy:2-alpine
+    restart: always
+    volumes:
+      - "./caddy/Caddyfile:/etc/caddy/Caddyfile"
+      - "./caddy/data:/data"
+      - "./web:/usr/share/caddy"
+    networks:
+      - backend
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:9090:9090"
+  minio:
+    image: quay.io/minio/minio
+    command: server /data --console-address ":9090"
+    environment:
+      MINIO_ROOT_USER: maxapps
+      MINIO_ROOT_PASSWORD: Assetku@321
+      MINIO_API_CORS_ALLOW_ORIGIN: '*'
+      MINIO_BROWSER_REDIRECT: true
+    volumes:
+      - './s3:/data'
+    expose:
+      - 9090
+    restart: always
+    networks:
+      - backend
+volumes:
+  mysql:
+    external: false
+networks:
+  backend:
+    driver: bridge
