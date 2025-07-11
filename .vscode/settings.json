@@ -1,0 +1,17 @@
+{
+    "typescript.preferences.includePackageJsonAutoImports": "on",
+    "typescript.suggest.autoImports": true,
+    "debug.allowBreakpointsEverywhere": true,
+    "debug.console.closeOnEnd": false,
+    "debug.console.fontSize": 12,
+    "debug.console.lineHeight": 1.2,
+    "debug.internalConsoleOptions": "openOnSessionStart",
+    "debug.openDebug": "openOnDebugBreak",
+    "debug.showBreakpointsInOverviewRuler": true,
+    "debug.showInlineBreakpointCandidates": true,
+    "files.autoSave": "onFocusChange",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit"
+    }
+}
