@@ -43,6 +43,9 @@ COPY --chown=nestjs:nodejs seeders ./seeders
 # Create public directory for PDF files
 RUN mkdir -p public/pdf && chown -R nestjs:nodejs public
 
+COPY --chown=nestjs:nodejs entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Switch to non-root user
 USER nestjs
 
@@ -53,5 +56,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node healthcheck.js
 
-# Start the application
-CMD ["node", "dist/main"] 
+# Start pakai entrypoint script
+CMD ["sh", "/app/entrypoint.sh"] 
