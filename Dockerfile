@@ -39,6 +39,7 @@ COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --chown=nestjs:nodejs config ./config
 COPY --chown=nestjs:nodejs migrations ./migrations
 COPY --chown=nestjs:nodejs seeders ./seeders
+COPY --chown=nestjs:nodejs .sequelizerc /app/.sequelizerc
 
 # Create public directory for PDF files
 RUN mkdir -p public/pdf && chown -R nestjs:nodejs public
