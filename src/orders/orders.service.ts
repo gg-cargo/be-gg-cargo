@@ -10,6 +10,8 @@ import { CreateOrderDto, CreateOrderPieceDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
 import { TrackingHelper } from './helpers/tracking.helper';
 import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
+import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
+import { Op, fn, col, literal } from 'sequelize';
 
 @Injectable()
 export class OrdersService {
@@ -91,8 +93,6 @@ export class OrdersService {
                         order_id: order.id,
                         order_shipment_id: shipment.id,
                         piece_id: pieceId,
-                        nama_barang: piece.nama_barang,
-                        qty: piece.qty,
                         berat: piece.berat,
                         panjang: piece.panjang,
                         lebar: piece.lebar,
@@ -231,6 +231,179 @@ export class OrdersService {
                 no_tracking: noTracking,
                 url,
             },
+        };
+    }
+
+    async addOrderHistory(orderId: number, dto: CreateOrderHistoryDto) {
+        // 1. Pastikan order ada
+        const order = await this.orderModel.findByPk(orderId, { raw: true });
+        if (!order) throw new NotFoundException('Order tidak ditemukan');
+
+        // 2. Simpan history baru, isi field NOT NULL dari order jika tidak diisi user
+        const history = await this.orderHistoryModel.create({
+            order_id: orderId,
+            status: dto.status,
+            provinsi: (dto as any).provinsi || order.provinsi_pengirim || '-',
+            kota: (dto as any).kota || order.kota_pengirim || '-',
+            remark: (dto as any).keterangan || '-',
+            created_at: new Date(),
+            updated_at: new Date(),
+        });
+
+        return {
+            message: 'Riwayat tracking berhasil ditambahkan',
+            data: history,
+        };
+    }
+
+    async listOrders(userId: number) {
+        // Ambil orders milik user, join ke order_shipments, hitung total koli, hanya field tertentu
+        const orders = await this.orderModel.findAll({
+            where: { order_by: userId },
+            include: [
+                {
+                    model: this.orderShipmentModel,
+                    as: 'shipments',
+                    attributes: [],
+                },
+            ],
+            attributes: [
+                'id',
+                'no_tracking',
+                'nama_pengirim',
+                'nama_penerima',
+                'layanan',
+                'payment_status',
+                'status',
+                'id_kontrak',
+                'created_at',
+                [fn('SUM', col('shipments.qty')), 'total_koli'],
+            ],
+            group: ['Order.id'],
+            order: [['created_at', 'DESC']],
+            raw: true,
+        });
+        return {
+            message: 'Data order berhasil diambil',
+            data: orders,
+        };
+    }
+
+    async getDashboardStatistics(userId: number) {
+        // Gunakan single query dengan aggregation untuk efisiensi
+        const currentDate = new Date();
+        const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+        // Single query dengan conditional aggregation
+        const result = await this.orderModel.findOne({
+            where: { order_by: userId },
+            attributes: [
+                [fn('COUNT', col('id')), 'total_shipment'],
+                [fn('SUM', literal(`CASE WHEN status = 'On Going' THEN 1 ELSE 0 END`)), 'on_going'],
+                [fn('SUM', literal(`CASE WHEN status = 'On Delivery' THEN 1 ELSE 0 END`)), 'on_delivery'],
+                [fn('SUM', literal(`CASE WHEN status = 'Completed' THEN 1 ELSE 0 END`)), 'completed'],
+                [fn('SUM', literal(`CASE WHEN status = 'Canceled' THEN 1 ELSE 0 END`)), 'canceled'],
+                [fn('SUM', literal(`CASE WHEN payment_status = 'completed' THEN 1 ELSE 0 END`)), 'payment_completed'],
+                [fn('SUM', literal(`CASE WHEN payment_status = 'pending' THEN 1 ELSE 0 END`)), 'payment_pending'],
+                // Monthly statistics
+                [fn('SUM', literal(`CASE WHEN created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_total'],
+                [fn('SUM', literal(`CASE WHEN status = 'On Going' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_on_going'],
+                [fn('SUM', literal(`CASE WHEN status = 'Completed' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_completed'],
+                [fn('SUM', literal(`CASE WHEN status = 'Canceled' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_canceled'],
+            ],
+            raw: true,
+        }) as any;
+
+        const monthNames = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+
+        const payload = {
+            total_shipment: parseInt(result?.total_shipment) || 0,
+            on_going: parseInt(result?.on_going) || 0,
+            on_delivery: parseInt(result?.on_delivery) || 0,
+            completed: parseInt(result?.completed) || 0,
+            canceled: parseInt(result?.canceled) || 0,
+            payment_completed: parseInt(result?.payment_completed) || 0,
+            payment_pending: parseInt(result?.payment_pending) || 0,
+            monthly: {
+                month: monthNames[currentDate.getMonth()],
+                total: parseInt(result?.monthly_total) || 0,
+                on_going: parseInt(result?.monthly_on_going) || 0,
+                completed: parseInt(result?.monthly_completed) || 0,
+                canceled: parseInt(result?.monthly_canceled) || 0,
+            }
+        };
+
+        return {
+            message: 'Data statistik berhasil diambil',
+            data: payload,
+        };
+    }
+
+    async getReorderData(orderId: number, userId: number) {
+        // Ambil data order beserta pieces
+        const order = await this.orderModel.findOne({
+            where: {
+                id: orderId,
+                order_by: userId // Pastikan user hanya bisa reorder order miliknya
+            },
+            include: [
+                {
+                    model: this.orderShipmentModel,
+                    as: 'shipments',
+                    attributes: ['qty', 'berat', 'panjang', 'lebar', 'tinggi'],
+                },
+            ],
+            raw: true,
+            nest: true,
+        });
+
+        if (!order) {
+            throw new NotFoundException('Order tidak ditemukan atau tidak memiliki akses');
+        }
+
+        // Transform data untuk response reorder
+        const reorderData = {
+            nama_pengirim: order.nama_pengirim,
+            alamat_pengirim: order.alamat_pengirim,
+            provinsi_pengirim: order.provinsi_pengirim,
+            kota_pengirim: order.kota_pengirim,
+            kecamatan_pengirim: order.kecamatan_pengirim,
+            kelurahan_pengirim: order.kelurahan_pengirim,
+            kodepos_pengirim: order.kodepos_pengirim,
+            no_telepon_pengirim: order.no_telepon_pengirim,
+            email_pengirim: order.email_pengirim,
+
+            nama_penerima: order.nama_penerima,
+            alamat_penerima: order.alamat_penerima,
+            provinsi_penerima: order.provinsi_penerima,
+            kota_penerima: order.kota_penerima,
+            kecamatan_penerima: order.kecamatan_penerima,
+            kelurahan_penerima: order.kelurahan_penerima,
+            kodepos_penerima: order.kodepos_penerima,
+            no_telepon_penerima: order.no_telepon_penerima,
+            email_penerima: order.email_penerima,
+
+            layanan: order.layanan,
+            asuransi: order.asuransi === 1,
+            harga_barang: order.harga_barang,
+            nama_barang: order.nama_barang,
+
+            pieces: (order as any).pieces?.map(piece => ({
+                qty: piece.qty,
+                berat: piece.berat,
+                panjang: piece.panjang,
+                lebar: piece.lebar,
+                tinggi: piece.tinggi,
+            })) || [],
+        };
+
+        return {
+            message: 'Data reorder berhasil diambil',
+            data: reorderData,
         };
     }
 
