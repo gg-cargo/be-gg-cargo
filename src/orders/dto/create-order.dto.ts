@@ -9,9 +9,6 @@ export enum LayananType {
 }
 
 export class CreateOrderPieceDto {
-    @IsString()
-    @IsNotEmpty()
-    nama_barang: string;
 
     @IsNumber()
     @IsPositive()
@@ -44,6 +41,7 @@ export class CreateOrderDto {
     @IsString() @IsNotEmpty() kelurahan_pengirim: string;
     @IsString() @IsNotEmpty() kodepos_pengirim: string;
     @IsString() @IsNotEmpty() no_telepon_pengirim: string;
+    @IsString() @IsOptional() email_pengirim: string;
 
     // Data penerima
     @IsString() @IsNotEmpty() nama_penerima: string;
@@ -54,6 +52,7 @@ export class CreateOrderDto {
     @IsString() @IsNotEmpty() kelurahan_penerima: string;
     @IsString() @IsNotEmpty() kodepos_penerima: string;
     @IsString() @IsNotEmpty() no_telepon_penerima: string;
+    @IsString() @IsOptional() email_penerima: string;
 
     // Layanan dan asuransi
     @IsEnum(LayananType)
@@ -66,6 +65,44 @@ export class CreateOrderDto {
     @IsOptional()
     @IsPositive()
     harga_barang?: number;
+
+    @IsString()
+    @IsOptional()
+    nama_barang?: string;
+
+    @IsString()
+    @IsOptional()
+    no_referensi?: string;
+
+    // surat jalan
+    @IsString()
+    @IsOptional()
+    SJName?: string;
+
+    // surat jalan no telepon
+    @IsString()
+    @IsOptional()
+    SJPhone?: string;
+
+    // surat jalan alamat
+    @IsString()
+    @IsOptional()
+    SJAddress?: string;
+
+    // surat jalan kota
+    @IsString()
+    @IsOptional()
+    SJCity?: string;
+
+    // provinsi
+    @IsString()
+    @IsOptional()
+    SJProvince?: string;
+
+    // dokumen po
+    @IsString()
+    @IsOptional()
+    dokumen_po?: string;
 
     // Detail paket/koli
     @IsArray()

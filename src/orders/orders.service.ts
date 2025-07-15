@@ -45,6 +45,7 @@ export class OrdersService {
             // 1. Simpan ke tabel orders
             const order = await this.orderModel.create({
                 no_tracking: noTracking,
+                //pengirim
                 nama_pengirim: createOrderDto.nama_pengirim,
                 alamat_pengirim: createOrderDto.alamat_pengirim,
                 provinsi_pengirim: createOrderDto.provinsi_pengirim,
@@ -53,6 +54,9 @@ export class OrdersService {
                 kelurahan_pengirim: createOrderDto.kelurahan_pengirim,
                 kodepos_pengirim: createOrderDto.kodepos_pengirim,
                 no_telepon_pengirim: createOrderDto.no_telepon_pengirim,
+                email_pengirim: createOrderDto.email_pengirim,
+
+                //penerima
                 nama_penerima: createOrderDto.nama_penerima,
                 alamat_penerima: createOrderDto.alamat_penerima,
                 provinsi_penerima: createOrderDto.provinsi_penerima,
@@ -61,35 +65,57 @@ export class OrdersService {
                 kelurahan_penerima: createOrderDto.kelurahan_penerima,
                 kodepos_penerima: createOrderDto.kodepos_penerima,
                 no_telepon_penerima: createOrderDto.no_telepon_penerima,
+                email_penerima: createOrderDto.email_penerima,
+
+                //barang
+                nama_barang: createOrderDto.nama_barang,
                 layanan: createOrderDto.layanan,
+                no_referensi: createOrderDto.no_referensi,
                 asuransi: createOrderDto.asuransi ? 1 : 0,
                 harga_barang: createOrderDto.harga_barang || 0,
+
+                //surat jalan
+                SJName: createOrderDto.SJName,
+                SJPhone: createOrderDto.SJPhone,
+                SJAddress: createOrderDto.SJAddress,
+                SJCity: createOrderDto.SJCity,
+                SJProvince: createOrderDto.SJProvince,
+
                 status: 'Order Created',
                 created_by: userId,
                 order_by: userId,
             }, { transaction });
 
-            // 2. Simpan ke tabel order_shipments
-            const shipment = await this.orderShipmentModel.create({
-                order_id: order.id,
-                total_koli: shipmentData.totalKoli,
-                total_berat: shipmentData.totalBerat,
-                total_volume: shipmentData.totalVolume,
-                berat_volume: shipmentData.beratVolume,
-                qty: shipmentData.totalKoli,
-                berat: shipmentData.totalBerat,
-                panjang: shipmentData.totalPanjang,
-                lebar: shipmentData.totalLebar,
-                tinggi: shipmentData.totalTinggi,
-                created_by: userId,
-            }, { transaction });
+            // 2. Simpan ke tabel order_shipments dan order_pieces secara batch
+            let shipmentGlobalCounter = 1;
+            let pieceGlobalCounter = 1;
+            const shipmentsToCreate: Partial<OrderShipment>[] = [];
+            const piecesToCreate: Partial<OrderPiece>[] = [];
 
-            // 3. Simpan ke tabel order_pieces
-            let pieceCounter = 1;
-            const pieces = await Promise.all(
-                createOrderDto.pieces.map(piece => {
-                    const pieceId = `P${order.id}-${pieceCounter++}`;
-                    return this.orderPieceModel.create({
+            for (const piece of createOrderDto.pieces) {
+                // Siapkan data shipment
+                const shipmentData = {
+                    order_id: order.id,
+                    qty: piece.qty,
+                    berat: piece.berat,
+                    panjang: piece.panjang,
+                    lebar: piece.lebar,
+                    tinggi: piece.tinggi,
+                    created_by: userId,
+                };
+                shipmentsToCreate.push(shipmentData);
+            }
+
+            // Bulk insert shipments
+            const createdShipments = await this.orderShipmentModel.bulkCreate(shipmentsToCreate, { transaction, returning: true });
+
+            // Siapkan data pieces
+            for (let s = 0; s < createdShipments.length; s++) {
+                const shipment = createdShipments[s];
+                const piece = createOrderDto.pieces[s];
+                for (let i = 0; i < piece.qty; i++) {
+                    const pieceId = `P${order.id}-${pieceGlobalCounter++}`;
+                    piecesToCreate.push({
                         order_id: order.id,
                         order_shipment_id: shipment.id,
                         piece_id: pieceId,
@@ -97,12 +123,14 @@ export class OrdersService {
                         panjang: piece.panjang,
                         lebar: piece.lebar,
                         tinggi: piece.tinggi,
-                        volume: this.calculateVolume(piece.panjang, piece.lebar, piece.tinggi),
-                        berat_volume: this.calculateBeratVolume(piece.panjang, piece.lebar, piece.tinggi),
-                        created_by: userId,
-                    }, { transaction });
-                })
-            );
+                        created_at: new Date(),
+                        updated_at: new Date(),
+                    });
+                }
+            }
+
+            // Bulk insert pieces
+            await this.orderPieceModel.bulkCreate(piecesToCreate, { transaction });
 
             // 4. Simpan ke tabel order_histories
             await this.orderHistoryModel.create({
@@ -357,8 +385,6 @@ export class OrdersService {
                     attributes: ['qty', 'berat', 'panjang', 'lebar', 'tinggi'],
                 },
             ],
-            raw: true,
-            nest: true,
         });
 
         if (!order) {
@@ -367,37 +393,38 @@ export class OrdersService {
 
         // Transform data untuk response reorder
         const reorderData = {
-            nama_pengirim: order.nama_pengirim,
-            alamat_pengirim: order.alamat_pengirim,
-            provinsi_pengirim: order.provinsi_pengirim,
-            kota_pengirim: order.kota_pengirim,
-            kecamatan_pengirim: order.kecamatan_pengirim,
-            kelurahan_pengirim: order.kelurahan_pengirim,
-            kodepos_pengirim: order.kodepos_pengirim,
-            no_telepon_pengirim: order.no_telepon_pengirim,
-            email_pengirim: order.email_pengirim,
+            nama_pengirim: order.getDataValue('nama_pengirim'),
+            alamat_pengirim: order.getDataValue('alamat_pengirim'),
+            provinsi_pengirim: order.getDataValue('provinsi_pengirim'),
+            kota_pengirim: order.getDataValue('kota_pengirim'),
+            kecamatan_pengirim: order.getDataValue('kecamatan_pengirim'),
+            kelurahan_pengirim: order.getDataValue('kelurahan_pengirim'),
+            kodepos_pengirim: order.getDataValue('kodepos_pengirim'),
+            no_telepon_pengirim: order.getDataValue('no_telepon_pengirim'),
+            email_pengirim: order.getDataValue('email_pengirim'),
 
-            nama_penerima: order.nama_penerima,
-            alamat_penerima: order.alamat_penerima,
-            provinsi_penerima: order.provinsi_penerima,
-            kota_penerima: order.kota_penerima,
-            kecamatan_penerima: order.kecamatan_penerima,
-            kelurahan_penerima: order.kelurahan_penerima,
-            kodepos_penerima: order.kodepos_penerima,
-            no_telepon_penerima: order.no_telepon_penerima,
-            email_penerima: order.email_penerima,
+            nama_penerima: order.getDataValue('nama_penerima'),
+            alamat_penerima: order.getDataValue('alamat_penerima'),
+            provinsi_penerima: order.getDataValue('provinsi_penerima'),
+            kota_penerima: order.getDataValue('kota_penerima'),
+            kecamatan_penerima: order.getDataValue('kecamatan_penerima'),
+            kelurahan_penerima: order.getDataValue('kelurahan_penerima'),
+            kodepos_penerima: order.getDataValue('kodepos_penerima'),
+            no_telepon_penerima: order.getDataValue('no_telepon_penerima'),
+            email_penerima: order.getDataValue('email_penerima'),
 
-            layanan: order.layanan,
-            asuransi: order.asuransi === 1,
-            harga_barang: order.harga_barang,
-            nama_barang: order.nama_barang,
+            layanan: order.getDataValue('layanan'),
+            asuransi: order.getDataValue('asuransi') === 1,
+            harga_barang: order.getDataValue('harga_barang'),
+            nama_barang: order.getDataValue('nama_barang'),
 
-            pieces: (order as any).pieces?.map(piece => ({
-                qty: piece.qty,
-                berat: piece.berat,
-                panjang: piece.panjang,
-                lebar: piece.lebar,
-                tinggi: piece.tinggi,
+            // pakek order.shipments
+            pieces: order.getDataValue('shipments')?.map(shipment => ({
+                qty: shipment.getDataValue('qty'),
+                berat: shipment.getDataValue('berat'),
+                panjang: shipment.getDataValue('panjang'),
+                lebar: shipment.getDataValue('lebar'),
+                tinggi: shipment.getDataValue('tinggi'),
             })) || [],
         };
 
