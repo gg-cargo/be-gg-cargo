@@ -53,4 +53,9 @@ export class OrdersController {
     ) {
         return this.ordersService.getReorderData(id, req.user.id);
     }
+
+    @Get(':id/history')
+    async getOrderHistory(@Param('id', ParseIntPipe) id: number) {
+        return this.ordersService.getOrderHistoryByOrderId(id);
+    }
 } 

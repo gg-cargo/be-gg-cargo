@@ -434,6 +434,60 @@ export class OrdersService {
         };
     }
 
+    async getOrderHistoryByOrderId(orderId: number) {
+        // Ambil data order
+        const order = await this.orderModel.findByPk(orderId, { raw: true });
+        if (!order) {
+            throw new NotFoundException('Order tidak ditemukan');
+        }
+
+        // Ambil histories
+        const histories = await this.orderHistoryModel.findAll({
+            where: { order_id: orderId },
+            order: [['created_at', 'DESC'], ['id', 'DESC']],
+            raw: true,
+        });
+
+        const payload = {
+            order: {
+                no_tracking: order.no_tracking,
+                pengirim: {
+                    nama: order.nama_pengirim,
+                    alamat: order.alamat_pengirim,
+                    provinsi: order.provinsi_pengirim,
+                    kota: order.kota_pengirim,
+                    kecamatan: order.kecamatan_pengirim,
+                    kelurahan: order.kelurahan_pengirim,
+                    kodepos: order.kodepos_pengirim,
+                    telepon: order.no_telepon_pengirim,
+                    email: order.email_pengirim
+                },
+                penerima: {
+                    nama: order.nama_penerima,
+                    alamat: order.alamat_penerima,
+                    provinsi: order.provinsi_penerima,
+                    kota: order.kota_penerima,
+                    kecamatan: order.kecamatan_penerima,
+                    kelurahan: order.kelurahan_penerima,
+                    kodepos: order.kodepos_penerima,
+                    telepon: order.no_telepon_penerima,
+                    email: order.email_penerima
+                }
+            },
+            histories: histories.map(h => ({
+                id: h.id,
+                status: h.status,
+                remark: h.remark,
+                created_at: h.created_at,
+            }))
+        };
+
+        return {
+            message: 'Data riwayat order berhasil diambil',
+            data: payload,
+        };
+    }
+
     private validateOrderData(createOrderDto: CreateOrderDto): void {
         // Validasi asuransi
         if (createOrderDto.asuransi && (!createOrderDto.harga_barang || createOrderDto.harga_barang <= 0)) {
