@@ -112,6 +112,7 @@ export class AuthService {
           email: user.getDataValue('email'),
           phone: user.getDataValue('phone'),
           level: user.getDataValue('level'),
+          otp: otp,
         },
       };
     } catch (error) {
