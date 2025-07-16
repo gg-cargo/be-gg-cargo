@@ -3,12 +3,12 @@ const { Sequelize } = require('sequelize');
 
 module.exports = {
   development: {
-    username: process.env.DB_DEVELOPMENT_USERNAME || 'root',
-    password: process.env.DB_DEVELOPMENT_PASSWORD || '',
-    database: process.env.DB_DEVELOPMENT_DATABASE || 'maxapp',
-    host: process.env.DB_DEVELOPMENT_HOST || 'localhost',
-    dialect: process.env.DB_DEVELOPMENT_DIALECT || 'mysql',
-    port: process.env.DB_DEVELOPMENT_PORT || 3306,
+    username: process.env.DB_USERNAME || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_DATABASE || 'gg_cargo',
+    host: process.env.DB_HOST || 'localhost',
+    dialect: process.env.DB_DIALECT || 'mysql',
+    port: process.env.DB_PORT || 3306,
     logging: console.log,
     pool: {
       max: 50,  // Maksimum koneksi dalam pool

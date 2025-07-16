@@ -15,16 +15,30 @@ import { OrderReferensi } from './models/order-referensi.model';
 import { OrderInvoice } from './models/order-invoice.model';
 import { OrderInvoiceDetail } from './models/order-invoice-detail.model';
 import { OrderDeliveryNote } from './models/order-delivery-note.model';
+import { UsersAddressModule } from './users-address/users-address.module';
+import * as dotenv from 'dotenv';
+dotenv.config();
+
+const dbConfig = {
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  username: process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
+  dialect: process.env.DB_DIALECT || 'mysql',
+};
+
+console.log('[DB CONFIG]', dbConfig);
 
 @Module({
   imports: [
     SequelizeModule.forRoot({
       dialect: 'mysql',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '3306'),
-      username: process.env.DB_USERNAME || 'root',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_DATABASE || 'gg_cargo',
+      host: dbConfig.host,
+      port: dbConfig.port ? parseInt(dbConfig.port) : 3306,
+      username: dbConfig.username,
+      password: dbConfig.password,
+      database: dbConfig.database,
       autoLoadModels: true,
       synchronize: false,
       logging: false,
@@ -32,6 +46,7 @@ import { OrderDeliveryNote } from './models/order-delivery-note.model';
     AuthModule,
     OrdersModule,
     HealthModule,
+    UsersAddressModule,
   ],
   controllers: [],
   providers: [],
