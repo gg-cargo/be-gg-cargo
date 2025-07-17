@@ -117,13 +117,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async logout(@Request() req) {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
       this.logger.log(`Logout request received for user: ${userId}`);
       const result = await this.authService.logout(userId);
       this.logger.log(`Logout successful for user: ${userId}`);
       return result;
     } catch (error) {
-      this.logger.error(`Logout failed for user: ${req.user?.user?.id}`, error.stack);
+      this.logger.error(`Logout failed for user: ${req.user?.id}`, error.stack);
       throw error;
     }
   }
