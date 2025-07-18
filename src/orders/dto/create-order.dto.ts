@@ -58,8 +58,15 @@ export class CreateOrderDto {
     @IsEnum(LayananType)
     layanan: LayananType;
 
-    @IsBoolean()
-    asuransi: boolean;
+    @IsNumber()
+    @IsOptional()
+    @IsPositive()
+    asuransi?: number;
+
+    @IsNumber()
+    @IsOptional()
+    @IsPositive()
+    packing?: number;
 
     @IsNumber()
     @IsOptional()
