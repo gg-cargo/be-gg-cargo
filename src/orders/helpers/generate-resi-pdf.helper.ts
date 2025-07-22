@@ -30,27 +30,6 @@ function getLogoBase64(): string | undefined {
     return undefined;
 }
 
-// Konfigurasi AWS S3
-const s3 = new AWS.S3({
-    endpoint: process.env.MINIO_ENDPOINT,
-    accessKeyId: process.env.MINIO_ACCESS_KEY,
-    secretAccessKey: process.env.MINIO_SECRET_KEY,
-    s3ForcePathStyle: true,
-    region: process.env.MINIO_REGION,
-});
-
-export async function uploadFileToS3(localFilePath: string, s3Bucket: string, s3Key: string): Promise<string> {
-    const fileContent = fs.readFileSync(localFilePath);
-    const params = {
-        Bucket: s3Bucket,
-        Key: s3Key,
-        Body: fileContent,
-        ContentType: 'application/pdf',
-    };
-    await s3.upload(params).promise();
-    return `https://${s3Bucket}.${process.env.MINIO_ENDPOINT}/${s3Key}`;
-}
-
 export async function generateResiPDF(data: any): Promise<string> {
     // Font setup pakai TTF
     const fontPaths = {
@@ -280,15 +259,7 @@ export async function generateResiPDF(data: any): Promise<string> {
             writeStream.on('error', (err) => reject(err));
         });
 
-        // Upload ke S3
-        const s3Bucket = "ggcargo" as string;
-        const s3Key = `resi/${fileName}`;
-        const s3Url = await uploadFileToS3(filePath, s3Bucket, s3Key);
-
-        // Optional: Hapus file lokal setelah upload
-        // fs.unlinkSync(filePath);
-
-        return s3Url;
+        return `/pdf/${fileName}`;
     } catch (err) {
         console.error('PDF GENERATE ERROR:', err);
         throw err;
