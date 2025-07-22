@@ -83,7 +83,7 @@ export class OrdersService {
                 SJCity: createOrderDto.SJCity,
                 SJProvince: createOrderDto.SJProvince,
 
-                status: 'Menuggu diproses',
+                status: 'Menunggu diproses',
                 created_by: userId,
                 order_by: userId,
             }, { transaction });
