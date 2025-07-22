@@ -242,7 +242,7 @@ export class OrdersService {
         try {
             url = await generateResiPDF(dataPDF);
         } catch (err) {
-            throw new InternalServerErrorException('Gagal generate PDF');
+            throw new InternalServerErrorException(`Gagal generate PDF: ${err.message}`);
         }
 
         // 7. Simpan ke order_referensi
