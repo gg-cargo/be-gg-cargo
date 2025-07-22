@@ -27,6 +27,8 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/sequelize": "^11.0.0",
+    "@types/aws-sdk": "^0.0.42",
+    "aws-sdk": "^2.1692.0",
     "bcryptjs": "^3.0.2",
     "bwip-js": "^4.7.0",
     "class-transformer": "^0.5.1",
