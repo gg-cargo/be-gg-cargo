@@ -46,6 +46,11 @@ export class OrdersController {
         return this.ordersService.getDashboardStatistics(req.user.id);
     }
 
+    @Get('export/excel')
+    async exportToExcel(@Req() req) {
+        return this.ordersService.exportToExcel(req.user.id);
+    }
+
     @Get(':id/reorder')
     async getReorderData(
         @Param('id', ParseIntPipe) id: number,

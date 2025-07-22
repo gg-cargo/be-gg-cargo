@@ -1059,4 +1059,5 @@ export class Order extends Model {
 
     @HasMany(() => OrderPiece, { foreignKey: 'order_id', as: 'pieces' })
     pieces: OrderPiece[];
+    total_koli: any;
 } 

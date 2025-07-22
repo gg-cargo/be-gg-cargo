@@ -12,6 +12,7 @@ import { TrackingHelper } from './helpers/tracking.helper';
 import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
 import { Op, fn, col, literal } from 'sequelize';
+import * as XLSX from 'xlsx';
 
 @Injectable()
 export class OrdersService {
@@ -82,7 +83,7 @@ export class OrdersService {
                 SJCity: createOrderDto.SJCity,
                 SJProvince: createOrderDto.SJProvince,
 
-                status: 'Order Created',
+                status: 'Menuggu diproses',
                 created_by: userId,
                 order_by: userId,
             }, { transaction });
@@ -136,7 +137,7 @@ export class OrdersService {
             // 4. Simpan ke tabel order_histories
             await this.orderHistoryModel.create({
                 order_id: order.id,
-                status: 'Order Created',
+                status: 'Order diproses',
                 keterangan: 'Order berhasil dibuat',
                 provinsi: createOrderDto.provinsi_pengirim,
                 kota: createOrderDto.kota_pengirim,
@@ -150,7 +151,7 @@ export class OrdersService {
             return {
                 order_id: order.id,
                 no_tracking: noTracking,
-                status: 'Order Created',
+                status: 'Order diproses',
                 message: 'Order berhasil dibuat',
             };
 
@@ -486,6 +487,61 @@ export class OrdersService {
         return {
             message: 'Data riwayat order berhasil diambil',
             data: payload,
+        };
+    }
+
+    async exportToExcel(userId: number) {
+        const orders = await this.orderModel.findAll({
+            where: { order_by: userId },
+            include: [
+                {
+                    model: this.orderShipmentModel,
+                    as: 'shipments',
+                    attributes: [],
+                },
+            ],
+            attributes: [
+                'id',
+                'no_tracking',
+                'nama_pengirim',
+                'nama_penerima',
+                'layanan',
+                'payment_status',
+                'status',
+                'id_kontrak',
+                'created_at',
+                [fn('SUM', col('shipments.qty')), 'total_koli'],
+            ],
+            group: ['Order.id'],
+            order: [['created_at', 'DESC']],
+            raw: true,
+        });
+
+        const worksheetName = 'Pengiriman';
+
+        const data = orders.map(order => ({
+            No: order.id,
+            Tracking: order.no_tracking,
+            Pengirim: order.nama_pengirim,
+            Penerima: order.alamat_pengirim,
+            layanan: order.layanan,
+            Pembayaran: order.payment_status,
+            status: order.status,
+            kontrak: order.id_kontrak === '1' ? 'iya' : 'tidak',
+            date: order.created_at,
+            total_koli: (order as any).total_koli,
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, worksheetName);
+        XLSX.writeFile(workbook, `public/excel/${worksheetName}.xlsx`);
+
+        return {
+            message: 'Data pengiriman berhasil diekspor ke Excel',
+            data: {
+                file_name: `${worksheetName}.xlsx`,
+            },
         };
     }
 
