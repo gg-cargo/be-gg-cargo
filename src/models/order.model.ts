@@ -1,4 +1,4 @@
-import { Column, DataType, Model, Table, BelongsTo, ForeignKey, HasMany } from 'sequelize-typescript';
+import { Column, DataType, Model, Table, BelongsTo, ForeignKey, HasMany, Sequelize } from 'sequelize-typescript';
 import { User } from './user.model';
 import { OrderShipment } from './order-shipment.model';
 import { OrderPiece } from './order-piece.model';
@@ -611,6 +611,7 @@ export class Order extends Model {
     @Column({
         type: DataType.DATE,
         allowNull: true,
+        defaultValue: DataType.NOW,
     })
     created_at: Date;
 
