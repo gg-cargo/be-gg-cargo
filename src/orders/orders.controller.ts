@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
@@ -51,6 +51,11 @@ export class OrdersController {
         return this.ordersService.exportToExcel(req.user.id);
     }
 
+    @Get('export/pdf')
+    async exportToPdf(@Req() req) {
+        return this.ordersService.exportToPdf(req.user.id);
+    }
+
     @Get(':id/reorder')
     async getReorderData(
         @Param('id', ParseIntPipe) id: number,
@@ -62,5 +67,10 @@ export class OrdersController {
     @Get(':id/history')
     async getOrderHistory(@Param('id', ParseIntPipe) id: number) {
         return this.ordersService.getOrderHistoryByOrderId(id);
+    }
+
+    @Patch(':id/cancel')
+    async cancelOrder(@Param('id', ParseIntPipe) id: number, @Req() req) {
+        return this.ordersService.cancelOrder(id, req.user.id);
     }
 } 

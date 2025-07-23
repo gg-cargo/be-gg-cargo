@@ -13,6 +13,7 @@ import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
 import { Op, fn, col, literal } from 'sequelize';
 import * as XLSX from 'xlsx';
+import * as PDFDocument from 'pdfkit';
 
 @Injectable()
 export class OrdersService {
@@ -523,26 +524,182 @@ export class OrdersService {
             No: order.id,
             Tracking: order.no_tracking,
             Pengirim: order.nama_pengirim,
-            Penerima: order.alamat_pengirim,
+            Penerima: order.nama_penerima,
             layanan: order.layanan,
-            Pembayaran: order.payment_status,
+            Pembayaran: order.payment_status || 'belum lunas',
             status: order.status,
             kontrak: order.id_kontrak === '1' ? 'iya' : 'tidak',
             date: order.created_at,
             total_koli: (order as any).total_koli,
         }));
 
+        const currentDate = new Date();
+        const fileName = `Data-${currentDate.toString().replace(/[:\s]/g, '')}.xlsx`;
+
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, worksheetName);
-        XLSX.writeFile(workbook, `public/excel/${worksheetName}.xlsx`);
+        XLSX.writeFile(workbook, `public/excel/${fileName}`);
 
         return {
             message: 'Data pengiriman berhasil diekspor ke Excel',
             data: {
-                file_name: `${worksheetName}.xlsx`,
+                file_name: fileName,
+                url: `/excel/${fileName}`
             },
         };
+    }
+
+    async exportToPdf(userId: number) {
+        const orders = await this.orderModel.findAll({
+            where: { order_by: userId },
+            include: [
+                {
+                    model: this.orderShipmentModel,
+                    as: 'shipments',
+                    attributes: [],
+                },
+            ],
+            attributes: [
+                'id',
+                'no_tracking',
+                'nama_pengirim',
+                'nama_penerima',
+                'layanan',
+                'payment_status',
+                'status',
+                'id_kontrak',
+                'created_at',
+                [fn('SUM', col('shipments.qty')), 'total_koli'],
+            ],
+            group: ['Order.id'],
+            order: [['created_at', 'DESC']],
+            raw: true,
+        });
+
+        const currentDate = new Date();
+        const tanggal = currentDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+        const jam = currentDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const fileName = `Laporan-Order-${tanggal.replace(/\s/g, '-')}-${jam.replace(/:/g, '')}.pdf`;
+        const filePath = `public/pdf/${fileName}`;
+
+        // Generate PDF (landscape)
+        const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+        const fs = require('fs');
+        const stream = fs.createWriteStream(filePath);
+        doc.pipe(stream);
+
+        // Judul formal
+        doc.fontSize(16).text(`Laporan Order - ${tanggal} pukul ${jam} WIB`, { align: 'center' });
+        doc.moveDown(1.5);
+
+        // Table columns (lebar diatur agar tidak padat, Kontrak diperlebar, Tracking & Date cukup lebar)
+        const columns = [
+            { label: 'No', width: 35 },
+            { label: 'Tracking', width: 130 },
+            { label: 'Pengirim', width: 90 },
+            { label: 'Penerima', width: 90 },
+            { label: 'Layanan', width: 70 },
+            { label: 'Pembayaran', width: 90 },
+            { label: 'Status', width: 110 },
+            { label: 'Kontrak', width: 70 },
+            { label: 'Date', width: 130 },
+        ];
+
+        // Center table horizontally
+        const tableWidth = columns.reduce((a, c) => a + c.width, 0);
+        const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+        let startX = doc.page.margins.left + Math.max(0, Math.floor((pageWidth - tableWidth) / 2));
+        let startY = doc.y;
+
+        // Header background (hijau #1A723B)
+        doc.save();
+        doc.rect(startX, startY, tableWidth, 22).fill('#1A723B');
+        doc.restore();
+
+        // Header text
+        let x = startX;
+        doc.fillColor('white').font('Helvetica-Bold').fontSize(10);
+        columns.forEach(col => {
+            doc.text(col.label, x + 2, startY + 6, { width: col.width - 4, align: 'left' });
+            x += col.width;
+        });
+        doc.fillColor('black').font('Helvetica').fontSize(10);
+
+        // Table rows
+        let y = startY + 22;
+        orders.forEach((order: any, idx: number) => {
+            // Alternating row background
+            if (idx % 2 === 0) {
+                doc.save();
+                doc.rect(startX, y, tableWidth, 22).fill('#f3f3f3');
+                doc.restore();
+            }
+            x = startX;
+            const row = [
+                String(idx + 1),
+                order.no_tracking || '-',
+                order.nama_pengirim || '-',
+                order.nama_penerima || '-',
+                order.layanan || '-',
+                order.payment_status || 'Unpaid',
+                order.status || '-',
+                order.id_kontrak === '1' ? 'Iya' : 'Tidak',
+                order.created_at ? new Date(order.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-',
+            ];
+            row.forEach((cell, i) => {
+                doc.fillColor('black').font('Helvetica').fontSize(10);
+                doc.text(cell, x + 2, y + 6, { width: columns[i].width - 4, align: 'left' });
+                x += columns[i].width;
+            });
+            y += 22;
+            // Page break jika melebihi halaman
+            if (y > doc.page.height - 50) {
+                doc.addPage();
+                y = 30;
+                // Redraw header di halaman baru
+                doc.save();
+                doc.rect(startX, y, tableWidth, 22).fill('#1A723B');
+                doc.restore();
+                x = startX;
+                doc.fillColor('white').font('Helvetica-Bold').fontSize(10);
+                columns.forEach(col => {
+                    doc.text(col.label, x + 2, y + 6, { width: col.width - 4, align: 'left' });
+                    x += col.width;
+                });
+                doc.fillColor('black').font('Helvetica').fontSize(10);
+                y += 22;
+            }
+        });
+
+        doc.end();
+
+        // Tunggu file selesai ditulis
+        await new Promise<void>((resolve, reject) => {
+            stream.on('finish', () => resolve());
+            stream.on('error', (err: any) => reject(err));
+        });
+
+        return {
+            message: 'Data pengiriman berhasil diekspor ke PDF',
+            data: {
+                file_name: fileName,
+                url: `/pdf/${fileName}`
+            },
+        };
+    }
+
+    async cancelOrder(orderId: number, userId: number) {
+        const order = await this.orderModel.findOne({ where: { id: orderId, order_by: userId } });
+        if (!order) throw new NotFoundException('Order tidak ditemukan atau tidak milik Anda');
+        if (order.getDataValue('status') === 'dibatalkan') {
+            return { message: 'Order sudah dibatalkan', data: { order_id: orderId, status: order.status } };
+        }
+        await this.orderModel.update(
+            { status: 'dibatalkan' },
+            { where: { id: orderId, order_by: userId } }
+        );
+        return { message: 'Order berhasil dibatalkan', data: { order_id: orderId, status: 'dibatalkan' } };
     }
 
     private validateOrderData(createOrderDto: CreateOrderDto): void {
