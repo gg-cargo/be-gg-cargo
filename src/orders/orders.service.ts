@@ -335,8 +335,8 @@ export class OrdersService {
                 [fn('SUM', literal(`CASE WHEN status = 'diantarkan' THEN 1 ELSE 0 END`)), 'on_delivery'],
                 [fn('SUM', literal(`CASE WHEN status = 'diterima' THEN 1 ELSE 0 END`)), 'completed'],
                 [fn('SUM', literal(`CASE WHEN status = 'dibatalkan' THEN 1 ELSE 0 END`)), 'canceled'],
-                [fn('SUM', literal(`CASE WHEN payment_status = 'completed' THEN 1 ELSE 0 END`)), 'payment_completed'],
-                [fn('SUM', literal(`CASE WHEN payment_status = 'pending' THEN 1 ELSE 0 END`)), 'payment_pending'],
+                [fn('SUM', literal(`CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END`)), 'payment_completed'],
+                [fn('SUM', literal(`CASE WHEN payment_status = 'unpaid' THEN 1 ELSE 0 END`)), 'payment_pending'],
                 // Monthly statistics
                 [fn('SUM', literal(`CASE WHEN created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_total'],
                 [fn('SUM', literal(`CASE WHEN status = 'On Going' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_on_going'],
