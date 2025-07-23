@@ -331,10 +331,10 @@ export class OrdersService {
             where: { order_by: userId },
             attributes: [
                 [fn('COUNT', col('id')), 'total_shipment'],
-                [fn('SUM', literal(`CASE WHEN status = 'On Going' THEN 1 ELSE 0 END`)), 'on_going'],
-                [fn('SUM', literal(`CASE WHEN status = 'On Delivery' THEN 1 ELSE 0 END`)), 'on_delivery'],
-                [fn('SUM', literal(`CASE WHEN status = 'Completed' THEN 1 ELSE 0 END`)), 'completed'],
-                [fn('SUM', literal(`CASE WHEN status = 'Canceled' THEN 1 ELSE 0 END`)), 'canceled'],
+                [fn('SUM', literal(`CASE WHEN status = 'Menunggu diproses' THEN 1 ELSE 0 END`)), 'on_going'],
+                [fn('SUM', literal(`CASE WHEN status = 'diantarkan' THEN 1 ELSE 0 END`)), 'on_delivery'],
+                [fn('SUM', literal(`CASE WHEN status = 'diterima' THEN 1 ELSE 0 END`)), 'completed'],
+                [fn('SUM', literal(`CASE WHEN status = 'dibatalkan' THEN 1 ELSE 0 END`)), 'canceled'],
                 [fn('SUM', literal(`CASE WHEN payment_status = 'completed' THEN 1 ELSE 0 END`)), 'payment_completed'],
                 [fn('SUM', literal(`CASE WHEN payment_status = 'pending' THEN 1 ELSE 0 END`)), 'payment_pending'],
                 // Monthly statistics
