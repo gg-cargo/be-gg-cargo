@@ -78,11 +78,13 @@ export class OrdersService {
                 harga_barang: createOrderDto.harga_barang || 0,
 
                 //surat jalan
+                isSuratJalanBalik: createOrderDto.isSuratJalanBalik || "0",
                 SJName: createOrderDto.SJName,
                 SJPhone: createOrderDto.SJPhone,
                 SJAddress: createOrderDto.SJAddress,
-                SJCity: createOrderDto.SJCity,
-                SJProvince: createOrderDto.SJProvince,
+                SJLocation: createOrderDto.SJLocation,
+                SJLatlng: createOrderDto.SJLatlng,
+                surat_jalan_balik: createOrderDto.surat_jalan_balik,
 
                 status: 'Menunggu diproses',
                 created_by: userId,

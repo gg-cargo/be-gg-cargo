@@ -81,6 +81,23 @@ export class CreateOrderDto {
     @IsOptional()
     no_referensi?: string;
 
+    // surat jalan balik
+    @IsString()
+    @IsOptional()
+    isSuratJalanBalik?: string;
+
+    @IsString()
+    @IsOptional()
+    surat_jalan_balik?: string;
+
+    @IsString()
+    @IsOptional()
+    SJLocation?: string;
+
+    @IsString()
+    @IsOptional()
+    SJLatlng?: string;
+
     // surat jalan
     @IsString()
     @IsOptional()
