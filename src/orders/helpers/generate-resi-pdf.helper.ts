@@ -101,7 +101,6 @@ export async function generateResiPDF(data: any): Promise<string> {
                         width: 220,
                         stack: [
                             logoBase64 ? { image: 'logo', width: 90, alignment: 'right', margin: [0, 0, 0, 2] } : {},
-                            { text: 'PT. GG CARGO', fontSize: 8, alignment: 'right', margin: [0, 0, 0, 12] },
                             { text: (data.layanan || 'REGULER').toUpperCase(), bold: true, fontSize: 11, alignment: 'right', margin: [0, 30, 0, 0] },
                         ]
                     }
@@ -123,28 +122,46 @@ export async function generateResiPDF(data: any): Promise<string> {
                         width: '50%',
                         stack: [
                             { text: 'PENGIRIM', style: 'sectionTitle' },
-                            { text: `Nama: ${data.pengirim?.nama || '-'}`, style: 'label' },
-                            { text: `Alamat: ${data.pengirim?.alamat || '-'}`, style: 'label' },
-                            { text: `Provinsi: ${data.pengirim?.provinsi || '-'}`, style: 'label' },
-                            { text: `Kota: ${data.pengirim?.kota || '-'}`, style: 'label' },
-                            { text: `Kecamatan: ${data.pengirim?.kecamatan || '-'}`, style: 'label' },
-                            { text: `Kelurahan: ${data.pengirim?.kelurahan || '-'}`, style: 'label' },
-                            { text: `Kode Pos: ${data.pengirim?.kodepos || '-'}`, style: 'label' },
-                            { text: `No. Telepon: ${data.pengirim?.telepon || '-'}`, style: 'label' },
+                            {
+                                table: {
+                                    widths: [90, 5, '*'],
+                                    body: [
+                                        ['Nama', ':', data.pengirim?.nama || '-'],
+                                        ['Alamat', ':', data.pengirim?.alamat || '-'],
+                                        ['Provinsi', ':', data.pengirim?.provinsi || '-'],
+                                        ['Kota', ':', data.pengirim?.kota || '-'],
+                                        ['Kecamatan', ':', data.pengirim?.kecamatan || '-'],
+                                        ['Kelurahan', ':', data.pengirim?.kelurahan || '-'],
+                                        ['Kode Pos', ':', data.pengirim?.kodepos || '-'],
+                                        ['No. Telp', ':', data.pengirim?.telepon || '-'],
+                                    ]
+                                },
+                                layout: 'noBorders',
+                                margin: [0, 0, 0, 2],
+                            },
                         ],
                     },
                     {
                         width: '50%',
                         stack: [
                             { text: 'PENERIMA', style: 'sectionTitle' },
-                            { text: `Nama: ${data.penerima?.nama || '-'}`, style: 'label' },
-                            { text: `Alamat: ${data.penerima?.alamat || '-'}`, style: 'label' },
-                            { text: `Provinsi: ${data.penerima?.provinsi || '-'}`, style: 'label' },
-                            { text: `Kota: ${data.penerima?.kota || '-'}`, style: 'label' },
-                            { text: `Kecamatan: ${data.penerima?.kecamatan || '-'}`, style: 'label' },
-                            { text: `Kelurahan: ${data.penerima?.kelurahan || '-'}`, style: 'label' },
-                            { text: `Kode Pos: ${data.penerima?.kodepos || '-'}`, style: 'label' },
-                            { text: `No. Telepon: ${data.penerima?.telepon || '-'}`, style: 'label' },
+                            {
+                                table: {
+                                    widths: [90, 5, '*'],
+                                    body: [
+                                        ['Nama', ':', data.penerima?.nama || '-'],
+                                        ['Alamat', ':', data.penerima?.alamat || '-'],
+                                        ['Provinsi', ':', data.penerima?.provinsi || '-'],
+                                        ['Kota', ':', data.penerima?.kota || '-'],
+                                        ['Kecamatan', ':', data.penerima?.kecamatan || '-'],
+                                        ['Kelurahan', ':', data.penerima?.kelurahan || '-'],
+                                        ['Kode Pos', ':', data.penerima?.kodepos || '-'],
+                                        ['No. Telp', ':', data.penerima?.telepon || '-'],
+                                    ]
+                                },
+                                layout: 'noBorders',
+                                margin: [0, 0, 0, 2],
+                            },
                         ],
                     },
                 ],
@@ -224,8 +241,7 @@ export async function generateResiPDF(data: any): Promise<string> {
                 absolutePosition: { x: 0, y: 750 },
                 width: 520,
                 stack: [
-                    { text: 'PT. GG CARGO', style: 'footerTitle' },
-                    { text: 'Receipt Generated by System GG Kargo 2025', style: 'footerItalic' },
+                    { text: 'Resi diproses oleh sistem GG Kargo', style: 'footerItalic' },
                     { text: 'Halaman 1 dari 1', alignment: 'center', fontSize: 9 },
                 ],
             },
