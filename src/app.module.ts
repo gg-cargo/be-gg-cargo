@@ -16,6 +16,7 @@ import { OrderInvoice } from './models/order-invoice.model';
 import { OrderInvoiceDetail } from './models/order-invoice-detail.model';
 import { OrderDeliveryNote } from './models/order-delivery-note.model';
 import { UsersAddressModule } from './users-address/users-address.module';
+import { FileModule } from './file/file.module';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -47,6 +48,7 @@ console.log('[DB CONFIG]', dbConfig);
     OrdersModule,
     HealthModule,
     UsersAddressModule,
+    FileModule,
   ],
   controllers: [],
   providers: [],
