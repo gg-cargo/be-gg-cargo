@@ -16,7 +16,7 @@ export class FileService {
             const created = await this.fileLogModel.create({
                 user_id: typeof user_id === 'number' ? user_id : 0,
                 file_name: file.originalname,
-                file_path: `https://api.99delivery.id/${file.path}`,
+                file_path: `https://api.99delivery.id/${file.path.replace('public/', '')}`,
                 file_type: file.mimetype.split('/')[1],
                 file_size: file.size,
                 is_assigned: 0,
@@ -26,7 +26,7 @@ export class FileService {
                 message: 'File berhasil diupload',
                 data: {
                     file_name: file.originalname,
-                    file_path: `https://api.99delivery.id/${file.path}`,
+                    file_path: `https://api.99delivery.id/${file.path.replace('public/', '')}`,
                     file_type: file.mimetype.split('/')[1],
                     file_size: file.size,
                     is_assigned: 0,
