@@ -45,7 +45,7 @@ COPY --chown=nestjs:nodejs .sequelizerc /app/.sequelizerc
 COPY --chown=nestjs:nodejs fonts ./fonts
 
 # Create public directory for PDF and Excel files
-RUN mkdir -p public/pdf public/excel && chown -R nestjs:nodejs public
+RUN mkdir -p public/pdf public/excel public/uploads && chown -R nestjs:nodejs public
 
 COPY --chown=nestjs:nodejs entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
