@@ -25,6 +25,7 @@ export class FileService {
             return {
                 message: 'File berhasil diupload',
                 data: {
+                    id: created.id,
                     file_name: file.originalname,
                     file_path: `https://api.99delivery.id/${file.path.replace('public/', '')}`,
                     file_type: file.mimetype.split('/')[1],
