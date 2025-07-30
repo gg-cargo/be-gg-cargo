@@ -18,6 +18,8 @@ import { OrderDeliveryNote } from './models/order-delivery-note.model';
 import { UsersAddressModule } from './users-address/users-address.module';
 import { FileModule } from './file/file.module';
 import { CityModule } from './city/city.module';
+import { PickupsModule } from './pickups/pickups.module';
+import { DriversModule } from './drivers/drivers.module';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -51,6 +53,8 @@ console.log('[DB CONFIG]', dbConfig);
     UsersAddressModule,
     FileModule,
     CityModule,
+    PickupsModule,
+    DriversModule,
   ],
   controllers: [],
   providers: [],

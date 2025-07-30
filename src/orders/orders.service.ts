@@ -5,6 +5,7 @@ import { Order } from '../models/order.model';
 import { OrderShipment } from '../models/order-shipment.model';
 import { OrderPiece } from '../models/order-piece.model';
 import { OrderHistory } from '../models/order-history.model';
+import { OrderList } from '../models/order-list.model';
 import { OrderReferensi } from '../models/order-referensi.model';
 import { CreateOrderDto, CreateOrderPieceDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
@@ -26,6 +27,8 @@ export class OrdersService {
         private readonly orderPieceModel: typeof OrderPiece,
         @InjectModel(OrderHistory)
         private readonly orderHistoryModel: typeof OrderHistory,
+        @InjectModel(OrderList)
+        private readonly orderListModel: typeof OrderList,
         @InjectModel(OrderReferensi)
         private readonly orderReferensiModel: typeof OrderReferensi,
     ) { }
@@ -148,6 +151,48 @@ export class OrdersService {
                 created_by: userId,
             }, { transaction });
 
+            // 5. Simpan ke tabel order_list
+            // @ts-ignore
+            await this.orderListModel.create({
+                no_tracking: noTracking,
+                nama_pengirim: createOrderDto.nama_pengirim,
+                alamat_pengirim: createOrderDto.alamat_pengirim,
+                provinsi_pengirim: createOrderDto.provinsi_pengirim,
+                kota_pengirim: createOrderDto.kota_pengirim,
+                kecamatan_pengirim: createOrderDto.kecamatan_pengirim,
+                kelurahan_pengirim: createOrderDto.kelurahan_pengirim,
+                kodepos_pengirim: createOrderDto.kodepos_pengirim,
+                no_telepon_pengirim: createOrderDto.no_telepon_pengirim,
+                email_pengirim: createOrderDto.email_pengirim,
+                nama_penerima: createOrderDto.nama_penerima,
+                alamat_penerima: createOrderDto.alamat_penerima,
+                provinsi_penerima: createOrderDto.provinsi_penerima,
+                kota_penerima: createOrderDto.kota_penerima,
+                kecamatan_penerima: createOrderDto.kecamatan_penerima,
+                kelurahan_penerima: createOrderDto.kelurahan_penerima,
+                kodepos_penerima: createOrderDto.kodepos_penerima,
+                no_telepon_penerima: createOrderDto.no_telepon_penerima,
+                email_penerima: createOrderDto.email_penerima || '',
+                status_pickup: 'Pending',
+                nama_barang: createOrderDto.nama_barang || '',
+                harga_barang: createOrderDto.harga_barang || 0,
+                asuransi: createOrderDto.asuransi || 0,
+                pickup_time: null as any,
+                total_berat: shipmentData.totalBerat?.toString() || '0',
+                total_harga: 0, // Akan dihitung nanti
+                status: 'Menunggu diproses',
+                payment_status: 'pending',
+                pickup_id: 0,
+                is_gagal_pickup: 0,
+                order_by: userId,
+                svc_source_id: 0,
+                hub_source_id: 0,
+                svc_dest_id: 0,
+                hub_dest_id: 0,
+                jumlah_koli: shipmentData.totalKoli || 0,
+                total_price: 0,
+            }, { transaction });
+
             // Commit transaction
             await transaction.commit();
 
@@ -182,18 +227,27 @@ export class OrdersService {
             await order.save();
         }
 
-        // 4. Hitung ringkasan koli
-        let qty = 0, berat = 0, panjang = 0, lebar = 0, tinggi = 0, volume = 0;
+        // 4. Hitung ringkasan koli menggunakan logika yang sama dengan frontend
+        let totalWeight = 0;
+        let totalQty = 0;
+        let totalVolume = 0;
+
         for (const s of shipments) {
-            qty += s.qty;
-            berat += s.berat;
-            panjang += s.panjang;
-            lebar += s.lebar;
-            tinggi += s.tinggi;
-            volume += (s.panjang * s.lebar * s.tinggi * s.qty) / 1000000;
+            const qty = Number(s.qty) || 0;
+            const berat = Number(s.berat) || 0;
+            const panjang = Number(s.panjang) || 0;
+            const lebar = Number(s.lebar) || 0;
+            const tinggi = Number(s.tinggi) || 0;
+
+            totalQty += qty;
+            totalWeight += berat * qty;
+            const volume = (panjang * lebar * tinggi * qty) / 1000000;
+            totalVolume += volume;
         }
-        const kubikasi = volume.toFixed(2);
-        const beratVolume = (volume * 250).toFixed(2);
+
+        const volumeWeight = totalVolume * 250;
+        const kubikasi = totalVolume.toFixed(2);
+        const beratVolume = volumeWeight.toFixed(2);
 
         // 5. Siapkan data untuk PDF
         const dataPDF = {
@@ -226,17 +280,16 @@ export class OrdersService {
                 packing: order.packing ? 'Ya' : 'Tidak',
                 surat_jalan_balik: order.surat_jalan_balik || 'Tidak',
                 catatan: order.remark_sales || '-',
-                jumlah_koli: qty,
-                berat_aktual: berat,
+                jumlah_koli: totalQty,
+                berat_aktual: totalWeight,
                 berat_volume: beratVolume,
                 kubikasi: kubikasi,
             },
             ringkasan: {
-                qty,
-                berat,
-                panjang,
-                lebar,
-                tinggi,
+                qty: totalQty,
+                berat: totalWeight,
+                volume: totalVolume,
+                volumeWeight: volumeWeight,
             },
         };
 
@@ -727,33 +780,30 @@ export class OrdersService {
     }
 
     private calculateShipmentData(pieces: CreateOrderPieceDto[]) {
-        let totalKoli = 0;
-        let totalBerat = 0;
+        let totalWeight = 0;
+        let totalQty = 0;
         let totalVolume = 0;
-        let totalPanjang = 0;
-        let totalLebar = 0;
-        let totalTinggi = 0;
 
-        pieces.forEach(piece => {
-            totalKoli += piece.qty;
-            totalBerat += piece.berat * piece.qty;
-            const volume = this.calculateVolume(piece.panjang, piece.lebar, piece.tinggi);
-            totalVolume += volume * piece.qty;
-            totalPanjang += piece.panjang * piece.qty;
-            totalLebar += piece.lebar * piece.qty;
-            totalTinggi += piece.tinggi * piece.qty;
+        pieces.forEach((piece) => {
+            const qty = Number(piece.qty) || 0;
+            const berat = Number(piece.berat) || 0;
+            const panjang = Number(piece.panjang) || 0;
+            const lebar = Number(piece.lebar) || 0;
+            const tinggi = Number(piece.tinggi) || 0;
+
+            totalQty += qty;
+            totalWeight += berat * qty;
+            const volume = (panjang * lebar * tinggi * qty) / 1000000;
+            totalVolume += volume;
         });
 
-        const beratVolume = totalVolume * 250;
+        const volumeWeight = totalVolume * 250;
 
         return {
-            totalKoli,
-            totalBerat,
+            totalKoli: totalQty,
+            totalBerat: totalWeight,
             totalVolume,
-            beratVolume,
-            totalPanjang,
-            totalLebar,
-            totalTinggi,
+            beratVolume: volumeWeight,
         };
     }
 

@@ -7,6 +7,7 @@ import { OrderShipment } from '../models/order-shipment.model';
 import { OrderPiece } from '../models/order-piece.model';
 import { OrderHistory } from '../models/order-history.model';
 import { OrderReferensi } from '../models/order-referensi.model';
+import { OrderList } from '../models/order-list.model';
 
 @Module({
     imports: [
@@ -16,6 +17,7 @@ import { OrderReferensi } from '../models/order-referensi.model';
             OrderPiece,
             OrderHistory,
             OrderReferensi,
+            OrderList,
         ]),
     ],
     controllers: [OrdersController],
