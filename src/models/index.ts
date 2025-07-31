@@ -19,4 +19,6 @@ export { OrderList } from './order-list.model';
 export { OrderPickupDriver } from './order-pickup-driver.model';
 export { OrderNotifikasi } from './order-notifikasi.model';
 export { RequestCancel } from './request-cancel.model';
-export { LogGps } from './log-gps.model'; 
+export { LogGps } from './log-gps.model';
+export { PaymentOrder } from './payment-order.model';
+export { Invoice } from './invoice.model'; 
