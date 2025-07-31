@@ -6,10 +6,14 @@ import { Order } from '../models/order.model';
 import { OrderShipment } from '../models/order-shipment.model';
 import { OrderPiece } from '../models/order-piece.model';
 import { OrderInvoice } from '../models/order-invoice.model';
+import { OrderInvoiceDetail } from '../models/order-invoice-detail.model';
 import { Invoice } from '../models/invoice.model';
 import { PaymentOrder } from '../models/payment-order.model';
+import { Bank } from '../models/bank.model';
 import { FinanceSummaryDto } from './dto/finance-summary.dto';
 import { FinanceShipmentsDto } from './dto/finance-shipments.dto';
+import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { Transaction } from 'sequelize';
 
 @Injectable()
 export class FinanceService {
@@ -18,6 +22,8 @@ export class FinanceService {
         private readonly orderModel: typeof Order,
         @InjectModel(OrderInvoice)
         private readonly orderInvoiceModel: typeof OrderInvoice,
+        @InjectModel(OrderInvoiceDetail)
+        private readonly orderInvoiceDetailModel: typeof OrderInvoiceDetail,
         @InjectModel(Invoice)
         private readonly invoiceModel: typeof Invoice,
         @InjectModel(PaymentOrder)
@@ -28,6 +34,8 @@ export class FinanceService {
         private readonly orderShipmentModel: typeof OrderShipment,
         @InjectModel(OrderPiece)
         private readonly orderPieceModel: typeof OrderPiece,
+        @InjectModel(Bank)
+        private readonly bankModel: typeof Bank,
     ) { }
 
     async getFinanceSummary(query: FinanceSummaryDto) {
@@ -516,5 +524,311 @@ export class FinanceService {
         } catch (error) {
             throw new Error(`Error getting finance shipments: ${error.message}`);
         }
+    }
+
+    async getInvoiceByResi(noResi: string) {
+        try {
+            // Get order by no_tracking
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noResi },
+                include: [
+                    {
+                        model: this.orderInvoiceModel,
+                        as: 'orderInvoice',
+                        include: [
+                            {
+                                model: this.orderInvoiceDetailModel,
+                                as: 'orderInvoiceDetails'
+                            }
+                        ]
+                    }
+                ]
+            });
+
+            if (!order) {
+                throw new Error('Order tidak ditemukan');
+            }
+
+            if (!order.orderInvoice) {
+                throw new Error('Invoice untuk order ini belum dibuat');
+            }
+
+            const invoice = order.orderInvoice;
+            const invoiceDetails = invoice.orderInvoiceDetails || [];
+
+            // Get bank information if bank_name exists
+            let bankInfo: any = null;
+            if (invoice.bank_name) {
+                bankInfo = await this.bankModel.findOne({
+                    where: { bank_name: invoice.bank_name }
+                });
+            }
+
+            // Calculate totals
+            const subtotalLayanan = invoiceDetails.reduce((sum, detail) => {
+                return sum + (detail.unit_price * detail.qty);
+            }, 0);
+
+            const diskon = invoice.discount || 0;
+            const ppn = invoice.ppn || 0;
+            const pph = invoice.pph || 0;
+            const totalAkhir = subtotalLayanan - diskon + ppn - pph;
+
+            // Transform invoice details
+            const itemTagihan = invoiceDetails.map(detail => ({
+                deskripsi: detail.description,
+                qty: detail.qty,
+                uom: detail.uom,
+                harga_satuan: detail.unit_price,
+                total: detail.unit_price * detail.qty
+            }));
+
+            const response = {
+                invoice_details: {
+                    no_invoice: invoice.invoice_no,
+                    tgl_invoice: invoice.invoice_date,
+                    no_resi_terkait: order.no_tracking,
+                    syarat_pembayaran: invoice.payment_terms,
+                    pihak_penagih: {
+                        nama_perusahaan: "PT. Xentra Logistik",
+                        alamat: "Jl. Contoh No. 1, Jakarta",
+                        telepon: "+628123456789"
+                    },
+                    ditagihkan_kepada: {
+                        nama: invoice.bill_to_name || order.nama_pengirim,
+                        telepon: invoice.bill_to_phone || order.no_telepon_pengirim,
+                        alamat: invoice.bill_to_address || order.alamat_pengirim
+                    },
+                    detail_pengiriman: {
+                        pengirim: order.nama_pengirim,
+                        alamat_pengirim: order.alamat_pengirim,
+                        penerima: order.nama_penerima,
+                        alamat_penerima: order.alamat_penerima,
+                        layanan: order.layanan
+                    },
+                    item_tagihan: itemTagihan,
+                    subtotal_layanan: subtotalLayanan,
+                    diskon: diskon,
+                    ppn: ppn,
+                    pph: pph,
+                    total_akhir_tagihan: totalAkhir,
+                    kode_unik_pembayaran: invoice.kode_unik,
+                    status_pembayaran: invoice.konfirmasi_bayar ? 'Sudah Bayar' : 'Belum Bayar',
+                    info_rekening_bank: bankInfo ? {
+                        nama_bank: bankInfo.bank_name,
+                        nama_pemilik_rek: bankInfo.account_name,
+                        no_rekening: bankInfo.no_account,
+                        swift_code: invoice.swift_code || ''
+                    } : {
+                        nama_bank: invoice.bank_name,
+                        nama_pemilik_rek: invoice.beneficiary_name,
+                        no_rekening: invoice.acc_no,
+                        swift_code: invoice.swift_code || ''
+                    }
+                }
+            };
+
+            return {
+                message: 'Detail invoice berhasil diambil',
+                success: true,
+                data: response
+            };
+
+        } catch (error) {
+            throw new Error(`Error getting invoice by resi: ${error.message}`);
+        }
+    }
+
+    async createInvoice(body: CreateInvoiceDto) {
+        const {
+            order_ids,
+            invoice_date,
+            payment_terms,
+            notes,
+            bill_to_name,
+            bill_to_phone,
+            bill_to_address,
+            created_by_user_id
+        } = body;
+
+        // 1. Validasi user (role finance)
+        const user = await this.userModel.findByPk(created_by_user_id);
+        if (!user) {
+            throw new Error('User tidak berhak membuat invoice');
+        }
+
+        // 2. Validasi input
+        if (!order_ids || !Array.isArray(order_ids) || order_ids.length === 0) {
+            throw new Error('order_ids tidak boleh kosong');
+        }
+        if (!invoice_date) {
+            throw new Error('invoice_date wajib diisi');
+        }
+        if (!payment_terms) {
+            throw new Error('payment_terms wajib diisi');
+        }
+
+        // 3. Validasi status order dan pengambilan data order
+        const orders = await this.orderModel.findAll({
+            where: { id: order_ids },
+            include: [
+                { model: this.orderPieceModel, as: 'pieces' },
+                { model: this.orderInvoiceModel, as: 'orderInvoice' }
+            ]
+        });
+        if (orders.length !== order_ids.length) {
+            throw new Error('Beberapa order tidak ditemukan');
+        }
+
+        // Validasi status order
+        for (const order of orders) {
+            if (order.getDataValue('invoiceStatus') === 'success' || order.getDataValue('invoiceStatus') === 'billed' || (order.getDataValue('orderInvoice') && order.getDataValue('orderInvoice').getDataValue('invoice_no'))) {
+                throw new Error(`Order ${order.id} sudah memiliki invoice`);
+            }
+            // if (!(order.status === 'Delivered' || order.status === 'Completed')) {
+            //     throw new Error(`Order ${order.id} belum delivered/completed`);
+            // }
+            if (order.getDataValue('reweight_status') !== 1) {
+                throw new Error(`Order ${order.id} belum reweight final`);
+            }
+        }
+
+        // 4. Ambil info bank default
+        const bank = await this.bankModel.findOne();
+        if (!bank) throw new Error('Info bank perusahaan belum diatur');
+
+        // 5. Generate nomor invoice unik
+        const today = invoice_date.replace(/-/g, '');
+        const lastInvoice = await this.orderInvoiceModel.findOne({
+            where: { invoice_no: { [Op.like]: `INV-${today}%` } },
+            order: [['invoice_no', 'DESC']]
+        });
+        let nextNumber = 1;
+        if (lastInvoice && lastInvoice.invoice_no) {
+            const match = lastInvoice.invoice_no.match(/INV-\d{8}-(\d+)/);
+            if (match) nextNumber = parseInt(match[1], 10) + 1;
+        }
+        const invoice_no = `INV-${today}-${String(nextNumber).padStart(3, '0')}`;
+
+        // 6. Mulai transaksi
+        if (!this.orderModel.sequelize) throw new Error('Sequelize instance not found');
+        return await this.orderModel.sequelize.transaction(async (t: Transaction) => {
+            let createdInvoices: any[] = [];
+            for (const order of orders) {
+                // Komponen biaya utama
+                const items: {
+                    description: string;
+                    qty: number;
+                    uom: string;
+                    unit_price: number;
+                    remark: string;
+                }[] = [];
+                // Biaya Pengiriman
+                items.push({
+                    description: 'Biaya Pengiriman Barang',
+                    qty: 1,
+                    uom: 'kg',
+                    unit_price: order.total_harga,
+                    remark: ''
+                });
+                // Biaya Asuransi
+                if (order.asuransi === 1) {
+                    items.push({
+                        description: 'Biaya Asuransi',
+                        qty: 1,
+                        uom: 'pcs',
+                        unit_price: Math.round(order.harga_barang * 0.002), // contoh 0.2% dari harga barang
+                        remark: ''
+                    });
+                }
+                // Biaya Packing
+                if (order.packing === 1) {
+                    items.push({
+                        description: 'Biaya Packing',
+                        qty: 1,
+                        uom: 'pcs',
+                        unit_price: 5000, // flat, bisa diambil dari config
+                        remark: ''
+                    });
+                }
+                // Diskon (jika ada)
+                if (order.voucher) {
+                    items.push({
+                        description: 'Diskon',
+                        qty: 1,
+                        uom: 'voucher',
+                        unit_price: -10000, // contoh, bisa diambil dari order
+                        remark: order.voucher
+                    });
+                }
+                // Subtotal
+                const subtotal = items.reduce((sum, i) => sum + i.unit_price * i.qty, 0);
+                // Pajak
+                const ppn = Math.round(subtotal * 0.1); // 10% PPN
+                const pph = 0; // default 0, bisa diatur sesuai kebutuhan
+                const kode_unik = Math.floor(100 + Math.random() * 900); // 3 digit random
+                const total = subtotal + ppn - pph;
+
+                // Insert ke order_invoices
+                const invoice = await this.orderInvoiceModel.create({
+                    order_id: order.id,
+                    invoice_no,
+                    invoice_date,
+                    payment_terms,
+                    vat: ppn,
+                    discount: 0,
+                    packing: order.packing,
+                    asuransi: order.asuransi,
+                    ppn,
+                    pph,
+                    kode_unik,
+                    notes,
+                    beneficiary_name: bank.account_name,
+                    acc_no: bank.no_account,
+                    bank_name: bank.bank_name,
+                    bank_address: '',
+                    swift_code: '',
+                    payment_info: 0,
+                    fm: 0,
+                    lm: 0,
+                    bill_to_name: bill_to_name || order.nama_pengirim,
+                    bill_to_phone: bill_to_phone || order.no_telepon_pengirim,
+                    bill_to_address: bill_to_address || order.alamat_pengirim,
+                    create_date: new Date(),
+                    noFaktur: '',
+                }, { transaction: t });
+
+                // Insert ke order_invoice_details
+                for (const item of items) {
+                    await this.orderInvoiceDetailModel.create({
+                        invoice_id: invoice.id,
+                        description: item.description,
+                        qty: item.qty,
+                        uom: item.uom,
+                        unit_price: item.unit_price,
+                        remark: item.remark
+                    }, { transaction: t });
+                }
+
+                // Update status order
+                await order.update({
+                    invoiceStatus: 'billed',
+                    isUnpaid: 1,
+                    date_submit: invoice_date,
+                    noFaktur: invoice_no
+                }, { transaction: t });
+
+                createdInvoices.push(invoice);
+            }
+            return {
+                message: 'Invoice berhasil dibuat',
+                success: true,
+                data: createdInvoices.map(inv => ({
+                    invoice_no: inv.invoice_no,
+                    order_id: inv.order_id,
+                    invoice_date: inv.invoice_date
+                }))
+            };
+        });
     }
 } 

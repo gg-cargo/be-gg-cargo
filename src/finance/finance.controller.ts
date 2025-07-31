@@ -1,8 +1,9 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Param, Body, Post } from '@nestjs/common';
 import { FinanceService } from './finance.service';
 import { FinanceSummaryDto } from './dto/finance-summary.dto';
 import { FinanceShipmentsDto } from './dto/finance-shipments.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CreateInvoiceDto } from './dto/create-invoice.dto';
 
 @Controller('finance')
 @UseGuards(JwtAuthGuard)
@@ -17,5 +18,15 @@ export class FinanceController {
     @Get('shipments')
     async getFinanceShipments(@Query() query: FinanceShipmentsDto) {
         return this.financeService.getFinanceShipments(query);
+    }
+
+    @Get('shipments/:no_resi/invoice')
+    async getInvoiceByResi(@Param('no_resi') noResi: string) {
+        return this.financeService.getInvoiceByResi(noResi);
+    }
+
+    @Post('invoices')
+    async createInvoice(@Body() body: CreateInvoiceDto) {
+        return this.financeService.createInvoice(body);
     }
 } 

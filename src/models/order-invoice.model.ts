@@ -1,5 +1,6 @@
-import { Column, DataType, Model, Table, ForeignKey, BelongsTo } from 'sequelize-typescript';
+import { Column, DataType, Model, Table, ForeignKey, BelongsTo, HasMany } from 'sequelize-typescript';
 import { Order } from './order.model';
+import { OrderInvoiceDetail } from './order-invoice-detail.model';
 
 @Table({
     tableName: 'order_invoices',
@@ -217,4 +218,7 @@ export class OrderInvoice extends Model {
 
     @BelongsTo(() => Order, { foreignKey: 'order_id', as: 'order' })
     order: Order;
+
+    @HasMany(() => OrderInvoiceDetail, { foreignKey: 'invoice_id', as: 'orderInvoiceDetails' })
+    orderInvoiceDetails: OrderInvoiceDetail[];
 } 

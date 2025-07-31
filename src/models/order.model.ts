@@ -1,7 +1,8 @@
-import { Column, DataType, Model, Table, BelongsTo, ForeignKey, HasMany, Sequelize } from 'sequelize-typescript';
+import { Column, DataType, Model, Table, BelongsTo, ForeignKey, HasMany, HasOne, Sequelize } from 'sequelize-typescript';
 import { User } from './user.model';
 import { OrderShipment } from './order-shipment.model';
 import { OrderPiece } from './order-piece.model';
+import { OrderInvoice } from './order-invoice.model';
 
 @Table({
     tableName: 'orders',
@@ -1060,5 +1061,9 @@ export class Order extends Model {
 
     @HasMany(() => OrderPiece, { foreignKey: 'order_id', as: 'pieces' })
     pieces: OrderPiece[];
+
+    @HasOne(() => OrderInvoice, { foreignKey: 'order_id', as: 'orderInvoice' })
+    orderInvoice: OrderInvoice;
+
     total_koli: any;
 } 

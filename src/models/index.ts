@@ -21,4 +21,5 @@ export { OrderNotifikasi } from './order-notifikasi.model';
 export { RequestCancel } from './request-cancel.model';
 export { LogGps } from './log-gps.model';
 export { PaymentOrder } from './payment-order.model';
-export { Invoice } from './invoice.model'; 
+export { Invoice } from './invoice.model';
+export { Bank } from './bank.model'; 

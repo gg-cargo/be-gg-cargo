@@ -91,6 +91,9 @@ export class OrdersService {
                 SJLatlng: createOrderDto.SJLatlng,
                 surat_jalan_balik: createOrderDto.surat_jalan_balik,
 
+                //pickup_time
+                pickup_time: createOrderDto.pickup_time || null,
+
                 status: 'Menunggu diproses',
                 created_by: userId,
                 order_by: userId,
@@ -179,7 +182,7 @@ export class OrdersService {
                 nama_barang: createOrderDto.nama_barang || '',
                 harga_barang: createOrderDto.harga_barang || 0,
                 asuransi: createOrderDto.asuransi || 0,
-                pickup_time: null as any,
+                pickup_time: createOrderDto.pickup_time || new Date(),
                 total_berat: shipmentData.totalBerat?.toString() || '0',
                 total_harga: 0, // Akan dihitung nanti
                 status: 'Menunggu diproses',
