@@ -63,12 +63,10 @@ export class CreateOrderDto {
 
     @IsNumber()
     @IsOptional()
-    @IsPositive()
     asuransi?: number;
 
     @IsNumber()
     @IsOptional()
-    @IsPositive()
     packing?: number;
 
     @IsNumber()
