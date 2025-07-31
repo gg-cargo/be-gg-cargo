@@ -14,6 +14,7 @@ import { FinanceSummaryDto } from './dto/finance-summary.dto';
 import { FinanceShipmentsDto } from './dto/finance-shipments.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { Transaction } from 'sequelize';
+import { generateInvoicePDF } from './helpers/generate-invoice-pdf.helper';
 
 @Injectable()
 export class FinanceService {
@@ -491,6 +492,7 @@ export class FinanceService {
 
                 return {
                     no,
+                    order_id: shipment.getDataValue('id'),
                     resi: shipment.getDataValue('no_tracking'),
                     tgl_pengiriman: shipment.getDataValue('created_at'),
                     pengirim: shipment.getDataValue('nama_pengirim'),
@@ -549,18 +551,18 @@ export class FinanceService {
                 throw new Error('Order tidak ditemukan');
             }
 
-            if (!order.orderInvoice) {
+            if (!order.getDataValue('orderInvoice')) {
                 throw new Error('Invoice untuk order ini belum dibuat');
             }
 
-            const invoice = order.orderInvoice;
-            const invoiceDetails = invoice.orderInvoiceDetails || [];
+            const invoice = order.getDataValue('orderInvoice');
+            const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
 
             // Get bank information if bank_name exists
             let bankInfo: any = null;
-            if (invoice.bank_name) {
+            if (invoice.getDataValue('bank_name')) {
                 bankInfo = await this.bankModel.findOne({
-                    where: { bank_name: invoice.bank_name }
+                    where: { bank_name: invoice.getDataValue('bank_name') }
                 });
             }
 
@@ -569,42 +571,42 @@ export class FinanceService {
                 return sum + (detail.unit_price * detail.qty);
             }, 0);
 
-            const diskon = invoice.discount || 0;
-            const ppn = invoice.ppn || 0;
-            const pph = invoice.pph || 0;
+            const diskon = invoice.getDataValue('discount') || 0;
+            const ppn = invoice.getDataValue('ppn') || 0;
+            const pph = invoice.getDataValue('pph') || 0;
             const totalAkhir = subtotalLayanan - diskon + ppn - pph;
 
             // Transform invoice details
             const itemTagihan = invoiceDetails.map(detail => ({
-                deskripsi: detail.description,
-                qty: detail.qty,
-                uom: detail.uom,
-                harga_satuan: detail.unit_price,
-                total: detail.unit_price * detail.qty
+                deskripsi: detail.getDataValue('description'),
+                qty: detail.getDataValue('qty'),
+                uom: detail.getDataValue('uom'),
+                harga_satuan: detail.getDataValue('unit_price'),
+                total: detail.getDataValue('unit_price') * detail.getDataValue('qty')
             }));
 
             const response = {
                 invoice_details: {
-                    no_invoice: invoice.invoice_no,
-                    tgl_invoice: invoice.invoice_date,
-                    no_resi_terkait: order.no_tracking,
-                    syarat_pembayaran: invoice.payment_terms,
+                    no_invoice: invoice.getDataValue('invoice_no'),
+                    tgl_invoice: invoice.getDataValue('invoice_date'),
+                    no_resi_terkait: order.getDataValue('no_tracking'),
+                    syarat_pembayaran: invoice.getDataValue('payment_terms'),
                     pihak_penagih: {
                         nama_perusahaan: "PT. Xentra Logistik",
                         alamat: "Jl. Contoh No. 1, Jakarta",
                         telepon: "+628123456789"
                     },
                     ditagihkan_kepada: {
-                        nama: invoice.bill_to_name || order.nama_pengirim,
-                        telepon: invoice.bill_to_phone || order.no_telepon_pengirim,
-                        alamat: invoice.bill_to_address || order.alamat_pengirim
+                        nama: invoice.getDataValue('bill_to_name') || order.getDataValue('nama_pengirim'),
+                        telepon: invoice.getDataValue('bill_to_phone') || order.getDataValue('no_telepon_pengirim'),
+                        alamat: invoice.getDataValue('bill_to_address') || order.getDataValue('alamat_pengirim')
                     },
                     detail_pengiriman: {
-                        pengirim: order.nama_pengirim,
-                        alamat_pengirim: order.alamat_pengirim,
-                        penerima: order.nama_penerima,
-                        alamat_penerima: order.alamat_penerima,
-                        layanan: order.layanan
+                        pengirim: order.getDataValue('nama_pengirim'),
+                        alamat_pengirim: order.getDataValue('alamat_pengirim'),
+                        penerima: order.getDataValue('nama_penerima'),
+                        alamat_penerima: order.getDataValue('alamat_penerima'),
+                        layanan: order.getDataValue('layanan')
                     },
                     item_tagihan: itemTagihan,
                     subtotal_layanan: subtotalLayanan,
@@ -612,18 +614,18 @@ export class FinanceService {
                     ppn: ppn,
                     pph: pph,
                     total_akhir_tagihan: totalAkhir,
-                    kode_unik_pembayaran: invoice.kode_unik,
-                    status_pembayaran: invoice.konfirmasi_bayar ? 'Sudah Bayar' : 'Belum Bayar',
+                    kode_unik_pembayaran: invoice.getDataValue('kode_unik'),
+                    status_pembayaran: invoice.getDataValue('konfirmasi_bayar') ? 'Sudah Bayar' : 'Belum Bayar',
                     info_rekening_bank: bankInfo ? {
-                        nama_bank: bankInfo.bank_name,
-                        nama_pemilik_rek: bankInfo.account_name,
-                        no_rekening: bankInfo.no_account,
-                        swift_code: invoice.swift_code || ''
+                        nama_bank: bankInfo.getDataValue('bank_name'),
+                        nama_pemilik_rek: bankInfo.getDataValue('account_name'),
+                        no_rekening: bankInfo.getDataValue('no_account'),
+                        swift_code: invoice.getDataValue('swift_code') || ''
                     } : {
-                        nama_bank: invoice.bank_name,
-                        nama_pemilik_rek: invoice.beneficiary_name,
-                        no_rekening: invoice.acc_no,
-                        swift_code: invoice.swift_code || ''
+                        nama_bank: invoice.getDataValue('bank_name'),
+                        nama_pemilik_rek: invoice.getDataValue('beneficiary_name'),
+                        no_rekening: invoice.getDataValue('acc_no'),
+                        swift_code: invoice.getDataValue('swift_code') || ''
                     }
                 }
             };
@@ -728,7 +730,7 @@ export class FinanceService {
                     description: 'Biaya Pengiriman Barang',
                     qty: 1,
                     uom: 'kg',
-                    unit_price: order.total_harga,
+                    unit_price: order.total_harga || 0,
                     remark: ''
                 });
                 // Biaya Asuransi
@@ -737,7 +739,7 @@ export class FinanceService {
                         description: 'Biaya Asuransi',
                         qty: 1,
                         uom: 'pcs',
-                        unit_price: Math.round(order.harga_barang * 0.002), // contoh 0.2% dari harga barang
+                        unit_price: Math.round((order.harga_barang || 0) * 0.002), // contoh 0.2% dari harga barang
                         remark: ''
                     });
                 }
@@ -802,11 +804,11 @@ export class FinanceService {
                 for (const item of items) {
                     await this.orderInvoiceDetailModel.create({
                         invoice_id: invoice.id,
-                        description: item.description,
-                        qty: item.qty,
-                        uom: item.uom,
-                        unit_price: item.unit_price,
-                        remark: item.remark
+                        description: item.description || '',
+                        qty: item.qty || 0,
+                        uom: item.uom || '',
+                        unit_price: item.unit_price || 0,
+                        remark: item.remark || ''
                     }, { transaction: t });
                 }
 
@@ -830,5 +832,31 @@ export class FinanceService {
                 }))
             };
         });
+    }
+
+    async getInvoicePDFByResi(noResi: string) {
+        try {
+            // Get invoice data first
+            const invoiceData = await this.getInvoiceByResi(noResi);
+
+            if (!invoiceData.success) {
+                throw new Error('Invoice tidak ditemukan');
+            }
+
+            // Generate PDF
+            const pdfPath = await generateInvoicePDF(invoiceData.data);
+
+            return {
+                message: 'PDF invoice berhasil dibuat',
+                success: true,
+                data: {
+                    pdf_url: pdfPath,
+                    invoice_no: invoiceData.data.invoice_details.no_invoice
+                }
+            };
+
+        } catch (error) {
+            throw new Error(`Error generating invoice PDF: ${error.message}`);
+        }
     }
 } 

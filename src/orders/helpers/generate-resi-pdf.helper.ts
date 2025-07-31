@@ -21,7 +21,7 @@ async function generateBarcodeBase64(text: string): Promise<string> {
     });
 }
 
-function getLogoBase64(): string | undefined {
+export function getLogoBase64(): string | undefined {
     const logoPath = path.join(process.cwd(), 'public/logo-gg.png');
     if (fs.existsSync(logoPath)) {
         const img = fs.readFileSync(logoPath);

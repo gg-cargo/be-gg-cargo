@@ -25,6 +25,11 @@ export class FinanceController {
         return this.financeService.getInvoiceByResi(noResi);
     }
 
+    @Get('shipments/:no_resi/invoice/pdf')
+    async getInvoicePDFByResi(@Param('no_resi') noResi: string) {
+        return this.financeService.getInvoicePDFByResi(noResi);
+    }
+
     @Post('invoices')
     async createInvoice(@Body() body: CreateInvoiceDto) {
         return this.financeService.createInvoice(body);
