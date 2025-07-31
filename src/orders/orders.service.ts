@@ -969,12 +969,48 @@ export class OrdersService {
             throw new BadRequestException('Truck type wajib diisi untuk layanan Sewa Truk');
         }
 
-        // Hitung volume dan berat volume
-        const volume = this.calculateVolume(item_details.panjang, item_details.lebar, item_details.tinggi);
-        const beratVolume = this.calculateBeratVolume(item_details.panjang, item_details.lebar, item_details.tinggi);
+        // Hitung total dari semua items
+        let totalWeight = 0;
+        let totalVolume = 0;
+        let totalBeratVolume = 0;
+        const itemBreakdown: any[] = [];
 
-        // Chargeable weight = max(berat aktual, berat volume)
-        const chargeableWeight = Math.max(item_details.berat, beratVolume);
+        item_details.items.forEach((item, index) => {
+            const qty = Number(item.qty) || 0;
+            const berat = Number(item.berat) || 0;
+            const panjang = Number(item.panjang) || 0;
+            const lebar = Number(item.lebar) || 0;
+            const tinggi = Number(item.tinggi) || 0;
+
+            // Hitung per item
+            const itemWeight = berat * qty;
+            let itemVolume = 0;
+            let itemBeratVolume = 0;
+
+            if (panjang && lebar && tinggi) {
+                itemVolume = this.calculateVolume(panjang, lebar, tinggi) * qty;
+                itemBeratVolume = this.calculateBeratVolume(panjang, lebar, tinggi) * qty;
+            }
+
+            // Akumulasi total
+            totalWeight += itemWeight;
+            totalVolume += itemVolume;
+            totalBeratVolume += itemBeratVolume;
+
+            // Simpan breakdown per item
+            itemBreakdown.push({
+                item_index: index + 1,
+                qty,
+                berat_per_unit: berat,
+                total_berat: itemWeight,
+                volume: itemVolume,
+                berat_volume: itemBeratVolume,
+                dimensi: panjang && lebar && tinggi ? `${panjang}x${lebar}x${tinggi} cm` : 'Tidak tersedia',
+            });
+        });
+
+        // Chargeable weight = max(total berat aktual, total berat volume)
+        const chargeableWeight = Math.max(totalWeight, totalBeratVolume);
 
         // Hitung estimasi harga berdasarkan layanan
         let basePrice = 0;
@@ -1005,7 +1041,7 @@ export class OrdersService {
                 break;
 
             case 'Paket':
-                if (item_details.berat <= 25) {
+                if (totalWeight <= 25) {
                     basePrice = 15000; // Rp15.000
                 } else {
                     throw new BadRequestException('Berat melebihi batas maksimal 25kg untuk layanan Paket');
@@ -1107,11 +1143,12 @@ export class OrdersService {
                     kodepos: destination.kodepos,
                 },
                 item_details: {
-                    berat_aktual: item_details.berat,
-                    berat_volume: beratVolume,
+                    total_berat_aktual: totalWeight,
+                    total_berat_volume: totalBeratVolume,
                     chargeable_weight: chargeableWeight,
-                    volume: volume,
-                    dimensi: `${item_details.panjang}x${item_details.lebar}x${item_details.tinggi} cm`,
+                    total_volume: totalVolume,
+                    total_qty: item_details.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0),
+                    items_breakdown: itemBreakdown,
                 },
                 service_details: {
                     layanan: service_options.layanan,

@@ -23,30 +23,43 @@ export class LocationDto {
     kodepos?: string;
 }
 
-export class ItemDetailsDto {
+export class ItemDetailDto {
+    @IsNotEmpty()
+    @IsNumber()
+    @Min(1)
+    @Max(100)
+    qty: number;
+
     @IsNotEmpty()
     @IsNumber()
     @Min(0.1)
     @Max(1000)
     berat: number;
 
-    @IsNotEmpty()
+    @IsOptional()
     @IsNumber()
     @Min(1)
     @Max(500)
-    panjang: number;
+    panjang?: number;
 
-    @IsNotEmpty()
+    @IsOptional()
     @IsNumber()
     @Min(1)
     @Max(500)
-    lebar: number;
+    lebar?: number;
 
-    @IsNotEmpty()
+    @IsOptional()
     @IsNumber()
     @Min(1)
     @Max(500)
-    tinggi: number;
+    tinggi?: number;
+}
+
+export class ItemDetailsDto {
+    @IsNotEmpty()
+    @ValidateNested({ each: true })
+    @Type(() => ItemDetailDto)
+    items: ItemDetailDto[];
 }
 
 export class ServiceOptionsDto {
