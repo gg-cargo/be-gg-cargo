@@ -12,6 +12,8 @@ import { CreateOrderResponseDto } from './dto/create-order-response.dto';
 import { TrackingHelper } from './helpers/tracking.helper';
 import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
+import { ReweightPieceDto } from './dto/reweight-piece.dto';
+import { EstimatePriceDto } from './dto/estimate-price.dto';
 import { Op, fn, col, literal } from 'sequelize';
 import * as XLSX from 'xlsx';
 import * as PDFDocument from 'pdfkit';
@@ -814,5 +816,324 @@ export class OrdersService {
     private calculateBeratVolume(panjang: number, lebar: number, tinggi: number): number {
         const volume = this.calculateVolume(panjang, lebar, tinggi);
         return volume * 250;
+    }
+
+    async reweightPiece(pieceId: number, reweightDto: ReweightPieceDto) {
+        const {
+            berat,
+            panjang,
+            lebar,
+            tinggi,
+            reweight_by_user_id,
+        } = reweightDto;
+
+        // Validasi piece exists
+        const piece = await this.orderPieceModel.findByPk(pieceId, {
+            include: [
+                {
+                    model: this.orderModel,
+                    as: 'order',
+                    attributes: ['id', 'no_tracking', 'provinsi_pengirim', 'kota_pengirim'],
+                },
+            ],
+        });
+
+        if (!piece) {
+            throw new NotFoundException('Piece tidak ditemukan');
+        }
+
+        // Validasi piece belum di-reweight
+        if (piece.getDataValue('reweight_status') === 1) {
+            throw new BadRequestException('Piece sudah di-reweight sebelumnya');
+        }
+
+        // Simpan data lama untuk history
+        const oldBerat = piece.getDataValue('berat');
+        const oldPanjang = piece.getDataValue('panjang');
+        const oldLebar = piece.getDataValue('lebar');
+        const oldTinggi = piece.getDataValue('tinggi');
+
+        // Mulai transaction
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const now = new Date();
+
+            // 1. Update order_pieces
+            await this.orderPieceModel.update(
+                {
+                    berat,
+                    panjang,
+                    lebar,
+                    tinggi,
+                    reweight_status: 1,
+                    reweight_by: reweight_by_user_id,
+                    updatedAt: now,
+                },
+                {
+                    where: { id: pieceId },
+                    transaction,
+                }
+            );
+
+            // 2. Check if all pieces in the order have been reweighted
+            const orderId = piece.getDataValue('order_id');
+            const allPieces = await this.orderPieceModel.findAll({
+                where: { order_id: orderId },
+                attributes: ['reweight_status'],
+                raw: true,
+            });
+
+            const allReweighted = allPieces.every(p => p.reweight_status === 1);
+
+            // 3. Update order reweight status if all pieces are reweighted
+            if (allReweighted) {
+                await this.orderModel.update(
+                    {
+                        reweight_status: 1,
+                        isUnreweight: 0,
+                        remark_reweight: 'Semua pieces telah di-reweight',
+                    },
+                    {
+                        where: { id: orderId },
+                        transaction,
+                    }
+                );
+            }
+
+            // 4. Create order_histories
+            const historyRemark = `Piece ID: ${pieceId}, Berat awal: ${oldBerat} kg → ${berat} kg, Dimensi awal: ${oldPanjang}x${oldLebar}x${oldTinggi} cm → ${panjang}x${lebar}x${tinggi} cm`;
+
+            await this.orderHistoryModel.create(
+                {
+                    order_id: orderId,
+                    status: 'Piece Reweighted',
+                    remark: historyRemark,
+                    provinsi: piece.getDataValue('order')?.getDataValue('provinsi_pengirim') || '',
+                    kota: piece.getDataValue('order')?.getDataValue('kota_pengirim') || '',
+                    date: now.toISOString().split('T')[0],
+                    time: now.toTimeString().split(' ')[0],
+                    created_by: reweight_by_user_id,
+                },
+                { transaction }
+            );
+
+            await transaction.commit();
+
+            return {
+                message: 'Piece berhasil di-reweight',
+                success: true,
+                data: {
+                    piece_id: pieceId,
+                    order_id: orderId,
+                    old_measurements: {
+                        berat: oldBerat,
+                        panjang: oldPanjang,
+                        lebar: oldLebar,
+                        tinggi: oldTinggi,
+                    },
+                    new_measurements: {
+                        berat,
+                        panjang,
+                        lebar,
+                        tinggi,
+                    },
+                    reweight_by: reweight_by_user_id,
+                    reweight_at: now,
+                    order_completed_reweight: allReweighted,
+                },
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            throw new InternalServerErrorException(error.message);
+        }
+    }
+
+    async estimatePrice(estimateDto: EstimatePriceDto) {
+        const { origin, destination, item_details, service_options } = estimateDto;
+
+        // Validasi layanan
+        const validServices = ['Ekonomi', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk'];
+        if (!validServices.includes(service_options.layanan)) {
+            throw new BadRequestException('Layanan tidak valid');
+        }
+
+        // Validasi motor_type untuk layanan Kirim Motor
+        if (service_options.layanan === 'Kirim Motor' && !service_options.motor_type) {
+            throw new BadRequestException('Motor type wajib diisi untuk layanan Kirim Motor');
+        }
+
+        // Validasi truck_type untuk layanan Sewa Truk
+        if (service_options.layanan === 'Sewa Truk' && !service_options.truck_type) {
+            throw new BadRequestException('Truck type wajib diisi untuk layanan Sewa Truk');
+        }
+
+        // Hitung volume dan berat volume
+        const volume = this.calculateVolume(item_details.panjang, item_details.lebar, item_details.tinggi);
+        const beratVolume = this.calculateBeratVolume(item_details.panjang, item_details.lebar, item_details.tinggi);
+
+        // Chargeable weight = max(berat aktual, berat volume)
+        const chargeableWeight = Math.max(item_details.berat, beratVolume);
+
+        // Hitung estimasi harga berdasarkan layanan
+        let basePrice = 0;
+        let estimatedDays = 0;
+        let serviceDescription = '';
+
+        switch (service_options.layanan) {
+            case 'Ekonomi':
+                basePrice = chargeableWeight * 3000; // Rp3.000/kg
+                estimatedDays = 4;
+                serviceDescription = 'Layanan ekonomi dengan estimasi 3-4+ hari';
+                break;
+
+            case 'Reguler':
+                basePrice = chargeableWeight * 6000; // Rp6.000/kg
+                estimatedDays = 3;
+                serviceDescription = 'Layanan reguler dengan estimasi 2-4 hari';
+                break;
+
+            case 'Kirim Motor':
+                if (service_options.motor_type === '125cc') {
+                    basePrice = 120000; // Rp120.000
+                } else {
+                    basePrice = 150000; // Rp150.000
+                }
+                estimatedDays = 5;
+                serviceDescription = `Layanan kirim motor ${service_options.motor_type}`;
+                break;
+
+            case 'Paket':
+                if (item_details.berat <= 25) {
+                    basePrice = 15000; // Rp15.000
+                } else {
+                    throw new BadRequestException('Berat melebihi batas maksimal 25kg untuk layanan Paket');
+                }
+                estimatedDays = 2;
+                serviceDescription = 'Layanan paket dengan batas maksimal 25kg';
+                break;
+
+            case 'Express':
+                // Estimasi jarak sederhana (bisa dikembangkan dengan API maps)
+                const estimatedDistance = 10; // km
+                basePrice = 10000 + (estimatedDistance * 3000); // Base + (jarak × Rp3.000/km)
+                estimatedDays = 1;
+                serviceDescription = 'Layanan express same day delivery';
+                break;
+
+            case 'Sewa Truk':
+                if (service_options.truck_type === 'Pick Up') {
+                    basePrice = 300000; // Rp300.000
+                } else {
+                    basePrice = 800000; // Rp800.000
+                }
+                // Tambahan biaya per km
+                const truckDistance = 20; // km
+                basePrice += truckDistance * 2000; // Rp2.000/km
+                estimatedDays = 2;
+                serviceDescription = `Layanan sewa truk ${service_options.truck_type}`;
+                break;
+
+            default:
+                throw new BadRequestException('Layanan tidak dikenali');
+        }
+
+        // Hitung biaya tambahan
+        let additionalCosts = 0;
+        const additionalServices: any[] = [];
+
+        if (service_options.asuransi) {
+            const asuransiCost = basePrice * 0.02; // 2% dari harga dasar
+            additionalCosts += asuransiCost;
+            additionalServices.push({
+                service: 'Asuransi',
+                cost: asuransiCost,
+                description: 'Asuransi pengiriman 2% dari harga dasar'
+            });
+        }
+
+        if (service_options.packing) {
+            const packingCost = 5000; // Rp5.000
+            additionalCosts += packingCost;
+            additionalServices.push({
+                service: 'Packing',
+                cost: packingCost,
+                description: 'Packing tambahan'
+            });
+        }
+
+        // Hitung diskon voucher (jika ada)
+        let discountAmount = 0;
+        let voucherInfo: any = null;
+
+        if (service_options.voucher_code) {
+            // Simulasi validasi voucher (bisa dikembangkan dengan tabel voucher)
+            if (service_options.voucher_code === 'DISKONAKHIRBULAN') {
+                discountAmount = basePrice * 0.1; // 10% diskon
+                voucherInfo = {
+                    code: service_options.voucher_code,
+                    discount_percentage: 10,
+                    discount_amount: discountAmount,
+                    description: 'Diskon akhir bulan 10%'
+                };
+            }
+        }
+
+        // Hitung total harga
+        const subtotal = basePrice + additionalCosts;
+        const totalPrice = subtotal - discountAmount;
+
+        // Estimasi waktu transit
+        const estimatedDeliveryDate = new Date();
+        estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + estimatedDays);
+
+        return {
+            message: 'Estimasi harga berhasil dihitung',
+            success: true,
+            data: {
+                origin: {
+                    provinsi: origin.provinsi,
+                    kota: origin.kota,
+                    kecamatan: origin.kecamatan,
+                    kelurahan: origin.kelurahan,
+                    kodepos: origin.kodepos,
+                },
+                destination: {
+                    provinsi: destination.provinsi,
+                    kota: destination.kota,
+                    kecamatan: destination.kecamatan,
+                    kelurahan: destination.kelurahan,
+                    kodepos: destination.kodepos,
+                },
+                item_details: {
+                    berat_aktual: item_details.berat,
+                    berat_volume: beratVolume,
+                    chargeable_weight: chargeableWeight,
+                    volume: volume,
+                    dimensi: `${item_details.panjang}x${item_details.lebar}x${item_details.tinggi} cm`,
+                },
+                service_details: {
+                    layanan: service_options.layanan,
+                    description: serviceDescription,
+                    estimated_days: estimatedDays,
+                    estimated_delivery_date: estimatedDeliveryDate.toISOString().split('T')[0],
+                },
+                pricing: {
+                    base_price: basePrice,
+                    additional_services: additionalServices,
+                    subtotal: subtotal,
+                    voucher: voucherInfo,
+                    discount_amount: discountAmount,
+                    total_price: totalPrice,
+                },
+                breakdown: {
+                    base_service: basePrice,
+                    additional_costs: additionalCosts,
+                    discount: discountAmount,
+                    total: totalPrice,
+                },
+            },
+        };
     }
 } 

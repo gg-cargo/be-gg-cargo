@@ -20,6 +20,7 @@ import { FileModule } from './file/file.module';
 import { CityModule } from './city/city.module';
 import { PickupsModule } from './pickups/pickups.module';
 import { DriversModule } from './drivers/drivers.module';
+import { TrackingsModule } from './trackings/trackings.module';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -55,6 +56,7 @@ console.log('[DB CONFIG]', dbConfig);
     CityModule,
     PickupsModule,
     DriversModule,
+    TrackingsModule,
   ],
   controllers: [],
   providers: [],
