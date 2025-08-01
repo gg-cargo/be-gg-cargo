@@ -104,15 +104,15 @@ export class UsersService {
 
         // Transform data
         const transformedUsers: UserResponseDto[] = users.map(user => ({
-            id: user.id,
-            service_center: user.serviceCenter?.nama || '-',
-            code: user.code,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-            level: user.levelData?.nama || '-',
+            id: user.getDataValue('id'),
+            code: user.getDataValue('code'),
+            service_center: user.getDataValue('serviceCenter')?.getDataValue('nama') || '-',
+            name: user.getDataValue('name'),
+            email: user.getDataValue('email'),
+            phone: user.getDataValue('phone'),
+            level: user.getDataValue('levelData')?.getDataValue('nama') || '-',
             status: this.getUserStatus(user),
-            saldo: 0, // TODO: Implement saldo calculation if needed
+            saldo: user.getDataValue('saldo') || 0, // TODO: Implement saldo calculation if needed
         }));
 
         // Build pagination info
