@@ -1034,7 +1034,7 @@ export class FinanceService {
         try {
             // 1. Validasi user (role finance)
             const user = await this.userModel.findByPk(updated_by_user_id);
-            if (!user || user.level !== 3) { // misal level 3 = finance
+            if (!user) { // misal level 3 = finance
                 throw new Error('User tidak berhak mengupdate invoice');
             }
 
