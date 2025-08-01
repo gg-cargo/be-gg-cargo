@@ -1,5 +1,5 @@
-import { Column, DataType, Model, Table, BelongsTo } from 'sequelize-typescript';
-import { Level, ServiceCenter, Hub } from './index';
+import { Column, DataType, Model, Table, BelongsTo, HasMany } from 'sequelize-typescript';
+import { Level, ServiceCenter, Hub, Saldo } from './index';
 
 @Table({
   tableName: 'users',
@@ -467,4 +467,7 @@ export class User extends Model {
 
   @BelongsTo(() => Hub, { foreignKey: 'hub_id', targetKey: 'id' })
   hub: Hub;
+
+  @HasMany(() => Saldo, { foreignKey: 'user_id', sourceKey: 'id' })
+  saldos: Saldo[];
 } 

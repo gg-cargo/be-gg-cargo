@@ -45,4 +45,5 @@ export class UserDetailResponseDto {
     isApprove: number;
     isHandover: number;
     show_price: number;
+    saldo: number;
 } 

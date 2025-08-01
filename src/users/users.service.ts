@@ -4,6 +4,7 @@ import { User } from '../models/user.model';
 import { Level } from '../models/level.model';
 import { ServiceCenter } from '../models/service-center.model';
 import { Hub } from '../models/hub.model';
+import { Saldo } from '../models/saldo.model';
 import { ListUsersDto } from './dto/list-users.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -23,6 +24,8 @@ export class UsersService {
         private readonly serviceCenterModel: typeof ServiceCenter,
         @InjectModel(Hub)
         private readonly hubModel: typeof Hub,
+        @InjectModel(Saldo)
+        private readonly saldoModel: typeof Saldo,
     ) { }
 
     async listUsers(query: ListUsersDto): Promise<ListUsersResponseDto> {
@@ -95,6 +98,12 @@ export class UsersService {
                     as: 'hub',
                     attributes: ['nama'],
                     required: false,
+                },
+                {
+                    model: this.saldoModel,
+                    as: 'saldos',
+                    attributes: ['saldo', 'saldo_dibekukan'],
+                    required: false,
                 }
             ],
             order: this.buildOrderClause(sort_by, order) as any,
@@ -103,17 +112,23 @@ export class UsersService {
         });
 
         // Transform data
-        const transformedUsers: UserResponseDto[] = users.map(user => ({
-            id: user.getDataValue('id'),
-            code: user.getDataValue('code'),
-            service_center: user.getDataValue('serviceCenter')?.getDataValue('nama') || '-',
-            name: user.getDataValue('name'),
-            email: user.getDataValue('email'),
-            phone: user.getDataValue('phone'),
-            level: user.getDataValue('levelData')?.getDataValue('nama') || '-',
-            status: this.getUserStatus(user),
-            saldo: user.getDataValue('saldo') || 0, // TODO: Implement saldo calculation if needed
-        }));
+        const transformedUsers: UserResponseDto[] = users.map(user => {
+            const saldos = user.getDataValue('saldos') || [];
+            const saldoData = saldos.length > 0 ? saldos[0] : null;
+            const saldoAktif = saldoData ? (saldoData.saldo - saldoData.saldo_dibekukan) : 0;
+
+            return {
+                id: user.getDataValue('id'),
+                code: user.getDataValue('code'),
+                service_center: user.getDataValue('serviceCenter')?.getDataValue('nama') || '-',
+                name: user.getDataValue('name'),
+                email: user.getDataValue('email'),
+                phone: user.getDataValue('phone'),
+                level: user.getDataValue('levelData')?.getDataValue('nama') || '-',
+                status: this.getUserStatus(user),
+                saldo: saldoAktif,
+            };
+        });
 
         // Build pagination info
         const pagination: PaginationDto = {
@@ -229,6 +244,12 @@ export class UsersService {
                     model: this.hubModel,
                     as: 'hub',
                     attributes: ['id', 'nama'],
+                },
+                {
+                    model: this.saldoModel,
+                    as: 'saldos',
+                    attributes: ['saldo', 'saldo_dibekukan'],
+                    required: false,
                 }
             ]
         });
@@ -236,6 +257,10 @@ export class UsersService {
         if (!user) {
             throw new NotFoundException('Pengguna tidak ditemukan');
         }
+
+        const saldos = user.getDataValue('saldos') || [];
+        const saldoData = saldos.length > 0 ? saldos[0] : null;
+        const saldoAktif = saldoData ? (saldoData.saldo - saldoData.saldo_dibekukan) : 0;
 
         return {
             id: user.getDataValue('id'),
@@ -283,6 +308,7 @@ export class UsersService {
             isApprove: user.getDataValue('isApprove'),
             isHandover: user.getDataValue('isHandover'),
             show_price: user.getDataValue('show_price'),
+            saldo: saldoAktif,
         };
     }
 
