@@ -139,8 +139,11 @@ export class UsersService {
         };
 
         return {
-            pagination,
-            users: transformedUsers,
+            message: 'Pengguna berhasil ditemukan',
+            data: {
+                pagination,
+                users: transformedUsers,
+            },
         };
     }
 
@@ -217,13 +220,15 @@ export class UsersService {
         });
 
         return {
-            id: newUser.id,
-            name: newUser.name,
-            email: newUser.email,
-            phone: newUser.phone,
-            level: level.nama,
-            status: this.getUserStatus(newUser),
             message: 'Pengguna berhasil dibuat',
+            data: {
+                id: newUser.id,
+                name: newUser.name,
+                email: newUser.email,
+                phone: newUser.phone,
+                level: level.nama,
+                status: this.getUserStatus(newUser),
+            },
         };
     }
 
@@ -263,52 +268,55 @@ export class UsersService {
         const saldoAktif = saldoData ? (saldoData.saldo - saldoData.saldo_dibekukan) : 0;
 
         return {
-            id: user.getDataValue('id'),
-            code: user.getDataValue('code'),
-            name: user.getDataValue('name'),
-            email: user.getDataValue('email'),
-            phone: user.getDataValue('phone'),
-            email_verified_at: user.getDataValue('email_verified_at'),
-            phone_verify_at: user.getDataValue('phone_verify_at'),
-            level: {
-                id: user.getDataValue('levelData')?.getDataValue('id') || 0,
-                nama: user.getDataValue('levelData')?.getDataValue('nama') || '-'
-            },
-            hub: user.hub ? {
-                id: user.getDataValue('hub')?.getDataValue('id'),
-                nama: user.getDataValue('hub')?.getDataValue('nama')
-            } : null,
-            service_center: user.serviceCenter ? {
-                id: user.getDataValue('serviceCenter')?.getDataValue('id'),
-                nama: user.getDataValue('serviceCenter')?.getDataValue('nama')
-            } : null,
-            aktif: user.getDataValue('aktif'),
-            status: this.getUserStatus(user),
-            nik: user.getDataValue('nik'),
-            sim: user.getDataValue('sim'),
-            stnk: user.getDataValue('stnk'),
-            kir: user.getDataValue('kir'),
-            expired_sim: user.getDataValue('expired_sim'),
-            expired_stnk: user.getDataValue('expired_stnk'),
-            expired_kir: user.getDataValue('expired_kir'),
-            no_polisi: user.getDataValue('no_polisi'),
-            address: user.getDataValue('address'),
-            location: user.getDataValue('location'),
-            created_at: user.getDataValue('created_at'),
-            updated_at: user.getDataValue('updated_at'),
-            customer: user.getDataValue('customer'),
-            payment_terms: user.getDataValue('payment_terms'),
-            discount_rate: user.getDataValue('discount_rate'),
-            type_transporter: user.getDataValue('type_transporter'),
-            type_expeditor: user.getDataValue('type_expeditor'),
-            stakeholder_id: user.getDataValue('stakeholder_id'),
-            aktif_disabled_super: user.getDataValue('aktif_disabled_super'),
-            status_app: user.getDataValue('status_app'),
-            isSales: user.getDataValue('isSales'),
-            isApprove: user.getDataValue('isApprove'),
-            isHandover: user.getDataValue('isHandover'),
-            show_price: user.getDataValue('show_price'),
-            saldo: saldoAktif,
+            message: 'Pengguna berhasil ditemukan',
+            data: {
+                id: user.getDataValue('id'),
+                code: user.getDataValue('code'),
+                name: user.getDataValue('name'),
+                email: user.getDataValue('email'),
+                phone: user.getDataValue('phone'),
+                email_verified_at: user.getDataValue('email_verified_at'),
+                phone_verify_at: user.getDataValue('phone_verify_at'),
+                level: {
+                    id: user.getDataValue('levelData')?.getDataValue('id') || 0,
+                    nama: user.getDataValue('levelData')?.getDataValue('nama') || '-'
+                },
+                hub: user.hub ? {
+                    id: user.getDataValue('hub')?.getDataValue('id'),
+                    nama: user.getDataValue('hub')?.getDataValue('nama')
+                } : null,
+                service_center: user.serviceCenter ? {
+                    id: user.getDataValue('serviceCenter')?.getDataValue('id'),
+                    nama: user.getDataValue('serviceCenter')?.getDataValue('nama')
+                } : null,
+                aktif: user.getDataValue('aktif'),
+                status: this.getUserStatus(user),
+                nik: user.getDataValue('nik'),
+                sim: user.getDataValue('sim'),
+                stnk: user.getDataValue('stnk'),
+                kir: user.getDataValue('kir'),
+                expired_sim: user.getDataValue('expired_sim'),
+                expired_stnk: user.getDataValue('expired_stnk'),
+                expired_kir: user.getDataValue('expired_kir'),
+                no_polisi: user.getDataValue('no_polisi'),
+                address: user.getDataValue('address'),
+                location: user.getDataValue('location'),
+                created_at: user.getDataValue('created_at'),
+                updated_at: user.getDataValue('updated_at'),
+                customer: user.getDataValue('customer'),
+                payment_terms: user.getDataValue('payment_terms'),
+                discount_rate: user.getDataValue('discount_rate'),
+                type_transporter: user.getDataValue('type_transporter'),
+                type_expeditor: user.getDataValue('type_expeditor'),
+                stakeholder_id: user.getDataValue('stakeholder_id'),
+                aktif_disabled_super: user.getDataValue('aktif_disabled_super'),
+                status_app: user.getDataValue('status_app'),
+                isSales: user.getDataValue('isSales'),
+                isApprove: user.getDataValue('isApprove'),
+                isHandover: user.getDataValue('isHandover'),
+                show_price: user.getDataValue('show_price'),
+                saldo: saldoAktif,
+            }
         };
     }
 
@@ -426,13 +434,15 @@ export class UsersService {
         }
 
         return {
-            id: updatedUser.id,
-            name: updatedUser.name,
-            email: updatedUser.email,
-            phone: updatedUser.phone,
-            level: updatedUser.levelData?.nama || '-',
-            status: this.getUserStatus(updatedUser),
             message: 'Pengguna berhasil diperbarui',
+            data: {
+                id: updatedUser.id,
+                name: updatedUser.name,
+                email: updatedUser.email,
+                phone: updatedUser.phone,
+                level: updatedUser.levelData?.nama || '-',
+                status: this.getUserStatus(updatedUser),
+            },
         };
     }
 

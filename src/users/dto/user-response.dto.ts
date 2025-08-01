@@ -11,23 +11,27 @@ export class UserResponseDto {
 }
 
 export class CreateUserResponseDto {
-    id: number;
-    name: string;
-    email: string;
-    phone: string;
-    level: string;
-    status: string;
     message: string;
+    data: {
+        id: number;
+        name: string;
+        email: string;
+        phone: string;
+        level: string;
+        status: string;
+    };
 }
 
 export class UpdateUserResponseDto {
-    id: number;
-    name: string;
-    email: string;
-    phone: string;
-    level: string;
-    status: string;
     message: string;
+    data: {
+        id: number;
+        name: string;
+        email: string;
+        phone: string;
+        level: string;
+        status: string;
+    };
 }
 
 export class PaginationDto {
@@ -38,6 +42,9 @@ export class PaginationDto {
 }
 
 export class ListUsersResponseDto {
-    pagination: PaginationDto;
-    users: UserResponseDto[];
+    message: string;
+    data: {
+        pagination: PaginationDto;
+        users: UserResponseDto[];
+    };
 } 
