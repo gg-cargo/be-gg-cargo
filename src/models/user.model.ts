@@ -1,5 +1,5 @@
-import { Column, DataType, Model, Table, HasOne } from 'sequelize-typescript';
-import { Level } from './index';
+import { Column, DataType, Model, Table, BelongsTo } from 'sequelize-typescript';
+import { Level, ServiceCenter, Hub } from './index';
 
 @Table({
   tableName: 'users',
@@ -459,6 +459,12 @@ export class User extends Model {
   show_price: number;
 
   // Relations
-  @HasOne(() => Level, { foreignKey: 'level', sourceKey: 'level' })
+  @BelongsTo(() => Level, { foreignKey: 'level', targetKey: 'level' })
   levelData: Level;
+
+  @BelongsTo(() => ServiceCenter, { foreignKey: 'service_center_id', targetKey: 'id' })
+  serviceCenter: ServiceCenter;
+
+  @BelongsTo(() => Hub, { foreignKey: 'hub_id', targetKey: 'id' })
+  hub: Hub;
 } 

@@ -9,6 +9,8 @@ import { OrderList } from '../models/order-list.model';
 import { OrderReferensi } from '../models/order-referensi.model';
 import { CreateOrderDto, CreateOrderPieceDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
+import { UpdateOrderDto, OrderPieceUpdateDto } from './dto/update-order.dto';
+import { UpdateOrderResponseDto } from './dto/order-response.dto';
 import { TrackingHelper } from './helpers/tracking.helper';
 import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
@@ -1175,5 +1177,206 @@ export class OrdersService {
                 },
             },
         };
+    }
+
+    async updateOrder(noResi: string, updateOrderDto: UpdateOrderDto): Promise<UpdateOrderResponseDto> {
+        // Find order by no_resi
+        const order = await this.orderModel.findOne({
+            where: { no_tracking: noResi }
+        });
+
+        if (!order) {
+            throw new NotFoundException('Order tidak ditemukan');
+        }
+
+        // Validate user permissions (basic check - can be enhanced)
+        if (!updateOrderDto.updated_by_user_id) {
+            throw new BadRequestException('User ID diperlukan untuk audit trail');
+        }
+
+        // Check if order can be updated based on current status
+        this.validateOrderUpdatePermission(order);
+
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const updatedFields: string[] = [];
+            let orderPiecesUpdated = 0;
+
+            // Update order details
+            const orderUpdateData: any = {
+                updated_at: new Date(),
+            };
+
+            // Check and update order fields
+            if (updateOrderDto.nama_pengirim !== undefined) {
+                orderUpdateData.nama_pengirim = updateOrderDto.nama_pengirim;
+                updatedFields.push('nama_pengirim');
+            }
+            if (updateOrderDto.alamat_pengirim !== undefined) {
+                orderUpdateData.alamat_pengirim = updateOrderDto.alamat_pengirim;
+                updatedFields.push('alamat_pengirim');
+            }
+            if (updateOrderDto.no_telepon_pengirim !== undefined) {
+                orderUpdateData.no_telepon_pengirim = updateOrderDto.no_telepon_pengirim;
+                updatedFields.push('no_telepon_pengirim');
+            }
+            if (updateOrderDto.nama_penerima !== undefined) {
+                orderUpdateData.nama_penerima = updateOrderDto.nama_penerima;
+                updatedFields.push('nama_penerima');
+            }
+            if (updateOrderDto.alamat_penerima !== undefined) {
+                orderUpdateData.alamat_penerima = updateOrderDto.alamat_penerima;
+                updatedFields.push('alamat_penerima');
+            }
+            if (updateOrderDto.no_telepon_penerima !== undefined) {
+                orderUpdateData.no_telepon_penerima = updateOrderDto.no_telepon_penerima;
+                updatedFields.push('no_telepon_penerima');
+            }
+            if (updateOrderDto.nama_barang !== undefined) {
+                orderUpdateData.nama_barang = updateOrderDto.nama_barang;
+                updatedFields.push('nama_barang');
+            }
+            if (updateOrderDto.layanan !== undefined) {
+                orderUpdateData.layanan = updateOrderDto.layanan;
+                updatedFields.push('layanan');
+            }
+            if (updateOrderDto.status !== undefined) {
+                orderUpdateData.status = updateOrderDto.status;
+                updatedFields.push('status');
+            }
+            if (updateOrderDto.catatan !== undefined) {
+                orderUpdateData.catatan = updateOrderDto.catatan;
+                updatedFields.push('catatan');
+            }
+
+            // Update order if there are changes
+            if (Object.keys(orderUpdateData).length > 1) { // More than just updated_at
+                await this.orderModel.update(orderUpdateData, {
+                    where: { id: order.id },
+                    transaction
+                });
+            }
+
+            // Update order pieces if provided
+            if (updateOrderDto.order_pieces_update && updateOrderDto.order_pieces_update.length > 0) {
+                for (const pieceUpdate of updateOrderDto.order_pieces_update) {
+                    const piece = await this.orderPieceModel.findOne({
+                        where: {
+                            piece_id: pieceUpdate.piece_id,
+                            order_id: order.id
+                        }
+                    });
+
+                    if (!piece) {
+                        throw new NotFoundException(`Order piece dengan ID ${pieceUpdate.piece_id} tidak ditemukan`);
+                    }
+
+                    const pieceUpdateData: any = {
+                        updated_at: new Date(),
+                    };
+
+                    if (pieceUpdate.berat !== undefined) {
+                        pieceUpdateData.berat = pieceUpdate.berat;
+                        updatedFields.push(`piece_${pieceUpdate.piece_id}_berat`);
+                    }
+                    if (pieceUpdate.panjang !== undefined) {
+                        pieceUpdateData.panjang = pieceUpdate.panjang;
+                        updatedFields.push(`piece_${pieceUpdate.piece_id}_panjang`);
+                    }
+                    if (pieceUpdate.lebar !== undefined) {
+                        pieceUpdateData.lebar = pieceUpdate.lebar;
+                        updatedFields.push(`piece_${pieceUpdate.piece_id}_lebar`);
+                    }
+                    if (pieceUpdate.tinggi !== undefined) {
+                        pieceUpdateData.tinggi = pieceUpdate.tinggi;
+                        updatedFields.push(`piece_${pieceUpdate.piece_id}_tinggi`);
+                    }
+                    if (pieceUpdate.nama_barang !== undefined) {
+                        pieceUpdateData.nama_barang = pieceUpdate.nama_barang;
+                        updatedFields.push(`piece_${pieceUpdate.piece_id}_nama_barang`);
+                    }
+
+                    if (Object.keys(pieceUpdateData).length > 1) { // More than just updated_at
+                        await this.orderPieceModel.update(pieceUpdateData, {
+                            where: { id: piece.id },
+                            transaction
+                        });
+                        orderPiecesUpdated++;
+                    }
+                }
+
+                // Recalculate total weight if pieces were updated
+                if (orderPiecesUpdated > 0 && (order.getDataValue('reweight_status') as any) === 0) {
+                    await this.recalculateOrderTotals(order.id, transaction);
+                }
+            }
+
+            // Create audit trail
+            await this.createUpdateHistory(order.id, updateOrderDto.updated_by_user_id, updatedFields, transaction);
+
+            await transaction.commit();
+
+            return {
+                no_resi: noResi,
+                status: 'success',
+                message: 'Order berhasil diperbarui',
+                updated_fields: updatedFields,
+                order_pieces_updated: orderPiecesUpdated > 0 ? orderPiecesUpdated : undefined,
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
+    }
+
+    private validateOrderUpdatePermission(order: Order): void {
+        // Check if order can be updated based on current status
+        const restrictedStatuses = ['Delivered', 'Cancelled'];
+
+        if (restrictedStatuses.includes(order.status)) {
+            throw new BadRequestException(`Order dengan status '${order.status}' tidak dapat diperbarui`);
+        }
+
+        // Additional business logic can be added here
+        // For example, check if order is already picked up
+        if ((order.getDataValue('status_pickup') as any) === 1) {
+            // Maybe restrict certain field updates
+        }
+    }
+
+    private async recalculateOrderTotals(orderId: number, transaction: Transaction): Promise<void> {
+        const pieces = await this.orderPieceModel.findAll({
+            where: { order_id: orderId },
+            transaction
+        });
+
+        let totalBerat = 0;
+        let totalKoli = pieces.length;
+
+        for (const piece of pieces) {
+            totalBerat += piece.berat || 0;
+        }
+
+        await this.orderModel.update({
+            total_berat: totalBerat,
+            total_koli: totalKoli,
+            updated_at: new Date(),
+        }, {
+            where: { id: orderId },
+            transaction
+        });
+    }
+
+    private async createUpdateHistory(orderId: number, userId: number, updatedFields: string[], transaction: Transaction): Promise<void> {
+        const remark = `Order details updated: ${updatedFields.join(', ')}`;
+
+        await this.orderHistoryModel.create({
+            order_id: orderId,
+            status: 'Order Details Updated',
+            remark: remark,
+            created_by: userId,
+        }, { transaction });
     }
 } 

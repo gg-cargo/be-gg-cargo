@@ -2,6 +2,8 @@ import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
+import { UpdateOrderDto } from './dto/update-order.dto';
+import { UpdateOrderResponseDto } from './dto/order-response.dto';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
 import { ReweightPieceDto } from './dto/reweight-piece.dto';
 import { EstimatePriceDto } from './dto/estimate-price.dto';
@@ -97,5 +99,14 @@ export class OrdersController {
     @Post('estimate-price')
     async estimatePrice(@Body() estimateDto: EstimatePriceDto) {
         return this.ordersService.estimatePrice(estimateDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_resi')
+    async updateOrder(
+        @Param('no_resi') noResi: string,
+        @Body() updateOrderDto: UpdateOrderDto
+    ): Promise<UpdateOrderResponseDto> {
+        return this.ordersService.updateOrder(noResi, updateOrderDto);
     }
 } 

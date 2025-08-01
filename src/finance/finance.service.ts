@@ -10,9 +10,11 @@ import { OrderInvoiceDetail } from '../models/order-invoice-detail.model';
 import { Invoice } from '../models/invoice.model';
 import { PaymentOrder } from '../models/payment-order.model';
 import { Bank } from '../models/bank.model';
+import { Quotation } from '../models/quotation.model';
 import { FinanceSummaryDto } from './dto/finance-summary.dto';
 import { FinanceShipmentsDto } from './dto/finance-shipments.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { Transaction } from 'sequelize';
 import { generateInvoicePDF } from './helpers/generate-invoice-pdf.helper';
 
@@ -37,6 +39,8 @@ export class FinanceService {
         private readonly orderPieceModel: typeof OrderPiece,
         @InjectModel(Bank)
         private readonly bankModel: typeof Bank,
+        @InjectModel(Quotation)
+        private readonly quotationModel: typeof Quotation,
     ) { }
 
     async getFinanceSummary(query: FinanceSummaryDto) {
@@ -699,18 +703,29 @@ export class FinanceService {
         const bank = await this.bankModel.findOne();
         if (!bank) throw new Error('Info bank perusahaan belum diatur');
 
-        // 5. Generate nomor invoice unik
-        const today = invoice_date.replace(/-/g, '');
-        const lastInvoice = await this.orderInvoiceModel.findOne({
-            where: { invoice_no: { [Op.like]: `INV-${today}%` } },
-            order: [['invoice_no', 'DESC']]
-        });
-        let nextNumber = 1;
-        if (lastInvoice && lastInvoice.invoice_no) {
-            const match = lastInvoice.invoice_no.match(/INV-\d{8}-(\d+)/);
-            if (match) nextNumber = parseInt(match[1], 10) + 1;
+        // 5. Generate nomor invoice berdasarkan no_tracking order
+        // Ambil order pertama untuk mendapatkan no_tracking sebagai base
+        const baseOrder = orders[0];
+        const baseTrackingNo = baseOrder.getDataValue('no_tracking');
+
+        // Jika ada multiple orders, gunakan format yang berbeda
+        let invoice_no: string;
+        if (orders.length === 1) {
+            // Single order: gunakan no_tracking langsung
+            invoice_no = baseTrackingNo;
+        } else {
+            // Multiple orders: gunakan no_tracking order pertama + suffix
+            const lastInvoice = await this.orderInvoiceModel.findOne({
+                where: { invoice_no: { [Op.like]: `${baseTrackingNo}-%` } },
+                order: [['invoice_no', 'DESC']]
+            });
+            let nextNumber = 1;
+            if (lastInvoice && lastInvoice.invoice_no) {
+                const match = lastInvoice.invoice_no.match(new RegExp(`${baseTrackingNo}-(\\d+)`));
+                if (match) nextNumber = parseInt(match[1], 10) + 1;
+            }
+            invoice_no = `${baseTrackingNo}-${String(nextNumber).padStart(3, '0')}`;
         }
-        const invoice_no = `INV-${today}-${String(nextNumber).padStart(3, '0')}`;
 
         // 6. Mulai transaksi
         if (!this.orderModel.sequelize) throw new Error('Sequelize instance not found');
@@ -857,6 +872,339 @@ export class FinanceService {
 
         } catch (error) {
             throw new Error(`Error generating invoice PDF: ${error.message}`);
+        }
+    }
+
+    async getInvoiceByInvoiceNo(invoiceNo: string) {
+        try {
+            // Get invoice by invoice_no
+            const invoice = await this.orderInvoiceModel.findOne({
+                where: { invoice_no: invoiceNo },
+                include: [
+                    {
+                        model: this.orderInvoiceDetailModel,
+                        as: 'orderInvoiceDetails'
+                    },
+                    {
+                        model: this.orderModel,
+                        as: 'order',
+                        include: [
+                            {
+                                model: this.orderPieceModel,
+                                as: 'pieces'
+                            }
+                        ]
+                    }
+                ]
+            });
+
+            if (!invoice) {
+                throw new Error('Invoice tidak ditemukan');
+            }
+
+            const order = invoice.getDataValue('order');
+            const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
+            const pieces = order.getDataValue('pieces') || [];
+
+            // Calculate kubikasi from pieces
+            let kubikasi = 0;
+            if (pieces.length > 0) {
+                pieces.forEach((piece: any) => {
+                    const panjang = parseFloat(piece.getDataValue('panjang')) || 0;
+                    const lebar = parseFloat(piece.getDataValue('lebar')) || 0;
+                    const tinggi = parseFloat(piece.getDataValue('tinggi')) || 0;
+                    kubikasi += (panjang * lebar * tinggi) / 1000000; // cm³ to m³
+                });
+            }
+
+            // Get quotation info if exists
+            let quotationInfo: any = null;
+            if (order.getDataValue('id_kontrak')) {
+                quotationInfo = await this.quotationModel.findOne({
+                    where: { no_quotation: order.getDataValue('id_kontrak') }
+                });
+            }
+
+            // Get payment info if exists
+            const paymentInfo = await this.paymentOrderModel.findOne({
+                where: { order_id: order.id }
+            });
+
+            // Format date
+            const formatDate = (dateStr: string) => {
+                const d = new Date(dateStr);
+                return d.toLocaleDateString('id-ID');
+            };
+
+            // Calculate totals
+            const subtotal = invoiceDetails.reduce((sum: number, detail: any) => {
+                return sum + (detail.getDataValue('unit_price') * detail.getDataValue('qty'));
+            }, 0);
+
+            const ppnAmount = invoice.getDataValue('ppn') || 0;
+            const pphAmount = invoice.getDataValue('pph') || 0;
+            const totalAll = subtotal + ppnAmount - pphAmount;
+
+            const response = {
+                invoice_data: {
+                    invoice_no: invoice.getDataValue('invoice_no'),
+                    invoice_date: formatDate(invoice.getDataValue('invoice_date')),
+                    payment_terms: invoice.getDataValue('payment_terms'),
+                    status_payment: order.getDataValue('invoiceStatus') === 'success' ? 'Paid' : 'Billed',
+                    paid_from_bank: paymentInfo ? paymentInfo.getDataValue('bank_name') : null,
+                    contract_quotation: quotationInfo ? quotationInfo.getDataValue('no_quotation') : null,
+
+                    shipment_details: {
+                        tracking_no: order.getDataValue('no_tracking'),
+                        shipper: {
+                            name: order.getDataValue('nama_pengirim'),
+                            address: order.getDataValue('alamat_pengirim'),
+                            area: `${order.getDataValue('kelurahan_pengirim')}, ${order.getDataValue('kecamatan_pengirim')}, ${order.getDataValue('kota_pengirim')}, ${order.getDataValue('provinsi_pengirim')}, ${order.getDataValue('kodepos_pengirim')}`
+                        },
+                        layanan: order.getDataValue('layanan'),
+                        item_summary: {
+                            nama_barang: order.getDataValue('nama_barang'),
+                            jumlah_koli: pieces.length,
+                            berat_actual_kg: parseFloat(order.getDataValue('total_berat')) || 0,
+                            berat_volume_kg: parseFloat(order.getDataValue('total_berat')) || 0, // Assuming same as actual weight
+                            berat_kubikasi_m3: Math.round(kubikasi * 1000) / 1000
+                        },
+                        status_pengiriman: order.getDataValue('status'),
+                        consignee: {
+                            name: order.getDataValue('nama_penerima'),
+                            address: order.getDataValue('alamat_penerima'),
+                            area: `${order.getDataValue('kelurahan_penerima')}, ${order.getDataValue('kecamatan_penerima')}, ${order.getDataValue('kota_penerima')}, ${order.getDataValue('provinsi_penerima')}, ${order.getDataValue('kodepos_penerima')}`
+                        }
+                    },
+
+                    billing_items: invoiceDetails.map((detail: any) => ({
+                        description: detail.getDataValue('description'),
+                        quantity: detail.getDataValue('qty'),
+                        uom: detail.getDataValue('uom'),
+                        unit_price: detail.getDataValue('unit_price'),
+                        total: detail.getDataValue('unit_price') * detail.getDataValue('qty'),
+                        remarks: detail.getDataValue('remark')
+                    })),
+
+                    discount_voucher_contract: invoice.getDataValue('discount') || 0,
+                    additional_fees: [],
+                    asuransi_amount: invoice.getDataValue('asuransi') || 0,
+                    packing_amount: invoice.getDataValue('packing') || 0,
+                    pph_percentage: 2,
+                    pph_amount: pphAmount,
+                    ppn_percentage: 11,
+                    ppn_amount: ppnAmount,
+                    gross_up: invoice.getDataValue('isGrossUp') === 1,
+                    total_all: totalAll,
+
+                    pay_information: {
+                        beneficiary_name: invoice.getDataValue('beneficiary_name'),
+                        bank_name: invoice.getDataValue('bank_name'),
+                        acc_no: invoice.getDataValue('acc_no'),
+                        swift_code: invoice.getDataValue('swift_code')
+                    },
+                    invoice_notes: invoice.getDataValue('notes')
+                }
+            };
+
+            return {
+                message: 'Detail invoice berhasil diambil',
+                success: true,
+                data: response
+            };
+
+        } catch (error) {
+            throw new Error(`Error getting invoice by invoice no: ${error.message}`);
+        }
+    }
+
+    async updateInvoice(invoiceNo: string, body: UpdateInvoiceDto) {
+        const {
+            status_payment,
+            payment_amount,
+            payment_date,
+            payment_method,
+            paid_attachment_url,
+            payment_terms,
+            notes,
+            update_items,
+            updated_by_user_id
+        } = body;
+
+        try {
+            // 1. Validasi user (role finance)
+            const user = await this.userModel.findByPk(updated_by_user_id);
+            if (!user || user.level !== 3) { // misal level 3 = finance
+                throw new Error('User tidak berhak mengupdate invoice');
+            }
+
+            // 2. Validasi invoice exists
+            const invoice = await this.orderInvoiceModel.findOne({
+                where: { invoice_no: invoiceNo },
+                include: [
+                    {
+                        model: this.orderModel,
+                        as: 'order'
+                    }
+                ]
+            });
+
+            if (!invoice) {
+                throw new Error('Invoice tidak ditemukan');
+            }
+
+            const order = invoice.getDataValue('order');
+
+            // 3. Mulai transaksi
+            if (!this.orderModel.sequelize) throw new Error('Sequelize instance not found');
+            return await this.orderModel.sequelize.transaction(async (t: Transaction) => {
+                const updateHistory: string[] = [];
+
+                // 4. Update Payment Status
+                if (status_payment) {
+                    const oldStatus = order.getDataValue('invoiceStatus');
+                    let newStatus = oldStatus;
+                    let isUnpaid = order.getDataValue('isUnpaid');
+                    let isPartialPaid = order.getDataValue('isPartialPaid');
+                    let sisaAmount = order.getDataValue('sisaAmount');
+
+                    switch (status_payment) {
+                        case 'paid':
+                            newStatus = 'success';
+                            isUnpaid = 0;
+                            isPartialPaid = 0;
+                            sisaAmount = 0;
+                            break;
+                        case 'partial_paid':
+                            newStatus = 'success';
+                            isUnpaid = 0;
+                            isPartialPaid = 1;
+                            sisaAmount = Math.max(0, parseFloat(order.getDataValue('total_harga')) - (payment_amount || 0));
+                            break;
+                        case 'unpaid':
+                            newStatus = 'billed';
+                            isUnpaid = 1;
+                            isPartialPaid = 0;
+                            sisaAmount = order.getDataValue('total_harga');
+                            break;
+                        case 'cancelled':
+                            newStatus = 'cancelled';
+                            isUnpaid = 1;
+                            isPartialPaid = 0;
+                            sisaAmount = order.getDataValue('total_harga');
+                            break;
+                    }
+
+                    // Update order status
+                    await order.update({
+                        invoiceStatus: newStatus,
+                        isUnpaid,
+                        isPartialPaid,
+                        sisaAmount: sisaAmount.toString()
+                    }, { transaction: t });
+
+                    // Update invoice payment status
+                    await invoice.update({
+                        konfirmasi_bayar: status_payment === 'paid' ? 1 : 0,
+                        paid_attachment: paid_attachment_url || null
+                    }, { transaction: t });
+
+                    // Create payment order record if payment received
+                    if (status_payment === 'paid' || status_payment === 'partial_paid') {
+                        await this.paymentOrderModel.create({
+                            order_id: order.id,
+                            no_tracking: order.getDataValue('no_tracking'),
+                            amount: payment_amount || 0,
+                            bank_name: payment_method || 'Transfer Bank',
+                            payment_date: payment_date || new Date(),
+                            user_id: updated_by_user_id
+                        }, { transaction: t });
+                    }
+
+                    updateHistory.push(`Status pembayaran diubah dari ${oldStatus} ke ${newStatus}`);
+                }
+
+                // 5. Update General Invoice Data
+                if (payment_terms || notes) {
+                    const updateData: any = {};
+                    if (payment_terms) updateData.payment_terms = payment_terms;
+                    if (notes) updateData.notes = notes;
+
+                    await invoice.update(updateData, { transaction: t });
+                    updateHistory.push('Data umum invoice diperbarui');
+                }
+
+                // 6. Update Invoice Items
+                if (update_items && update_items.length > 0) {
+                    for (const item of update_items) {
+                        const invoiceDetail = await this.orderInvoiceDetailModel.findByPk(item.invoice_detail_id);
+                        if (invoiceDetail) {
+                            const oldData = {
+                                description: invoiceDetail.getDataValue('description'),
+                                quantity: invoiceDetail.getDataValue('qty'),
+                                unit_price: invoiceDetail.getDataValue('unit_price')
+                            };
+
+                            await invoiceDetail.update({
+                                description: item.description || invoiceDetail.getDataValue('description'),
+                                qty: item.quantity || invoiceDetail.getDataValue('qty'),
+                                uom: item.uom || invoiceDetail.getDataValue('uom'),
+                                unit_price: item.unit_price || invoiceDetail.getDataValue('unit_price'),
+                                remark: item.remarks || invoiceDetail.getDataValue('remark')
+                            }, { transaction: t });
+
+                            updateHistory.push(`Item "${oldData.description}" diperbarui`);
+                        }
+                    }
+
+                    // Recalculate invoice totals
+                    const updatedDetails = await this.orderInvoiceDetailModel.findAll({
+                        where: { invoice_id: invoice.id }
+                    });
+
+                    const subtotal = updatedDetails.reduce((sum, detail) => {
+                        return sum + (detail.getDataValue('unit_price') * detail.getDataValue('qty'));
+                    }, 0);
+
+                    const ppn = Math.round(subtotal * 0.1); // 10% PPN
+                    const pph = 0; // default 0
+                    const total = subtotal + ppn - pph;
+
+                    await invoice.update({
+                        vat: ppn,
+                        ppn,
+                        pph,
+                        total
+                    }, { transaction: t });
+
+                    updateHistory.push('Total invoice dihitung ulang');
+                }
+
+                // 7. Create audit trail
+                if (updateHistory.length > 0) {
+                    // Note: OrderHistory model should be injected if needed
+                    // For now, we'll skip audit trail creation
+                    console.log('Audit trail:', {
+                        order_id: order.id,
+                        status: 'Invoice Updated',
+                        remark: updateHistory.join('; '),
+                        created_by: updated_by_user_id
+                    });
+                }
+
+                return {
+                    message: 'Invoice berhasil diperbarui',
+                    success: true,
+                    data: {
+                        invoice_no: invoiceNo,
+                        updates: updateHistory
+                    }
+                };
+
+            });
+
+        } catch (error) {
+            throw new Error(`Error updating invoice: ${error.message}`);
         }
     }
 } 
