@@ -15,7 +15,10 @@ import { TrackingHelper } from './helpers/tracking.helper';
 import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
 import { ReweightPieceDto } from './dto/reweight-piece.dto';
+import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
 import { EstimatePriceDto } from './dto/estimate-price.dto';
+import { BypassReweightDto } from './dto/bypass-reweight.dto';
+import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { Op, fn, col, literal } from 'sequelize';
 import * as XLSX from 'xlsx';
 import * as PDFDocument from 'pdfkit';
@@ -828,7 +831,7 @@ export class OrdersService {
         return volume * 250;
     }
 
-    async reweightPiece(pieceId: number, reweightDto: ReweightPieceDto) {
+    async reweightPiece(pieceId: number, reweightDto: ReweightPieceDto): Promise<ReweightPieceResponseDto> {
         const {
             berat,
             panjang,
@@ -850,6 +853,11 @@ export class OrdersService {
 
         if (!piece) {
             throw new NotFoundException('Piece tidak ditemukan');
+        }
+
+        // Validasi pickup status - piece harus sudah di-pickup
+        if (piece.getDataValue('pickup_status') !== 1) {
+            throw new BadRequestException('Piece belum di-pickup. Reweight hanya bisa dilakukan setelah pickup');
         }
 
         // Validasi piece belum di-reweight
@@ -936,21 +944,186 @@ export class OrdersService {
                 data: {
                     piece_id: pieceId,
                     order_id: orderId,
-                    old_measurements: {
-                        berat: oldBerat,
-                        panjang: oldPanjang,
-                        lebar: oldLebar,
-                        tinggi: oldTinggi,
+                    berat_lama: oldBerat,
+                    berat_baru: berat,
+                    dimensi_lama: `${oldPanjang}x${oldLebar}x${oldTinggi}`,
+                    dimensi_baru: `${panjang}x${lebar}x${tinggi}`,
+                    reweight_status: 1,
+                    order_reweight_completed: allReweighted,
+                },
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            throw new InternalServerErrorException(error.message);
+        }
+    }
+
+    async bypassReweight(orderId: number, bypassDto: BypassReweightDto): Promise<BypassReweightResponseDto> {
+        const {
+            bypass_reweight_status,
+            reason,
+            updated_by_user_id,
+        } = bypassDto;
+
+        // Validasi order exists
+        const order = await this.orderModel.findByPk(orderId, {
+            include: [
+                {
+                    model: this.orderPieceModel,
+                    as: 'pieces',
+                    attributes: ['id', 'reweight_status'],
+                },
+            ],
+        });
+
+        if (!order) {
+            throw new NotFoundException('Order tidak ditemukan');
+        }
+
+        // Validasi user authorization (hanya Admin/Super Admin)
+        // Note: Implementasi validasi level user bisa ditambahkan sesuai kebutuhan
+        // const user = await this.userModel.findByPk(updated_by_user_id, {
+        //     include: [{ model: this.levelModel, as: 'levelData' }]
+        // });
+        // if (!user || !['Admin', 'Super Admin'].includes(user.levelData?.nama)) {
+        //     throw new BadRequestException('Anda tidak memiliki izin untuk melakukan bypass reweight');
+        // }
+
+        // Validasi status order untuk bypass
+        const currentBypassStatus = order.getDataValue('bypass_reweight');
+        const currentReweightStatus = order.getDataValue('reweight_status');
+
+        // Jika order sudah di-reweight dan bypass diaktifkan, berikan warning
+        if (currentReweightStatus === 1 && bypass_reweight_status === 'true') {
+            console.warn(`Order ${orderId} sudah di-reweight, bypass reweight diaktifkan`);
+        }
+
+        // Mulai transaction
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const now = new Date();
+            const isBypassEnabled = bypass_reweight_status === 'true';
+
+            // 1. Update order bypass status
+            await this.orderModel.update(
+                {
+                    bypass_reweight: bypass_reweight_status,
+                    remark_reweight: reason || (isBypassEnabled ? 'Bypass reweight diaktifkan' : 'Bypass reweight dinonaktifkan'),
+                    updated_at: now,
+                },
+                {
+                    where: { id: orderId },
+                    transaction,
+                }
+            );
+
+            let orderPiecesUpdated = 0;
+
+            // 2. Update order_pieces jika bypass diaktifkan
+            if (isBypassEnabled) {
+                // Set semua pieces menjadi reweighted
+                const updateResult = await this.orderPieceModel.update(
+                    {
+                        reweight_status: 1,
+                        reweight_by: updated_by_user_id,
+                        updatedAt: now,
                     },
-                    new_measurements: {
-                        berat,
-                        panjang,
-                        lebar,
-                        tinggi,
+                    {
+                        where: {
+                            order_id: orderId,
+                            reweight_status: 0 // Hanya update yang belum di-reweight
+                        },
+                        transaction,
+                    }
+                );
+                orderPiecesUpdated = updateResult[0];
+
+                // Update order reweight status
+                await this.orderModel.update(
+                    {
+                        reweight_status: 1,
+                        isUnreweight: 0,
                     },
-                    reweight_by: reweight_by_user_id,
-                    reweight_at: now,
-                    order_completed_reweight: allReweighted,
+                    {
+                        where: { id: orderId },
+                        transaction,
+                    }
+                );
+            } else {
+                // Jika bypass dinonaktifkan, reset reweight status pieces yang belum di-reweight manual
+                const updateResult = await this.orderPieceModel.update(
+                    {
+                        reweight_status: 0,
+                        reweight_by: null,
+                        updatedAt: now,
+                    },
+                    {
+                        where: {
+                            order_id: orderId,
+                            reweight_by: updated_by_user_id // Reset hanya yang di-bypass
+                        },
+                        transaction,
+                    }
+                );
+                orderPiecesUpdated = updateResult[0];
+
+                // Check if any pieces still need reweight
+                const remainingPieces = await this.orderPieceModel.count({
+                    where: {
+                        order_id: orderId,
+                        reweight_status: 0
+                    },
+                    transaction,
+                });
+
+                if (remainingPieces > 0) {
+                    // Reset order reweight status jika masih ada pieces yang belum di-reweight
+                    await this.orderModel.update(
+                        {
+                            reweight_status: 0,
+                            isUnreweight: 1,
+                        },
+                        {
+                            where: { id: orderId },
+                            transaction,
+                        }
+                    );
+                }
+            }
+
+            // 3. Create order_histories
+            const statusText = isBypassEnabled ? 'Reweight Bypass Enabled' : 'Reweight Bypass Disabled';
+            const historyRemark = `${statusText} oleh User ID ${updated_by_user_id}${reason ? ` dengan alasan: ${reason}` : ''}`;
+
+            await this.orderHistoryModel.create(
+                {
+                    order_id: orderId,
+                    status: statusText,
+                    remark: historyRemark,
+                    provinsi: order.getDataValue('provinsi_pengirim') || '',
+                    kota: order.getDataValue('kota_pengirim') || '',
+                    date: now.toISOString().split('T')[0],
+                    time: now.toTimeString().split(' ')[0],
+                    created_by: updated_by_user_id,
+                },
+                { transaction }
+            );
+
+            await transaction.commit();
+
+            return {
+                message: `Bypass reweight berhasil ${isBypassEnabled ? 'diaktifkan' : 'dinonaktifkan'}`,
+                success: true,
+                data: {
+                    order_id: orderId,
+                    no_tracking: order.getDataValue('no_tracking'),
+                    bypass_reweight_status,
+                    reason,
+                    updated_by_user: `User ID ${updated_by_user_id}`,
+                    updated_at: now,
+                    order_pieces_updated: orderPiecesUpdated,
                 },
             };
 

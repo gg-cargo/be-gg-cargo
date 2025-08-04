@@ -1,37 +1,27 @@
-import { IsNumber, IsNotEmpty, Min, Max } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsNumber, IsPositive, IsNotEmpty, Min, Max } from 'class-validator';
 
 export class ReweightPieceDto {
-    @IsNotEmpty()
-    @Transform(({ value }) => parseFloat(value))
     @IsNumber()
-    @Min(0.1)
-    @Max(1000)
+    @IsPositive({ message: 'Berat harus lebih dari 0' })
+    @Max(10000, { message: 'Berat tidak boleh lebih dari 10.000 kg' })
     berat: number;
 
-    @IsNotEmpty()
-    @Transform(({ value }) => parseInt(value))
     @IsNumber()
-    @Min(1)
-    @Max(500)
+    @IsPositive({ message: 'Panjang harus lebih dari 0' })
+    @Max(1000, { message: 'Panjang tidak boleh lebih dari 1000 cm' })
     panjang: number;
 
-    @IsNotEmpty()
-    @Transform(({ value }) => parseInt(value))
     @IsNumber()
-    @Min(1)
-    @Max(500)
+    @IsPositive({ message: 'Lebar harus lebih dari 0' })
+    @Max(1000, { message: 'Lebar tidak boleh lebih dari 1000 cm' })
     lebar: number;
 
-    @IsNotEmpty()
-    @Transform(({ value }) => parseInt(value))
     @IsNumber()
-    @Min(1)
-    @Max(500)
+    @IsPositive({ message: 'Tinggi harus lebih dari 0' })
+    @Max(1000, { message: 'Tinggi tidak boleh lebih dari 1000 cm' })
     tinggi: number;
 
-    @IsNotEmpty()
-    @Transform(({ value }) => parseInt(value))
     @IsNumber()
+    @IsNotEmpty({ message: 'ID user yang melakukan reweight wajib diisi' })
     reweight_by_user_id: number;
 } 
