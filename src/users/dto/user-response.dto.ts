@@ -34,6 +34,11 @@ export class UpdateUserResponseDto {
     };
 }
 
+export class ChangePasswordResponseDto {
+    message: string;
+    success: boolean;
+}
+
 export class PaginationDto {
     total_items: number;
     total_pages: number;

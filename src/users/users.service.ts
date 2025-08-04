@@ -8,7 +8,8 @@ import { Saldo } from '../models/saldo.model';
 import { ListUsersDto } from './dto/list-users.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { ListUsersResponseDto, UserResponseDto, PaginationDto, CreateUserResponseDto, UpdateUserResponseDto } from './dto/user-response.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ListUsersResponseDto, UserResponseDto, PaginationDto, CreateUserResponseDto, UpdateUserResponseDto, ChangePasswordResponseDto } from './dto/user-response.dto';
 import { UserDetailResponseDto } from './dto/user-detail-response.dto';
 import { Op, Sequelize } from 'sequelize';
 import * as bcrypt from 'bcrypt';
@@ -489,5 +490,68 @@ export class UsersService {
         }
 
         return 'Aktif';
+    }
+
+    async changePassword(currentUserId: number, changePasswordDto: ChangePasswordDto): Promise<ChangePasswordResponseDto> {
+        // Validasi password baru dan konfirmasi password
+        if (changePasswordDto.new_password !== changePasswordDto.confirm_password) {
+            throw new BadRequestException('Konfirmasi password tidak cocok');
+        }
+
+        // Tentukan target user ID
+        const targetUserId = changePasswordDto.target_user_id || currentUserId;
+
+        // Ambil current user untuk cek level
+        const currentUser = await this.userModel.findByPk(currentUserId, {
+            include: [
+                {
+                    model: this.levelModel,
+                    as: 'levelData',
+                    attributes: ['nama'],
+                }
+            ]
+        });
+        if (!currentUser) {
+            throw new NotFoundException('User tidak ditemukan');
+        }
+
+        // Cek apakah current user adalah admin atau target user adalah dirinya sendiri
+        const currentUserLevel = currentUser.getDataValue('levelData')?.getDataValue('nama');
+        const isAdmin = currentUserLevel === 'administrator';
+        const isOwnPassword = targetUserId === currentUserId;
+
+        if (!isAdmin && !isOwnPassword) {
+            throw new BadRequestException('Anda tidak memiliki izin untuk mengubah password user lain');
+        }
+
+        // Ambil target user
+        const targetUser = await this.userModel.findByPk(targetUserId);
+        if (!targetUser) {
+            throw new NotFoundException('Target user tidak ditemukan');
+        }
+
+        // Hash password baru
+        const saltRounds = 10;
+        const hashedNewPassword = await bcrypt.hash(changePasswordDto.new_password, saltRounds);
+
+        // Update password
+        await this.userModel.update(
+            {
+                password: hashedNewPassword,
+                updated_at: new Date(),
+            },
+            {
+                where: { id: targetUserId }
+            }
+        );
+
+        const message = isOwnPassword
+            ? 'Password berhasil diubah'
+            : `Password user ${targetUser.getDataValue('name')} berhasil diubah`;
+
+        return {
+            message,
+            success: true,
+        };
     }
 } 
