@@ -24,6 +24,10 @@ export class FinanceShipmentsDto {
 
     @IsOptional()
     @IsString()
+    layanan?: string;
+
+    @IsOptional()
+    @IsString()
     start_date?: string;
 
     @IsOptional()
@@ -45,7 +49,7 @@ export class FinanceShipmentsDto {
     created_by_user_id?: number;
 
     @IsOptional()
-    @IsIn(['no_tracking', 'created_at', 'nama_pengirim', 'nama_penerima', 'total_harga', 'status'])
+    @IsIn(['no_tracking', 'created_at', 'nama_pengirim', 'nama_penerima', 'layanan', 'total_harga', 'status'])
     sort_by?: string = 'created_at';
 
     @IsOptional()

@@ -319,6 +319,7 @@ export class FinanceService {
             limit = 20,
             search,
             billing_status,
+            layanan,
             start_date,
             end_date,
             invoice_date_start,
@@ -357,6 +358,11 @@ export class FinanceService {
         // Created by user filter
         if (created_by_user_id) {
             whereCondition.order_by = created_by_user_id;
+        }
+
+        // Layanan filter
+        if (layanan) {
+            whereCondition.layanan = { [Op.like]: `%${layanan}%` };
         }
 
         // Billing status filter
@@ -422,6 +428,7 @@ export class FinanceService {
                     'created_at',
                     'nama_pengirim',
                     'nama_penerima',
+                    'layanan',
                     'total_berat',
                     'status',
                     'invoiceStatus',
@@ -501,6 +508,7 @@ export class FinanceService {
                     tgl_pengiriman: shipment.getDataValue('created_at'),
                     pengirim: shipment.getDataValue('nama_pengirim'),
                     penerima: shipment.getDataValue('nama_penerima'),
+                    layanan: shipment.getDataValue('layanan') || 'Regular',
                     qty: shipment.getDataValue('shipments') ? shipment.getDataValue('shipments').reduce((sum: number, ship: any) => sum + (ship.getDataValue('qty') || 0), 0) : pieces.length,
                     berat_aktual_kg: beratAktual,
                     berat_volume_kg: totalVolumeWeight,

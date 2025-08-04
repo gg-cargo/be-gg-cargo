@@ -1,39 +1,93 @@
-# Finance Service API
+# Finance API Documentation
 
-## Invoice Number Generation
+## Endpoints
 
-### Format Invoice Number
+### 1. Get Finance Summary
+**GET** `/finance/summary`
 
-Invoice number sekarang menggunakan format berdasarkan `order.no_tracking`:
+Get financial summary with various statistics.
 
-#### Single Order Invoice
-- **Format**: `{no_tracking}`
-- **Contoh**: `RES123456789`
+### 2. Get Finance Shipments
+**GET** `/finance/shipments`
 
-#### Multiple Orders Invoice
-- **Format**: `{no_tracking}-{sequence}`
-- **Contoh**: `RES123456789-001`, `RES123456789-002`
+Get list of shipments with financial data and filtering options.
 
-### Business Logic
+#### Query Parameters
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `page` | number | ❌ | Page number for pagination | `1` |
+| `limit` | number | ❌ | Items per page | `20` |
+| `search` | string | ❌ | Search by tracking number, sender, or receiver | `"GGK-2024"` |
+| `billing_status` | string | ❌ | Filter by billing status | `"unpaid"`, `"paid"`, `"partial_paid"` |
+| `layanan` | string | ❌ | Filter by service type | `"Express"`, `"Regular"`, `"Economy"` |
+| `start_date` | string | ❌ | Start date filter (YYYY-MM-DD) | `"2024-01-01"` |
+| `end_date` | string | ❌ | End date filter (YYYY-MM-DD) | `"2024-12-31"` |
+| `invoice_date_start` | string | ❌ | Invoice start date filter | `"2024-01-01"` |
+| `invoice_date_end` | string | ❌ | Invoice end date filter | `"2024-12-31"` |
+| `created_by_user_id` | number | ❌ | Filter by user who created | `1` |
+| `sort_by` | string | ❌ | Sort field | `"created_at"`, `"layanan"`, `"total_harga"` |
+| `order` | string | ❌ | Sort order | `"asc"`, `"desc"` |
 
-1. **Single Order**: Invoice number langsung menggunakan no_tracking order
-2. **Multiple Orders**: Invoice number menggunakan no_tracking order pertama + sequence number
-3. **Sequence**: Otomatis increment jika sudah ada invoice dengan no_tracking yang sama
-
-### Contoh Penggunaan
-
-```javascript
-// Single order
-const singleOrderInvoice = "RES123456789";
-
-// Multiple orders (batch invoice)
-const batchInvoice1 = "RES123456789-001";
-const batchInvoice2 = "RES123456789-002";
+#### Response
+```json
+{
+  "message": "Daftar shipments berhasil diambil",
+  "success": true,
+  "data": {
+    "pagination": {
+      "total_items": 150,
+      "total_pages": 8,
+      "current_page": 1,
+      "items_per_page": 20
+    },
+    "shipments": [
+      {
+        "no": 1,
+        "order_id": 123,
+        "resi": "GGK-2024-001234",
+        "tgl_pengiriman": "2024-01-15T10:30:00.000Z",
+        "pengirim": "PT ABC",
+        "penerima": "PT XYZ",
+        "layanan": "Express",
+        "qty": 2,
+        "berat_aktual_kg": 15.5,
+        "berat_volume_kg": 12.3,
+        "volume_m3": 0.049,
+        "status_pengiriman": "In Transit",
+        "status_tagihan": "Lunas",
+        "tgl_tagihan": "2024-01-15",
+        "dibuat_oleh": "John Doe",
+        "total_harga": 250000,
+        "sisa_tagihan": 0
+      }
+    ]
+  }
+}
 ```
 
-### Keuntungan
+#### cURL Example
+```bash
+curl -X GET \
+  "http://localhost:3000/finance/shipments?page=1&limit=20&layanan=Express&billing_status=paid&sort_by=layanan&order=asc" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
 
-- **Traceability**: Mudah melacak invoice berdasarkan resi
-- **Consistency**: Format yang konsisten dan mudah dipahami
-- **Uniqueness**: Memastikan invoice number tetap unik
-- **Business Friendly**: Sesuai dengan kebutuhan bisnis logistik 
+### 3. Create Invoice
+**POST** `/finance/invoices`
+
+Create invoice for orders.
+
+### 4. Update Invoice
+**PATCH** `/finance/invoices/:invoice_no`
+
+Update existing invoice.
+
+### 5. Get Invoice PDF
+**GET** `/finance/invoices/:no_resi/pdf`
+
+Get invoice PDF by tracking number.
+
+### 6. Get Invoice Details
+**GET** `/finance/invoices/:invoice_no`
+
+Get invoice details by invoice number. 
