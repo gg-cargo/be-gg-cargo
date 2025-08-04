@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsEnum, IsBoolean, IsNumber, IsOptional, IsArray, ValidateNested, IsPositive, IsDate } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsBoolean, IsNumber, IsOptional, IsArray, ValidateNested, IsPositive, IsDate, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 // Ekonomi', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk
@@ -105,7 +105,7 @@ export class CreateOrderDto {
     SJName?: string;
 
     //pickup_time, date
-    @IsDate()
+    @IsDateString()
     @IsOptional()
     pickup_time?: Date;
 
@@ -123,6 +123,17 @@ export class CreateOrderDto {
     @IsString()
     @IsOptional()
     SJCity?: string;
+
+    // invoice
+    @IsString()
+    @IsOptional()
+    billing_name?: string;
+    @IsString()
+    @IsOptional()
+    billing_phone?: string;
+    @IsString()
+    @IsOptional()
+    billing_address?: string;
 
     // provinsi
     @IsString()

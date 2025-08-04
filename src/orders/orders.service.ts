@@ -84,6 +84,11 @@ export class OrdersService {
                 packing: createOrderDto.packing || 0,
                 harga_barang: createOrderDto.harga_barang || 0,
 
+                //billing
+                billing_name: createOrderDto.billing_name,
+                billing_phone: createOrderDto.billing_phone,
+                billing_address: createOrderDto.billing_address,
+
                 //surat jalan
                 isSuratJalanBalik: createOrderDto.isSuratJalanBalik || "0",
                 SJName: createOrderDto.SJName,
@@ -1312,17 +1317,18 @@ export class OrdersService {
                 }
             }
 
-            // Create audit trail
-            await this.createUpdateHistory(order.id, updateOrderDto.updated_by_user_id, updatedFields, transaction);
+            // Audit trail removed - no longer creating order_histories entry
 
             await transaction.commit();
 
             return {
-                no_resi: noResi,
-                status: 'success',
                 message: 'Order berhasil diperbarui',
-                updated_fields: updatedFields,
-                order_pieces_updated: orderPiecesUpdated > 0 ? orderPiecesUpdated : undefined,
+                success: true,
+                data: {
+                    no_resi: noResi,
+                    updated_fields: updatedFields,
+                    order_pieces_updated: orderPiecesUpdated > 0 ? orderPiecesUpdated : undefined,
+                },
             };
 
         } catch (error) {

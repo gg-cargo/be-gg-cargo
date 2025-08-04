@@ -808,9 +808,9 @@ export class FinanceService {
                     payment_info: 0,
                     fm: 0,
                     lm: 0,
-                    bill_to_name: bill_to_name || order.nama_pengirim,
-                    bill_to_phone: bill_to_phone || order.no_telepon_pengirim,
-                    bill_to_address: bill_to_address || order.alamat_pengirim,
+                    bill_to_name: bill_to_name || order.getDataValue('billing_name') || order.getDataValue('nama_pengirim'),
+                    bill_to_phone: bill_to_phone || order.getDataValue('billing_phone') || order.getDataValue('no_telepon_pengirim'),
+                    bill_to_address: bill_to_address || order.getDataValue('billing_address') || order.getDataValue('alamat_pengirim'),
                     create_date: new Date(),
                     noFaktur: '',
                 }, { transaction: t });
