@@ -1111,13 +1111,18 @@ export class FinanceService {
 
                     // Create payment order record if payment received
                     if (status_payment === 'paid' || status_payment === 'partial_paid') {
+                        // Generate payment order ID
+                        const paymentOrderId = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
                         await this.paymentOrderModel.create({
-                            order_id: order.id,
+                            id: paymentOrderId,
+                            order_id: order.id.toString(),
                             no_tracking: order.getDataValue('no_tracking'),
-                            amount: payment_amount || 0,
+                            amount: (payment_amount || 0).toString(),
                             bank_name: payment_method || 'Transfer Bank',
-                            payment_date: payment_date || new Date(),
-                            user_id: updated_by_user_id
+                            user_id: updated_by_user_id.toString(),
+                            date: new Date(payment_date || Date.now()).toISOString().split('T')[0],
+                            created_at: new Date()
                         }, { transaction: t });
                     }
 
