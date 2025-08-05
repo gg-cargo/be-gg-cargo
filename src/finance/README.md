@@ -90,4 +90,87 @@ Get invoice PDF by tracking number.
 ### 6. Get Invoice Details
 **GET** `/finance/invoices/:invoice_no`
 
-Get invoice details by invoice number. 
+Get invoice details by invoice number.
+
+### 7. Get Revenue Summary by Service
+**GET** `/finance/revenue/summary-by-service`
+
+Get revenue statistics summary grouped by service type (Ekonomi, Reguler, Express, Paket, etc.).
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `start_date` | string | ❌ | Start date for data range (YYYY-MM-DD) |
+| `end_date` | string | ❌ | End date for data range (YYYY-MM-DD) |
+| `hub_id` | number | ❌ | Filter by Hub ID |
+| `layanan` | string | ❌ | Filter by specific service type |
+
+#### Example Request
+```
+GET /finance/revenue/summary-by-service?start_date=2025-07-01&end_date=2025-07-31&hub_id=5&layanan=Reguler
+```
+
+#### Response
+```json
+{
+    "message": "Ringkasan pendapatan berdasarkan layanan berhasil diambil",
+    "success": true,
+    "data": {
+        "periode": "2025-07-01 to 2025-07-31",
+        "summary_by_service": [
+            {
+                "layanan": "Ekonomi",
+                "jumlah_order": 500,
+                "total_pendapatan": 75000000,
+                "rata_rata_pendapatan_per_order": 150000,
+                "total_berat": 2500.5
+            },
+            {
+                "layanan": "Reguler",
+                "jumlah_order": 1200,
+                "total_pendapatan": 240000000,
+                "rata_rata_pendapatan_per_order": 200000,
+                "total_berat": 4800.0
+            },
+            {
+                "layanan": "Express",
+                "jumlah_order": 150,
+                "total_pendapatan": 90000000,
+                "rata_rata_pendapatan_per_order": 600000,
+                "total_berat": 450.5
+            },
+            {
+                "layanan": "Paket",
+                "jumlah_order": 80,
+                "total_pendapatan": 1200000,
+                "rata_rata_pendapatan_per_order": 15000,
+                "total_berat": 160.0
+            }
+        ],
+        "grand_total": {
+            "jumlah_order": 1930,
+            "total_pendapatan": 406200000,
+            "rata_rata_pendapatan_per_order": 210466,
+            "total_berat": 7911.0
+        }
+    }
+}
+```
+
+#### cURL Example
+```bash
+curl -X GET \
+  "http://localhost:3000/finance/revenue/summary-by-service?start_date=2025-07-01&end_date=2025-07-31&hub_id=5" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### Business Rules
+- **Authorization**: Requires JWT authentication
+- **Date Filter**: If both start_date and end_date provided, filters orders by created_at
+- **Hub Filter**: If hub_id provided, filters by hub_source_id
+- **Service Filter**: If layanan provided, filters by specific service type
+- **Data Source**: Uses orders table with total_harga and total_berat
+- **Calculations**: 
+  - Average revenue per order = Total revenue / Number of orders
+  - Grand totals calculated from all service types
+- **Available Services**: Ekonomi, Reguler, Express, Paket, Sewa Truk, Kirim Motor 

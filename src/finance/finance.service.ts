@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op, fn, col, literal, where } from 'sequelize';
 import { User } from '../models/user.model';
@@ -15,6 +15,8 @@ import { FinanceSummaryDto } from './dto/finance-summary.dto';
 import { FinanceShipmentsDto } from './dto/finance-shipments.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import { RevenueSummaryByServiceDto } from './dto/revenue-summary-by-service.dto';
+import { RevenueSummaryByServiceResponseDto, ServiceSummaryDto, GrandTotalDto } from './dto/revenue-summary-response.dto';
 import { Transaction } from 'sequelize';
 import { generateInvoicePDF } from './helpers/generate-invoice-pdf.helper';
 
@@ -1218,6 +1220,94 @@ export class FinanceService {
 
         } catch (error) {
             throw new Error(`Error updating invoice: ${error.message}`);
+        }
+    }
+
+    async getRevenueSummaryByService(query: RevenueSummaryByServiceDto): Promise<RevenueSummaryByServiceResponseDto> {
+        const { start_date, end_date, hub_id, layanan } = query;
+
+        // Build where conditions
+        const whereCondition: any = {};
+
+        // Date filter
+        if (start_date && end_date) {
+            whereCondition.created_at = {
+                [Op.between]: [start_date, end_date + ' 23:59:59']
+            };
+        }
+
+        // Hub filter
+        if (hub_id) {
+            whereCondition.hub_source_id = hub_id;
+        }
+
+        // Service filter
+        if (layanan) {
+            whereCondition.layanan = layanan;
+        }
+
+        try {
+            // Get revenue summary by service
+            const revenueSummary = await this.orderModel.findAll({
+                where: whereCondition,
+                attributes: [
+                    'layanan',
+                    [fn('COUNT', col('id')), 'jumlah_order'],
+                    [fn('SUM', col('total_harga')), 'total_pendapatan'],
+                    [fn('SUM', col('total_berat')), 'total_berat'],
+                    [
+                        literal('ROUND(SUM(total_harga) / COUNT(id), 2)'),
+                        'rata_rata_pendapatan_per_order'
+                    ]
+                ],
+                group: ['layanan'],
+                raw: true
+            });
+
+            // Transform data
+            const summaryByService: ServiceSummaryDto[] = revenueSummary.map((item: any) => ({
+                layanan: item.layanan || 'Unknown',
+                jumlah_order: parseInt(item.jumlah_order) || 0,
+                total_pendapatan: parseFloat(item.total_pendapatan) || 0,
+                rata_rata_pendapatan_per_order: parseFloat(item.rata_rata_pendapatan_per_order) || 0,
+                total_berat: parseFloat(item.total_berat) || 0
+            }));
+
+            // Calculate grand totals
+            const grandTotal: GrandTotalDto = summaryByService.reduce((acc, item) => ({
+                jumlah_order: acc.jumlah_order + item.jumlah_order,
+                total_pendapatan: acc.total_pendapatan + item.total_pendapatan,
+                rata_rata_pendapatan_per_order: 0, // Will be calculated below
+                total_berat: acc.total_berat + item.total_berat
+            }), {
+                jumlah_order: 0,
+                total_pendapatan: 0,
+                rata_rata_pendapatan_per_order: 0,
+                total_berat: 0
+            });
+
+            // Calculate average revenue per order for grand total
+            if (grandTotal.jumlah_order > 0) {
+                grandTotal.rata_rata_pendapatan_per_order = Math.round(grandTotal.total_pendapatan / grandTotal.jumlah_order);
+            }
+
+            // Format period string
+            const period = start_date && end_date
+                ? `${start_date} to ${end_date}`
+                : 'All time';
+
+            return {
+                message: 'Ringkasan pendapatan berdasarkan layanan berhasil diambil',
+                success: true,
+                data: {
+                    periode: period,
+                    summary_by_service: summaryByService,
+                    grand_total: grandTotal
+                }
+            };
+
+        } catch (error) {
+            throw new InternalServerErrorException(`Gagal mengambil ringkasan pendapatan: ${error.message}`);
         }
     }
 } 

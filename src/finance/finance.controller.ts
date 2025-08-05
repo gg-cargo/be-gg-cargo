@@ -5,6 +5,7 @@ import { FinanceShipmentsDto } from './dto/finance-shipments.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import { RevenueSummaryByServiceDto } from './dto/revenue-summary-by-service.dto';
 
 @Controller('finance')
 @UseGuards(JwtAuthGuard)
@@ -44,5 +45,10 @@ export class FinanceController {
     @Patch('invoices/:invoice_no')
     async updateInvoice(@Param('invoice_no') invoiceNo: string, @Body() body: UpdateInvoiceDto) {
         return this.financeService.updateInvoice(invoiceNo, body);
+    }
+
+    @Get('revenue/summary-by-service')
+    async getRevenueSummaryByService(@Query() query: RevenueSummaryByServiceDto) {
+        return this.financeService.getRevenueSummaryByService(query);
     }
 } 
