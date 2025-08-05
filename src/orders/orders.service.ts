@@ -1297,9 +1297,9 @@ export class OrdersService {
     async estimatePrice(estimateDto: EstimatePriceDto) {
         const { origin, destination, item_details, service_options } = estimateDto;
 
-        // Validasi layanan
+        // Validasi layanan jika diisi
         const validServices = ['Ekonomi', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk'];
-        if (!validServices.includes(service_options.layanan)) {
+        if (service_options.layanan && !validServices.includes(service_options.layanan)) {
             throw new BadRequestException('Layanan tidak valid');
         }
 
@@ -1356,68 +1356,216 @@ export class OrdersService {
         // Chargeable weight = max(total berat aktual, total berat volume)
         const chargeableWeight = Math.max(totalWeight, totalBeratVolume);
 
-        // Hitung estimasi harga berdasarkan layanan
-        let basePrice = 0;
-        let estimatedDays = 0;
-        let serviceDescription = '';
+        // Fungsi untuk menghitung harga berdasarkan layanan
+        const calculateServicePrice = (layanan: string) => {
+            let basePrice = 0;
+            let estimatedDays = 0;
+            let serviceDescription = '';
+            let isValid = true;
+            let errorMessage = '';
 
-        switch (service_options.layanan) {
-            case 'Ekonomi':
-                basePrice = chargeableWeight * 3000; // Rp3.000/kg
-                estimatedDays = 4;
-                serviceDescription = 'Layanan ekonomi dengan estimasi 3-4+ hari';
-                break;
+            switch (layanan) {
+                case 'Ekonomi':
+                    basePrice = chargeableWeight * 3000; // Rp3.000/kg
+                    estimatedDays = 4;
+                    serviceDescription = 'Layanan ekonomi dengan estimasi 3-4+ hari';
+                    break;
 
-            case 'Reguler':
-                basePrice = chargeableWeight * 6000; // Rp6.000/kg
-                estimatedDays = 3;
-                serviceDescription = 'Layanan reguler dengan estimasi 2-4 hari';
-                break;
+                case 'Reguler':
+                    basePrice = chargeableWeight * 6000; // Rp6.000/kg
+                    estimatedDays = 3;
+                    serviceDescription = 'Layanan reguler dengan estimasi 2-4 hari';
+                    break;
 
-            case 'Kirim Motor':
-                if (service_options.motor_type === '125cc') {
-                    basePrice = 120000; // Rp120.000
-                } else {
-                    basePrice = 150000; // Rp150.000
+                case 'Paket':
+                    if (totalWeight <= 25) {
+                        basePrice = 15000; // Rp15.000
+                        estimatedDays = 2;
+                        serviceDescription = 'Layanan paket dengan batas maksimal 25kg';
+                    } else {
+                        isValid = false;
+                        errorMessage = 'Berat melebihi batas maksimal 25kg untuk layanan Paket';
+                    }
+                    break;
+
+                case 'Express':
+                    // Estimasi jarak sederhana (bisa dikembangkan dengan API maps)
+                    const estimatedDistance = 10; // km
+                    basePrice = 10000 + (estimatedDistance * 3000); // Base + (jarak × Rp3.000/km)
+                    estimatedDays = 1;
+                    serviceDescription = 'Layanan express same day delivery';
+                    break;
+
+                case 'Kirim Motor':
+                    if (service_options.motor_type) {
+                        if (service_options.motor_type === '125cc') {
+                            basePrice = 120000; // Rp120.000
+                        } else {
+                            basePrice = 150000; // Rp150.000
+                        }
+                        estimatedDays = 5;
+                        serviceDescription = `Layanan kirim motor ${service_options.motor_type}`;
+                    } else {
+                        isValid = false;
+                        errorMessage = 'Motor type wajib diisi untuk layanan Kirim Motor';
+                    }
+                    break;
+
+                case 'Sewa Truk':
+                    if (service_options.truck_type) {
+                        if (service_options.truck_type === 'Pick Up') {
+                            basePrice = 300000; // Rp300.000
+                        } else {
+                            basePrice = 800000; // Rp800.000
+                        }
+                        // Tambahan biaya per km
+                        const truckDistance = 20; // km
+                        basePrice += truckDistance * 2000; // Rp2.000/km
+                        estimatedDays = 2;
+                        serviceDescription = `Layanan sewa truk ${service_options.truck_type}`;
+                    } else {
+                        isValid = false;
+                        errorMessage = 'Truck type wajib diisi untuk layanan Sewa Truk';
+                    }
+                    break;
+
+                default:
+                    isValid = false;
+                    errorMessage = 'Layanan tidak dikenali';
+                    break;
+            }
+
+            return {
+                layanan,
+                basePrice,
+                estimatedDays,
+                serviceDescription,
+                isValid,
+                errorMessage
+            };
+        };
+
+        // Jika layanan tidak diisi, hitung untuk semua layanan yang relevan
+        if (!service_options.layanan) {
+            const servicesToCalculate = ['Ekonomi', 'Reguler', 'Paket', 'Express'];
+            const allServices = servicesToCalculate.map(service => calculateServicePrice(service));
+
+            // Hitung biaya tambahan dan diskon untuk setiap layanan
+            const servicesWithPricing = allServices.map(service => {
+                if (!service.isValid) {
+                    return {
+                        ...service,
+                        pricing: null,
+                        estimatedDeliveryDate: null
+                    };
                 }
-                estimatedDays = 5;
-                serviceDescription = `Layanan kirim motor ${service_options.motor_type}`;
-                break;
 
-            case 'Paket':
-                if (totalWeight <= 25) {
-                    basePrice = 15000; // Rp15.000
-                } else {
-                    throw new BadRequestException('Berat melebihi batas maksimal 25kg untuk layanan Paket');
+                // Hitung biaya tambahan
+                let additionalCosts = 0;
+                const additionalServices: any[] = [];
+
+                if (service_options.asuransi) {
+                    const asuransiCost = service.basePrice * 0.02; // 2% dari harga dasar
+                    additionalCosts += asuransiCost;
+                    additionalServices.push({
+                        service: 'Asuransi',
+                        cost: asuransiCost,
+                        description: 'Asuransi pengiriman 2% dari harga dasar'
+                    });
                 }
-                estimatedDays = 2;
-                serviceDescription = 'Layanan paket dengan batas maksimal 25kg';
-                break;
 
-            case 'Express':
-                // Estimasi jarak sederhana (bisa dikembangkan dengan API maps)
-                const estimatedDistance = 10; // km
-                basePrice = 10000 + (estimatedDistance * 3000); // Base + (jarak × Rp3.000/km)
-                estimatedDays = 1;
-                serviceDescription = 'Layanan express same day delivery';
-                break;
-
-            case 'Sewa Truk':
-                if (service_options.truck_type === 'Pick Up') {
-                    basePrice = 300000; // Rp300.000
-                } else {
-                    basePrice = 800000; // Rp800.000
+                if (service_options.packing) {
+                    const packingCost = 5000; // Rp5.000
+                    additionalCosts += packingCost;
+                    additionalServices.push({
+                        service: 'Packing',
+                        cost: packingCost,
+                        description: 'Packing tambahan'
+                    });
                 }
-                // Tambahan biaya per km
-                const truckDistance = 20; // km
-                basePrice += truckDistance * 2000; // Rp2.000/km
-                estimatedDays = 2;
-                serviceDescription = `Layanan sewa truk ${service_options.truck_type}`;
-                break;
 
-            default:
-                throw new BadRequestException('Layanan tidak dikenali');
+                // Hitung diskon voucher (jika ada)
+                let discountAmount = 0;
+                let voucherInfo: any = null;
+
+                if (service_options.voucher_code) {
+                    if (service_options.voucher_code === 'DISKONAKHIRBULAN') {
+                        discountAmount = service.basePrice * 0.1; // 10% diskon
+                        voucherInfo = {
+                            code: service_options.voucher_code,
+                            discount_percentage: 10,
+                            discount_amount: discountAmount,
+                            description: 'Diskon akhir bulan 10%'
+                        };
+                    }
+                }
+
+                // Hitung total harga
+                const subtotal = service.basePrice + additionalCosts;
+                const totalPrice = subtotal - discountAmount;
+
+                // Estimasi waktu transit
+                const estimatedDeliveryDate = new Date();
+                estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + service.estimatedDays);
+
+                return {
+                    ...service,
+                    pricing: {
+                        base_price: service.basePrice,
+                        additional_services: additionalServices,
+                        subtotal: subtotal,
+                        voucher: voucherInfo,
+                        discount_amount: discountAmount,
+                        total_price: totalPrice,
+                    },
+                    estimatedDeliveryDate: estimatedDeliveryDate.toISOString().split('T')[0]
+                };
+            });
+
+            return {
+                message: 'Estimasi harga untuk semua layanan berhasil dihitung',
+                success: true,
+                data: {
+                    origin: {
+                        provinsi: origin.provinsi,
+                        kota: origin.kota,
+                        kecamatan: origin.kecamatan,
+                        kelurahan: origin.kelurahan,
+                        kodepos: origin.kodepos,
+                    },
+                    destination: {
+                        provinsi: destination.provinsi,
+                        kota: destination.kota,
+                        kecamatan: destination.kecamatan,
+                        kelurahan: destination.kelurahan,
+                        kodepos: destination.kodepos,
+                    },
+                    item_details: {
+                        total_berat_aktual: totalWeight,
+                        total_berat_volume: totalBeratVolume,
+                        chargeable_weight: chargeableWeight,
+                        total_volume: totalVolume,
+                        total_qty: item_details.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0),
+                        items_breakdown: itemBreakdown,
+                    },
+                    service_options: {
+                        asuransi: service_options.asuransi || false,
+                        packing: service_options.packing || false,
+                        voucher_code: service_options.voucher_code || null,
+                    },
+                    services: servicesWithPricing
+                }
+            };
         }
+
+        // Jika layanan diisi, hitung untuk layanan spesifik
+        const serviceResult = calculateServicePrice(service_options.layanan);
+
+        if (!serviceResult.isValid) {
+            throw new BadRequestException(serviceResult.errorMessage);
+        }
+
+        const { basePrice, estimatedDays, serviceDescription } = serviceResult;
 
         // Hitung biaya tambahan
         let additionalCosts = 0;

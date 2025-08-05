@@ -63,9 +63,9 @@ export class ItemDetailsDto {
 }
 
 export class ServiceOptionsDto {
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
-    layanan: string;
+    layanan?: string;
 
     @IsOptional()
     @IsBoolean()
