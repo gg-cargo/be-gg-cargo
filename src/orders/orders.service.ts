@@ -863,9 +863,9 @@ export class OrdersService {
         }
 
         // Validasi pickup status - piece harus sudah di-pickup
-        if (piece.getDataValue('pickup_status') !== 1) {
-            throw new BadRequestException('Piece belum di-pickup. Reweight hanya bisa dilakukan setelah pickup');
-        }
+        // if (piece.getDataValue('pickup_status') !== 1) {
+        //     throw new BadRequestException('Piece belum di-pickup. Reweight hanya bisa dilakukan setelah pickup');
+        // }
 
         // Validasi piece belum di-reweight
         if (piece.getDataValue('reweight_status') === 1) {
