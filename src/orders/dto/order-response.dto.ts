@@ -4,6 +4,5 @@ export class UpdateOrderResponseDto {
     data: {
         no_resi: string;
         updated_fields: string[];
-        order_pieces_updated?: number;
     };
 } 

@@ -1,33 +1,27 @@
-import { IsString, IsNumber, IsOptional, IsArray, ValidateNested, IsIn } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class OrderPieceUpdateDto {
-    @IsString()
-    piece_id: string;
-
-    @IsOptional()
-    @IsNumber()
-    berat?: number;
-
-    @IsOptional()
-    @IsNumber()
-    panjang?: number;
-
-    @IsOptional()
-    @IsNumber()
-    lebar?: number;
-
-    @IsOptional()
-    @IsNumber()
-    tinggi?: number;
-
+export class UpdateOrderDto {
+    // Order info fields
     @IsOptional()
     @IsString()
     nama_barang?: string;
-}
 
-export class UpdateOrderDto {
-    // Order details
+    @IsOptional()
+    @IsNumber()
+    @Type(() => Number)
+    harga_barang?: number;
+
+    @IsOptional()
+    @IsString()
+    @IsIn(['Draft', 'Ready for Pickup', 'Picked Up', 'In Transit', 'Out for Delivery', 'Delivered', 'Cancelled', 'Menunggu diproses'])
+    status?: string;
+
+    @IsOptional()
+    @IsString()
+    layanan?: string;
+
+    // Shipper fields
     @IsOptional()
     @IsString()
     nama_pengirim?: string;
@@ -42,6 +36,31 @@ export class UpdateOrderDto {
 
     @IsOptional()
     @IsString()
+    email_pengirim?: string;
+
+    @IsOptional()
+    @IsString()
+    provinsi_pengirim?: string;
+
+    @IsOptional()
+    @IsString()
+    kota_pengirim?: string;
+
+    @IsOptional()
+    @IsString()
+    kecamatan_pengirim?: string;
+
+    @IsOptional()
+    @IsString()
+    kelurahan_pengirim?: string;
+
+    @IsOptional()
+    @IsString()
+    kodepos_pengirim?: string;
+
+    // Consignee fields
+    @IsOptional()
+    @IsString()
     nama_penerima?: string;
 
     @IsOptional()
@@ -54,37 +73,30 @@ export class UpdateOrderDto {
 
     @IsOptional()
     @IsString()
-    nama_barang?: string;
+    email_penerima?: string;
 
     @IsOptional()
     @IsString()
-    layanan?: string;
+    provinsi_penerima?: string;
 
     @IsOptional()
     @IsString()
-    @IsIn(['Draft', 'Ready for Pickup', 'Picked Up', 'In Transit', 'Out for Delivery', 'Delivered', 'Cancelled'])
-    status?: string;
-
-    @IsOptional()
-    @IsNumber()
-    total_berat?: number;
-
-    @IsOptional()
-    @IsNumber()
-    total_harga?: number;
+    kota_penerima?: string;
 
     @IsOptional()
     @IsString()
-    catatan?: string;
+    kecamatan_penerima?: string;
 
-    // Order pieces updates
     @IsOptional()
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => OrderPieceUpdateDto)
-    order_pieces_update?: OrderPieceUpdateDto[];
+    @IsString()
+    kelurahan_penerima?: string;
+
+    @IsOptional()
+    @IsString()
+    kodepos_penerima?: string;
 
     // Required field for audit trail
     @IsNumber()
+    @Type(() => Number)
     updated_by_user_id: number;
 } 

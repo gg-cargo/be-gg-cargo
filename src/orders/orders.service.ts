@@ -9,7 +9,7 @@ import { OrderList } from '../models/order-list.model';
 import { OrderReferensi } from '../models/order-referensi.model';
 import { CreateOrderDto, CreateOrderPieceDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
-import { UpdateOrderDto, OrderPieceUpdateDto } from './dto/update-order.dto';
+import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateOrderResponseDto } from './dto/order-response.dto';
 import { TrackingHelper } from './helpers/tracking.helper';
 import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
@@ -19,6 +19,7 @@ import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
 import { EstimatePriceDto } from './dto/estimate-price.dto';
 import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
+import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
 import { Op, fn, col, literal } from 'sequelize';
 import * as XLSX from 'xlsx';
 import * as PDFDocument from 'pdfkit';
@@ -169,6 +170,7 @@ export class OrdersService {
             // 5. Simpan ke tabel order_list
             // @ts-ignore
             await this.orderListModel.create({
+                //pengirim
                 no_tracking: noTracking,
                 nama_pengirim: createOrderDto.nama_pengirim,
                 alamat_pengirim: createOrderDto.alamat_pengirim,
@@ -179,6 +181,8 @@ export class OrdersService {
                 kodepos_pengirim: createOrderDto.kodepos_pengirim,
                 no_telepon_pengirim: createOrderDto.no_telepon_pengirim,
                 email_pengirim: createOrderDto.email_pengirim,
+
+                //penerima
                 nama_penerima: createOrderDto.nama_penerima,
                 alamat_penerima: createOrderDto.alamat_penerima,
                 provinsi_penerima: createOrderDto.provinsi_penerima,
@@ -188,6 +192,8 @@ export class OrdersService {
                 kodepos_penerima: createOrderDto.kodepos_penerima,
                 no_telepon_penerima: createOrderDto.no_telepon_penerima,
                 email_penerima: createOrderDto.email_penerima || '',
+
+                //pickup
                 status_pickup: 'Pending',
                 nama_barang: createOrderDto.nama_barang || '',
                 harga_barang: createOrderDto.harga_barang || 0,
@@ -1133,6 +1139,157 @@ export class OrdersService {
         }
     }
 
+    async getOrderDetail(noResi: string): Promise<OrderDetailResponseDto> {
+        try {
+            // 1. Get order with all related data
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noResi },
+                include: [
+                    {
+                        model: this.orderPieceModel,
+                        as: 'pieces',
+                        attributes: [
+                            'id',
+                            'berat',
+                            'panjang',
+                            'lebar',
+                            'tinggi',
+                            'reweight_status',
+                            'pickup_status'
+                        ],
+                        required: false
+                    }
+                ],
+                attributes: [
+                    'id',
+                    'no_tracking',
+                    'nama_barang',
+                    'harga_barang',
+                    'status',
+                    'bypass_reweight',
+                    'layanan',
+                    'created_at',
+                    'updated_at',
+                    // Shipper data
+                    'nama_pengirim',
+                    'alamat_pengirim',
+                    'provinsi_pengirim',
+                    'kota_pengirim',
+                    'kecamatan_pengirim',
+                    'kelurahan_pengirim',
+                    'kodepos_pengirim',
+                    'no_telepon_pengirim',
+                    'email_pengirim',
+                    // Consignee data
+                    'nama_penerima',
+                    'alamat_penerima',
+                    'provinsi_penerima',
+                    'kota_penerima',
+                    'kecamatan_penerima',
+                    'kelurahan_penerima',
+                    'kodepos_penerima',
+                    'no_telepon_penerima',
+                    'email_penerima',
+                    // Additional data
+                    'total_harga'
+                ]
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            // 2. Calculate summary metrics from pieces
+            const pieces = order.getDataValue('pieces') || [];
+            let jumlahKoli = 0;
+            let beratAktual = 0;
+            let beratVolume = 0;
+            let kubikasi = 0;
+
+            pieces.forEach((piece: any) => {
+                jumlahKoli += 1; // Each piece = 1 koli
+
+                const berat = parseFloat(piece.getDataValue('berat')) || 0;
+                const panjang = parseFloat(piece.getDataValue('panjang')) || 0;
+                const lebar = parseFloat(piece.getDataValue('lebar')) || 0;
+                const tinggi = parseFloat(piece.getDataValue('tinggi')) || 0;
+
+                beratAktual += berat;
+
+                // Calculate volume weight (panjang * lebar * tinggi) / 6000
+                const volumeWeight = (panjang * lebar * tinggi) / 6000;
+                beratVolume += volumeWeight;
+
+                // Calculate cubic meter (panjang * lebar * tinggi) / 1000000
+                const cubicMeter = (panjang * lebar * tinggi) / 1000000;
+                kubikasi += cubicMeter;
+            });
+
+            // 3. Build response
+            const response: OrderDetailResponseDto = {
+                message: 'Detail order berhasil diambil',
+                success: true,
+                data: {
+                    order_info: {
+                        tracking_no: order.getDataValue('no_tracking'),
+                        nama_barang: order.getDataValue('nama_barang'),
+                        harga_barang: parseFloat(order.getDataValue('harga_barang')) || 0,
+                        status: order.getDataValue('status') || 'Pending',
+                        bypass_reweight: order.getDataValue('bypass_reweight') || 'false',
+                        layanan: order.getDataValue('layanan') || 'Regular',
+                        created_at: order.getDataValue('created_at'),
+                        updated_at: order.getDataValue('updated_at')
+                    },
+                    shipper: {
+                        name: order.getDataValue('nama_pengirim'),
+                        address: order.getDataValue('alamat_pengirim'),
+                        phone: order.getDataValue('no_telepon_pengirim'),
+                        email: order.getDataValue('email_pengirim'),
+                        province: order.getDataValue('provinsi_pengirim'),
+                        city: order.getDataValue('kota_pengirim'),
+                        district: order.getDataValue('kecamatan_pengirim'),
+                        postal_code: order.getDataValue('kodepos_pengirim')
+                    },
+                    consignee: {
+                        name: order.getDataValue('nama_penerima'),
+                        address: order.getDataValue('alamat_penerima'),
+                        phone: order.getDataValue('no_telepon_penerima'),
+                        email: order.getDataValue('email_penerima'),
+                        province: order.getDataValue('provinsi_penerima'),
+                        city: order.getDataValue('kota_penerima'),
+                        district: order.getDataValue('kecamatan_penerima'),
+                        postal_code: order.getDataValue('kodepos_penerima')
+                    },
+                    summary_metrics: {
+                        jumlah_koli: jumlahKoli,
+                        berat_aktual_kg: Math.round(beratAktual * 100) / 100, // Round to 2 decimals
+                        berat_volume_kg: Math.round(beratVolume * 100) / 100,
+                        kubikasi_m3: Math.round(kubikasi * 1000) / 1000, // Round to 3 decimals
+                        total_harga: parseFloat(order.getDataValue('total_harga')) || 0
+                    },
+                    pieces_detail: pieces.map((piece: any, index: number) => ({
+                        piece_id: piece.getDataValue('id'),
+                        qty: 1, // Each piece = 1 qty
+                        berat: parseFloat(piece.getDataValue('berat')) || 0,
+                        panjang: parseFloat(piece.getDataValue('panjang')) || 0,
+                        lebar: parseFloat(piece.getDataValue('lebar')) || 0,
+                        tinggi: parseFloat(piece.getDataValue('tinggi')) || 0,
+                        reweight_status: piece.getDataValue('reweight_status') || 0,
+                        pickup_status: piece.getDataValue('pickup_status') || 0
+                    }))
+                }
+            };
+
+            return response;
+
+        } catch (error) {
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new InternalServerErrorException(`Error getting order detail: ${error.message}`);
+        }
+    }
+
     async estimatePrice(estimateDto: EstimatePriceDto) {
         const { origin, destination, item_details, service_options } = estimateDto;
 
@@ -1379,14 +1536,31 @@ export class OrdersService {
 
         try {
             const updatedFields: string[] = [];
-            let orderPiecesUpdated = 0;
 
             // Update order details
             const orderUpdateData: any = {
                 updated_at: new Date(),
             };
 
-            // Check and update order fields
+            // Check and update order info fields
+            if (updateOrderDto.nama_barang !== undefined) {
+                orderUpdateData.nama_barang = updateOrderDto.nama_barang;
+                updatedFields.push('nama_barang');
+            }
+            if (updateOrderDto.harga_barang !== undefined) {
+                orderUpdateData.harga_barang = updateOrderDto.harga_barang;
+                updatedFields.push('harga_barang');
+            }
+            if (updateOrderDto.status !== undefined) {
+                orderUpdateData.status = updateOrderDto.status;
+                updatedFields.push('status');
+            }
+            if (updateOrderDto.layanan !== undefined) {
+                orderUpdateData.layanan = updateOrderDto.layanan;
+                updatedFields.push('layanan');
+            }
+
+            // Check and update shipper fields
             if (updateOrderDto.nama_pengirim !== undefined) {
                 orderUpdateData.nama_pengirim = updateOrderDto.nama_pengirim;
                 updatedFields.push('nama_pengirim');
@@ -1399,6 +1573,32 @@ export class OrdersService {
                 orderUpdateData.no_telepon_pengirim = updateOrderDto.no_telepon_pengirim;
                 updatedFields.push('no_telepon_pengirim');
             }
+            if (updateOrderDto.email_pengirim !== undefined) {
+                orderUpdateData.email_pengirim = updateOrderDto.email_pengirim;
+                updatedFields.push('email_pengirim');
+            }
+            if (updateOrderDto.provinsi_pengirim !== undefined) {
+                orderUpdateData.provinsi_pengirim = updateOrderDto.provinsi_pengirim;
+                updatedFields.push('provinsi_pengirim');
+            }
+            if (updateOrderDto.kota_pengirim !== undefined) {
+                orderUpdateData.kota_pengirim = updateOrderDto.kota_pengirim;
+                updatedFields.push('kota_pengirim');
+            }
+            if (updateOrderDto.kecamatan_pengirim !== undefined) {
+                orderUpdateData.kecamatan_pengirim = updateOrderDto.kecamatan_pengirim;
+                updatedFields.push('kecamatan_pengirim');
+            }
+            if (updateOrderDto.kelurahan_pengirim !== undefined) {
+                orderUpdateData.kelurahan_pengirim = updateOrderDto.kelurahan_pengirim;
+                updatedFields.push('kelurahan_pengirim');
+            }
+            if (updateOrderDto.kodepos_pengirim !== undefined) {
+                orderUpdateData.kodepos_pengirim = updateOrderDto.kodepos_pengirim;
+                updatedFields.push('kodepos_pengirim');
+            }
+
+            // Check and update consignee fields
             if (updateOrderDto.nama_penerima !== undefined) {
                 orderUpdateData.nama_penerima = updateOrderDto.nama_penerima;
                 updatedFields.push('nama_penerima');
@@ -1411,21 +1611,29 @@ export class OrdersService {
                 orderUpdateData.no_telepon_penerima = updateOrderDto.no_telepon_penerima;
                 updatedFields.push('no_telepon_penerima');
             }
-            if (updateOrderDto.nama_barang !== undefined) {
-                orderUpdateData.nama_barang = updateOrderDto.nama_barang;
-                updatedFields.push('nama_barang');
+            if (updateOrderDto.email_penerima !== undefined) {
+                orderUpdateData.email_penerima = updateOrderDto.email_penerima;
+                updatedFields.push('email_penerima');
             }
-            if (updateOrderDto.layanan !== undefined) {
-                orderUpdateData.layanan = updateOrderDto.layanan;
-                updatedFields.push('layanan');
+            if (updateOrderDto.provinsi_penerima !== undefined) {
+                orderUpdateData.provinsi_penerima = updateOrderDto.provinsi_penerima;
+                updatedFields.push('provinsi_penerima');
             }
-            if (updateOrderDto.status !== undefined) {
-                orderUpdateData.status = updateOrderDto.status;
-                updatedFields.push('status');
+            if (updateOrderDto.kota_penerima !== undefined) {
+                orderUpdateData.kota_penerima = updateOrderDto.kota_penerima;
+                updatedFields.push('kota_penerima');
             }
-            if (updateOrderDto.catatan !== undefined) {
-                orderUpdateData.catatan = updateOrderDto.catatan;
-                updatedFields.push('catatan');
+            if (updateOrderDto.kecamatan_penerima !== undefined) {
+                orderUpdateData.kecamatan_penerima = updateOrderDto.kecamatan_penerima;
+                updatedFields.push('kecamatan_penerima');
+            }
+            if (updateOrderDto.kelurahan_penerima !== undefined) {
+                orderUpdateData.kelurahan_penerima = updateOrderDto.kelurahan_penerima;
+                updatedFields.push('kelurahan_penerima');
+            }
+            if (updateOrderDto.kodepos_penerima !== undefined) {
+                orderUpdateData.kodepos_penerima = updateOrderDto.kodepos_penerima;
+                updatedFields.push('kodepos_penerima');
             }
 
             // Update order if there are changes
@@ -1434,60 +1642,6 @@ export class OrdersService {
                     where: { id: order.id },
                     transaction
                 });
-            }
-
-            // Update order pieces if provided
-            if (updateOrderDto.order_pieces_update && updateOrderDto.order_pieces_update.length > 0) {
-                for (const pieceUpdate of updateOrderDto.order_pieces_update) {
-                    const piece = await this.orderPieceModel.findOne({
-                        where: {
-                            piece_id: pieceUpdate.piece_id,
-                            order_id: order.id
-                        }
-                    });
-
-                    if (!piece) {
-                        throw new NotFoundException(`Order piece dengan ID ${pieceUpdate.piece_id} tidak ditemukan`);
-                    }
-
-                    const pieceUpdateData: any = {
-                        updated_at: new Date(),
-                    };
-
-                    if (pieceUpdate.berat !== undefined) {
-                        pieceUpdateData.berat = pieceUpdate.berat;
-                        updatedFields.push(`piece_${pieceUpdate.piece_id}_berat`);
-                    }
-                    if (pieceUpdate.panjang !== undefined) {
-                        pieceUpdateData.panjang = pieceUpdate.panjang;
-                        updatedFields.push(`piece_${pieceUpdate.piece_id}_panjang`);
-                    }
-                    if (pieceUpdate.lebar !== undefined) {
-                        pieceUpdateData.lebar = pieceUpdate.lebar;
-                        updatedFields.push(`piece_${pieceUpdate.piece_id}_lebar`);
-                    }
-                    if (pieceUpdate.tinggi !== undefined) {
-                        pieceUpdateData.tinggi = pieceUpdate.tinggi;
-                        updatedFields.push(`piece_${pieceUpdate.piece_id}_tinggi`);
-                    }
-                    if (pieceUpdate.nama_barang !== undefined) {
-                        pieceUpdateData.nama_barang = pieceUpdate.nama_barang;
-                        updatedFields.push(`piece_${pieceUpdate.piece_id}_nama_barang`);
-                    }
-
-                    if (Object.keys(pieceUpdateData).length > 1) { // More than just updated_at
-                        await this.orderPieceModel.update(pieceUpdateData, {
-                            where: { id: piece.id },
-                            transaction
-                        });
-                        orderPiecesUpdated++;
-                    }
-                }
-
-                // Recalculate total weight if pieces were updated
-                if (orderPiecesUpdated > 0 && (order.getDataValue('reweight_status') as any) === 0) {
-                    await this.recalculateOrderTotals(order.id, transaction);
-                }
             }
 
             // Audit trail removed - no longer creating order_histories entry
@@ -1500,7 +1654,6 @@ export class OrdersService {
                 data: {
                     no_resi: noResi,
                     updated_fields: updatedFields,
-                    order_pieces_updated: orderPiecesUpdated > 0 ? orderPiecesUpdated : undefined,
                 },
             };
 

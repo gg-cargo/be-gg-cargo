@@ -10,6 +10,7 @@ import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
 import { EstimatePriceDto } from './dto/estimate-price.dto';
 import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
+import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('orders')
@@ -106,6 +107,14 @@ export class OrdersController {
         @Body() bypassDto: BypassReweightDto,
     ): Promise<BypassReweightResponseDto> {
         return this.ordersService.bypassReweight(orderId, bypassDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get(':no_resi')
+    async getOrderDetail(
+        @Param('no_resi') noResi: string,
+    ): Promise<OrderDetailResponseDto> {
+        return this.ordersService.getOrderDetail(noResi);
     }
 
     @Post('estimate-price')
