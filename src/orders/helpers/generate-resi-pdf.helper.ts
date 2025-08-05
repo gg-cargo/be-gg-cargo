@@ -22,7 +22,7 @@ async function generateBarcodeBase64(text: string): Promise<string> {
 }
 
 export function getLogoBase64(): string | undefined {
-    const logoPath = path.join(process.cwd(), 'public/logo-gg.png');
+    const logoPath = path.join(process.cwd(), 'public/logo-gg-2.png');
     if (fs.existsSync(logoPath)) {
         const img = fs.readFileSync(logoPath);
         return 'data:image/png;base64,' + img.toString('base64');
