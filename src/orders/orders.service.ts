@@ -20,6 +20,7 @@ import { EstimatePriceDto } from './dto/estimate-price.dto';
 import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
+import { ORDER_STATUS, getOrderStatusFromPieces } from '../common/constants/order-status.constants';
 import { Op, fn, col, literal } from 'sequelize';
 import * as XLSX from 'xlsx';
 import * as PDFDocument from 'pdfkit';
@@ -105,7 +106,7 @@ export class OrdersService {
                 //pickup_time
                 pickup_time: createOrderDto.pickup_time || null,
 
-                status: 'Menunggu diproses',
+                status: ORDER_STATUS.DRAFT,
                 created_by: userId,
                 order_by: userId,
             }, { transaction });
@@ -159,7 +160,7 @@ export class OrdersService {
             // 4. Simpan ke tabel order_histories
             await this.orderHistoryModel.create({
                 order_id: order.id,
-                status: 'Order diproses',
+                status: ORDER_STATUS.DRAFT,
                 keterangan: 'Order berhasil dibuat',
                 provinsi: createOrderDto.provinsi_pengirim,
                 kota: createOrderDto.kota_pengirim,
@@ -923,6 +924,9 @@ export class OrdersService {
                         transaction,
                     }
                 );
+
+                // Update order status based on pieces
+                await this.updateOrderStatusFromPieces(orderId, transaction);
             }
 
             // 4. Create order_histories
@@ -1234,7 +1238,7 @@ export class OrdersService {
                         tracking_no: order.getDataValue('no_tracking'),
                         nama_barang: order.getDataValue('nama_barang'),
                         harga_barang: parseFloat(order.getDataValue('harga_barang')) || 0,
-                        status: order.getDataValue('status') || 'Pending',
+                        status: order.getDataValue('status') || ORDER_STATUS.DRAFT,
                         bypass_reweight: order.getDataValue('bypass_reweight') || 'false',
                         layanan: order.getDataValue('layanan') || 'Regular',
                         created_at: order.getDataValue('created_at'),
@@ -1665,9 +1669,9 @@ export class OrdersService {
 
     private validateOrderUpdatePermission(order: Order): void {
         // Check if order can be updated based on current status
-        const restrictedStatuses = ['Delivered', 'Cancelled'];
+        const restrictedStatuses = [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED];
 
-        if (restrictedStatuses.includes(order.status)) {
+        if (restrictedStatuses.includes(order.status as any)) {
             throw new BadRequestException(`Order dengan status '${order.status}' tidak dapat diperbarui`);
         }
 
@@ -1709,6 +1713,35 @@ export class OrdersService {
             status: 'Order Details Updated',
             remark: remark,
             created_by: userId,
+        }, { transaction });
+    }
+
+    /**
+     * Update order status based on pieces status
+     * This method should be called whenever piece statuses change
+     */
+    private async updateOrderStatusFromPieces(orderId: number, transaction: Transaction): Promise<void> {
+        const pieces = await this.orderPieceModel.findAll({
+            where: { order_id: orderId },
+            transaction
+        });
+
+        const newStatus = getOrderStatusFromPieces(pieces);
+
+        await this.orderModel.update({
+            status: newStatus,
+            updated_at: new Date()
+        }, {
+            where: { id: orderId },
+            transaction
+        });
+
+        // Add history entry for status change
+        await this.orderHistoryModel.create({
+            order_id: orderId,
+            status: newStatus,
+            remark: `Status order diupdate menjadi: ${newStatus}`,
+            created_by: 1, // System user
         }, { transaction });
     }
 } 

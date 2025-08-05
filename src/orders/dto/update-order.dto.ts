@@ -1,5 +1,6 @@
 import { IsString, IsNumber, IsOptional, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ORDER_STATUS_LABELS } from '../../common/constants/order-status.constants';
 
 export class UpdateOrderDto {
     // Order info fields
@@ -14,7 +15,7 @@ export class UpdateOrderDto {
 
     @IsOptional()
     @IsString()
-    @IsIn(['Draft', 'Ready for Pickup', 'Picked Up', 'In Transit', 'Out for Delivery', 'Delivered', 'Cancelled', 'Menunggu diproses'])
+    @IsIn(ORDER_STATUS_LABELS)
     status?: string;
 
     @IsOptional()

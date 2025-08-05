@@ -49,7 +49,7 @@ Updates an existing order based on tracking number. This endpoint can update ord
 |-------|------|----------|-------------|
 | `nama_barang` | string | ❌ | Nama barang yang dikirim |
 | `harga_barang` | number | ❌ | Nilai barang (untuk asuransi) |
-| `status` | string | ❌ | Status pengiriman |
+| `status` | string | ❌ | Status pengiriman (Draft, Ready for Pickup, Picked Up, In Transit, Out for Delivery, Delivered, Cancelled) |
 | `layanan` | string | ❌ | Jenis layanan |
 | `nama_pengirim` | string | ❌ | Nama pengirim |
 | `alamat_pengirim` | string | ❌ | Alamat pengirim |
@@ -103,6 +103,7 @@ curl -X PATCH \
 - **No Pieces Update**: Order pieces cannot be updated through this endpoint
 - **Partial Update**: Only provided fields will be updated
 - **Audit Trail**: No audit trail is created (removed as requested)
+- **Status Standardization**: All statuses use English labels (Draft, Ready for Pickup, Picked Up, In Transit, Out for Delivery, Delivered, Cancelled)
 
 ### 3. Reweight Order Piece
 **PATCH** `/order-pieces/:id/reweight`
