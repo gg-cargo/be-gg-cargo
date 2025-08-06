@@ -61,6 +61,34 @@ $ npm run test:cov
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
 
+### Docker Deployment
+
+The application includes Docker support with static file serving for logos and other assets:
+
+- **Logo Files**: The application serves logo files from the `public` directory
+  - `logo-gg.png` - Main GG Kargo logo
+  - `logo-gg-2.png` - Alternative GG Kargo logo
+- **Static Files**: All files in the `public` directory are served as static assets
+- **Access URLs**: 
+  - `http://localhost:3000/logo-gg.png`
+  - `http://localhost:3000/logo-gg-2.png`
+
+### Building with Docker
+
+```bash
+# Build the Docker image
+docker build -t gg-kargo-backend .
+
+# Run the container
+docker run -p 3000:3000 gg-kargo-backend
+```
+
+The Docker build process automatically:
+1. Copies the `public` directory including all logo files
+2. Sets proper permissions for the `nestjs` user
+3. Creates necessary subdirectories (`pdf`, `excel`, `uploads`)
+4. Serves static files from the `public` directory
+
 If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
 
 ```bash
