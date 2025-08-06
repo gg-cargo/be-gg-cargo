@@ -381,7 +381,7 @@ export class OrdersService {
                 'nama_pengirim',
                 'nama_penerima',
                 'layanan',
-                'payment_status',
+                'invoiceStatus',
                 'status',
                 'id_kontrak',
                 'created_at',
@@ -393,7 +393,18 @@ export class OrdersService {
         });
         return {
             message: 'Data order berhasil diambil',
-            data: orders,
+            data: orders.map(order => ({
+                id: order.id,
+                no_tracking: order.no_tracking,
+                nama_pengirim: order.nama_pengirim,
+                nama_penerima: order.nama_penerima,
+                layanan: order.layanan,
+                status_tagihan: order.invoiceStatus,
+                status_pengiriman: order.status,
+                id_kontrak: order.id_kontrak,
+                created_at: order.created_at,
+                total_koli: order.total_koli,
+            })),
         };
     }
 

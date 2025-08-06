@@ -54,7 +54,7 @@ Get list of shipments with financial data and filtering options.
         "berat_volume_kg": 12.3,
         "volume_m3": 0.049,
         "status_pengiriman": "In Transit",
-        "status_tagihan": "Lunas",
+        "jenis_pembayaran": "Lunas",
         "tgl_tagihan": "2024-01-15",
         "dibuat_oleh": "John Doe",
         "total_harga": 250000,

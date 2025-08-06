@@ -490,20 +490,6 @@ export class FinanceService {
                 // Calculate volume M3
                 const volumeM3 = roundToDecimals(totalVolume, 3);
 
-                // Determine billing status
-                let statusTagihan = 'Belum Ditagih';
-                if (shipment.getDataValue('invoiceStatus') === INVOICE_STATUS.SUDAH_DITAGIH || shipment.getDataValue('invoiceStatus') === INVOICE_STATUS.LUNAS) {
-                    if (shipment.getDataValue('isUnpaid') === 1 && shipment.getDataValue('isPartialPaid') === 0) {
-                        statusTagihan = 'Belum Bayar';
-                    } else if (shipment.getDataValue('isPartialPaid') === 1) {
-                        statusTagihan = 'Bayar Sebagian';
-                    } else if (shipment.getDataValue('isUnpaid') === 0 && shipment.getDataValue('isPartialPaid') === 0) {
-                        statusTagihan = 'Lunas';
-                    } else {
-                        statusTagihan = 'Sudah Ditagih';
-                    }
-                }
-
                 return {
                     no,
                     order_id: shipment.getDataValue('id'),
@@ -516,8 +502,8 @@ export class FinanceService {
                     berat_aktual_kg: beratAktual,
                     berat_volume_kg: totalVolumeWeight,
                     volume_m3: volumeM3,
-                    status_pengiriman: shipment.getDataValue('status') || 'Pending',
-                    status_tagihan: statusTagihan,
+                    status_pengiriman: shipment.getDataValue('status'),
+                    status_tagihan: shipment.getDataValue('invoiceStatus'),
                     tgl_tagihan: shipment.getDataValue('date_submit'),
                     dibuat_oleh: shipment.getDataValue('orderUser')?.getDataValue('name') || 'Unknown',
                     total_harga: shipment.getDataValue('total_harga') || 0,
