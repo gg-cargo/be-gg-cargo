@@ -21,6 +21,7 @@ import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
 import { ORDER_STATUS, getOrderStatusFromPieces } from '../common/constants/order-status.constants';
+import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 import { Op, fn, col, literal } from 'sequelize';
 import * as XLSX from 'xlsx';
 import * as PDFDocument from 'pdfkit';
@@ -929,6 +930,7 @@ export class OrdersService {
                         reweight_status: 1,
                         isUnreweight: 0,
                         remark_reweight: 'Semua pieces telah di-reweight',
+                        invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH, // Update invoiceStatus menjadi "belum ditagih"
                     },
                     {
                         where: { id: orderId },
@@ -1066,6 +1068,7 @@ export class OrdersService {
                     {
                         reweight_status: 1,
                         isUnreweight: 0,
+                        invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH, // Update invoiceStatus menjadi "belum ditagih"
                     },
                     {
                         where: { id: orderId },
