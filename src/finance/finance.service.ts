@@ -19,6 +19,7 @@ import { RevenueSummaryByServiceDto } from './dto/revenue-summary-by-service.dto
 import { RevenueSummaryByServiceResponseDto, ServiceSummaryDto, GrandTotalDto } from './dto/revenue-summary-response.dto';
 import { Transaction } from 'sequelize';
 import { generateInvoicePDF } from './helpers/generate-invoice-pdf.helper';
+import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 
 @Injectable()
 export class FinanceService {
@@ -87,7 +88,7 @@ export class FinanceService {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
-                        [Op.in]: ['success', 'billed']
+                        [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                     }
                 }
             }) || 0;
@@ -97,7 +98,7 @@ export class FinanceService {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
-                        [Op.in]: ['success', 'billed']
+                        [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                     },
                     isUnpaid: 0,
                     isPartialPaid: 0
@@ -109,7 +110,7 @@ export class FinanceService {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
-                        [Op.in]: ['success', 'billed']
+                        [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                     },
                     [Op.or]: [
                         { isUnpaid: 1 },
@@ -123,7 +124,7 @@ export class FinanceService {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
-                        [Op.in]: ['success', 'billed']
+                        [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                     },
                     isPartialPaid: 1
                 }
@@ -172,7 +173,7 @@ export class FinanceService {
             this.orderModel.count({
                 where: {
                     ...orderWhereCondition,
-                    invoiceStatus: 'draft'
+                    invoiceStatus: INVOICE_STATUS.BELUM_PROSES
                 }
             }),
             // Billed but unpaid
@@ -180,7 +181,7 @@ export class FinanceService {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
-                        [Op.in]: ['success', 'billed']
+                        [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                     },
                     isUnpaid: 1,
                     isPartialPaid: 0
@@ -191,7 +192,7 @@ export class FinanceService {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
-                        [Op.in]: ['success', 'billed']
+                        [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                     },
                     isPartialPaid: 1
                 }
@@ -201,7 +202,7 @@ export class FinanceService {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
-                        [Op.in]: ['success', 'billed']
+                        [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                     },
                     isUnpaid: 0,
                     isPartialPaid: 0
@@ -226,7 +227,7 @@ export class FinanceService {
             where: {
                 ...orderWhereCondition,
                 invoiceStatus: {
-                    [Op.in]: ['success', 'billed']
+                    [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                 }
             },
             group: ['layanan'],
@@ -250,7 +251,7 @@ export class FinanceService {
             where: {
                 ...orderWhereCondition,
                 invoiceStatus: {
-                    [Op.in]: ['success', 'billed']
+                    [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                 }
             },
             group: ['order_by'],
@@ -371,21 +372,21 @@ export class FinanceService {
         if (billing_status) {
             switch (billing_status) {
                 case 'unpaid':
-                    whereCondition.invoiceStatus = { [Op.in]: ['success', 'billed'] };
+                    whereCondition.invoiceStatus = { [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS] };
                     whereCondition.isUnpaid = 1;
                     whereCondition.isPartialPaid = 0;
                     break;
                 case 'billed':
-                    whereCondition.invoiceStatus = { [Op.in]: ['success', 'billed'] };
+                    whereCondition.invoiceStatus = { [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS] };
                     whereCondition.isUnpaid = 0;
                     break;
                 case 'paid':
-                    whereCondition.invoiceStatus = { [Op.in]: ['success', 'billed'] };
+                    whereCondition.invoiceStatus = { [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS] };
                     whereCondition.isUnpaid = 0;
                     whereCondition.isPartialPaid = 0;
                     break;
                 case 'partial_paid':
-                    whereCondition.invoiceStatus = { [Op.in]: ['success', 'billed'] };
+                    whereCondition.invoiceStatus = { [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS] };
                     whereCondition.isPartialPaid = 1;
                     break;
             }
@@ -491,7 +492,7 @@ export class FinanceService {
 
                 // Determine billing status
                 let statusTagihan = 'Belum Ditagih';
-                if (shipment.getDataValue('invoiceStatus') === 'success' || shipment.getDataValue('invoiceStatus') === 'billed') {
+                if (shipment.getDataValue('invoiceStatus') === INVOICE_STATUS.SUDAH_DITAGIH || shipment.getDataValue('invoiceStatus') === INVOICE_STATUS.LUNAS) {
                     if (shipment.getDataValue('isUnpaid') === 1 && shipment.getDataValue('isPartialPaid') === 0) {
                         statusTagihan = 'Belum Bayar';
                     } else if (shipment.getDataValue('isPartialPaid') === 1) {
@@ -698,7 +699,7 @@ export class FinanceService {
 
         // Validasi status order
         for (const order of orders) {
-            if (order.getDataValue('invoiceStatus') === 'success' || order.getDataValue('invoiceStatus') === 'billed' || (order.getDataValue('orderInvoice') && order.getDataValue('orderInvoice').getDataValue('invoice_no'))) {
+            if (order.getDataValue('invoiceStatus') === INVOICE_STATUS.SUDAH_DITAGIH || order.getDataValue('invoiceStatus') === INVOICE_STATUS.LUNAS || (order.getDataValue('orderInvoice') && order.getDataValue('orderInvoice').getDataValue('invoice_no'))) {
                 throw new Error(`Order ${order.id} sudah memiliki invoice`);
             }
             // if (!(order.status === 'Delivered' || order.status === 'Completed')) {
@@ -839,7 +840,7 @@ export class FinanceService {
 
                 // Update status order
                 await order.update({
-                    invoiceStatus: 'billed',
+                    invoiceStatus: INVOICE_STATUS.SUDAH_DITAGIH,
                     isUnpaid: 1,
                     date_submit: invoice_date,
                     noFaktur: invoice_no
@@ -960,7 +961,7 @@ export class FinanceService {
                     invoice_no: invoice.getDataValue('invoice_no'),
                     invoice_date: formatDate(invoice.getDataValue('invoice_date')),
                     payment_terms: invoice.getDataValue('payment_terms'),
-                    status_payment: order.getDataValue('invoiceStatus') === 'success' ? 'Paid' : 'Billed',
+                    status_payment: order.getDataValue('invoiceStatus') === INVOICE_STATUS.LUNAS ? 'Paid' : 'Billed',
                     paid_from_bank: paymentInfo ? paymentInfo.getDataValue('bank_name') : null,
                     contract_quotation: quotationInfo ? quotationInfo.getDataValue('no_quotation') : null,
 
@@ -1080,25 +1081,25 @@ export class FinanceService {
 
                     switch (status_payment) {
                         case 'paid':
-                            newStatus = 'success';
+                            newStatus = INVOICE_STATUS.LUNAS;
                             isUnpaid = 0;
                             isPartialPaid = 0;
                             sisaAmount = 0;
                             break;
                         case 'partial_paid':
-                            newStatus = 'success';
+                            newStatus = INVOICE_STATUS.LUNAS;
                             isUnpaid = 0;
                             isPartialPaid = 1;
                             sisaAmount = Math.max(0, parseFloat(order.getDataValue('total_harga')) - (payment_amount || 0));
                             break;
                         case 'unpaid':
-                            newStatus = 'billed';
+                            newStatus = INVOICE_STATUS.SUDAH_DITAGIH;
                             isUnpaid = 1;
                             isPartialPaid = 0;
                             sisaAmount = order.getDataValue('total_harga');
                             break;
                         case 'cancelled':
-                            newStatus = 'cancelled';
+                            newStatus = INVOICE_STATUS.BELUM_DITAGIH;
                             isUnpaid = 1;
                             isPartialPaid = 0;
                             sisaAmount = order.getDataValue('total_harga');

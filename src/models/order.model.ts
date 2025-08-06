@@ -3,6 +3,7 @@ import { User } from './user.model';
 import { OrderShipment } from './order-shipment.model';
 import { OrderPiece } from './order-piece.model';
 import { OrderInvoice } from './order-invoice.model';
+import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 
 @Table({
     tableName: 'orders',
@@ -842,7 +843,7 @@ export class Order extends Model {
     @Column({
         type: DataType.STRING(200),
         allowNull: false,
-        defaultValue: 'draft',
+        defaultValue: INVOICE_STATUS.BELUM_PROSES,
     })
     invoiceStatus: string;
 
