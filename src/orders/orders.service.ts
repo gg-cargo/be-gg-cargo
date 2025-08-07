@@ -914,14 +914,24 @@ export class OrdersService {
             );
 
             // 2. Check if all pieces in the order have been reweighted
+            // Kita perlu menghitung ulang setelah piece ini diupdate
             const orderId = piece.getDataValue('order_id');
-            const allPieces = await this.orderPieceModel.findAll({
-                where: { order_id: orderId },
-                attributes: ['reweight_status'],
-                raw: true,
+
+            // Hitung jumlah pieces yang belum di-reweight
+            const unreweightedCount = await this.orderPieceModel.count({
+                where: {
+                    order_id: orderId,
+                    reweight_status: { [Op.ne]: 1 } // Tidak sama dengan 1
+                },
+                transaction,
             });
 
-            const allReweighted = allPieces.every(p => p.reweight_status === 1);
+            const totalPieces = await this.orderPieceModel.count({
+                where: { order_id: orderId },
+                transaction,
+            });
+
+            const allReweighted = unreweightedCount === 0 && totalPieces > 0;
 
             // 3. Update order reweight status if all pieces are reweighted
             if (allReweighted) {
@@ -942,22 +952,6 @@ export class OrdersService {
                 await this.updateOrderStatusFromPieces(orderId, transaction);
             }
 
-            // 4. Create order_histories
-            const historyRemark = `Piece ID: ${pieceId}, Berat awal: ${oldBerat} kg → ${berat} kg, Dimensi awal: ${oldPanjang}x${oldLebar}x${oldTinggi} cm → ${panjang}x${lebar}x${tinggi} cm`;
-
-            await this.orderHistoryModel.create(
-                {
-                    order_id: orderId,
-                    status: 'Piece Reweighted',
-                    remark: historyRemark,
-                    provinsi: piece.getDataValue('order')?.getDataValue('provinsi_pengirim') || '',
-                    kota: piece.getDataValue('order')?.getDataValue('kota_pengirim') || '',
-                    date: now.toISOString().split('T')[0],
-                    time: now.toTimeString().split(' ')[0],
-                    created_by: reweight_by_user_id,
-                },
-                { transaction }
-            );
 
             await transaction.commit();
 
@@ -1168,6 +1162,7 @@ export class OrdersService {
                         as: 'pieces',
                         attributes: [
                             'id',
+                            'piece_id',
                             'berat',
                             'panjang',
                             'lebar',
@@ -1286,7 +1281,8 @@ export class OrdersService {
                         total_harga: parseFloat(order.getDataValue('total_harga')) || 0
                     },
                     pieces_detail: pieces.map((piece: any, index: number) => ({
-                        piece_id: piece.getDataValue('id'),
+                        id: piece.getDataValue('id'),
+                        piece_id: piece.getDataValue('piece_id'),
                         qty: 1, // Each piece = 1 qty
                         berat: parseFloat(piece.getDataValue('berat')) || 0,
                         panjang: parseFloat(piece.getDataValue('panjang')) || 0,
@@ -1897,13 +1893,5 @@ export class OrdersService {
             where: { id: orderId },
             transaction
         });
-
-        // Add history entry for status change
-        await this.orderHistoryModel.create({
-            order_id: orderId,
-            status: newStatus,
-            remark: `Status order diupdate menjadi: ${newStatus}`,
-            created_by: 1, // System user
-        }, { transaction });
     }
 } 
