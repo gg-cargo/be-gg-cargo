@@ -145,6 +145,37 @@ export class FinanceService {
             // 9. Get additional payment statistics from payment_order table
             const paymentOrderStats = await this.getPaymentOrderStatistics(whereCondition);
 
+            // 10. Get total pembayaran untuk draft (belum ditagih)
+            const totalDraftAmount = await this.orderModel.sum('total_harga', {
+                where: {
+                    ...orderWhereCondition,
+                    invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH
+                }
+            }) || 0;
+
+            // 11. Get total pembayaran untuk pending (sudah ditagih)
+            const totalPendingAmount = await this.orderModel.sum('total_harga', {
+                where: {
+                    ...orderWhereCondition,
+                    invoiceStatus: INVOICE_STATUS.SUDAH_DITAGIH
+                }
+            }) || 0;
+
+            // 12. Get count untuk draft dan pending
+            const draftCount = await this.orderModel.count({
+                where: {
+                    ...orderWhereCondition,
+                    invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH
+                }
+            });
+
+            const pendingCount = await this.orderModel.count({
+                where: {
+                    ...orderWhereCondition,
+                    invoiceStatus: INVOICE_STATUS.SUDAH_DITAGIH
+                }
+            });
+
             return {
                 message: 'Finance summary berhasil diambil',
                 success: true,
@@ -160,6 +191,16 @@ export class FinanceService {
                     top_customers_by_revenue: topCustomersByRevenue,
                     payment_statistics: paymentStats,
                     payment_order_statistics: paymentOrderStats,
+                    total_pembayaran: {
+                        draft: {
+                            count: draftCount,
+                            amount: totalDraftAmount
+                        },
+                        pending: {
+                            count: pendingCount,
+                            amount: totalPendingAmount
+                        }
+                    }
                 },
             };
         } catch (error) {
@@ -431,6 +472,7 @@ export class FinanceService {
                     'created_at',
                     'nama_pengirim',
                     'nama_penerima',
+                    'nama_barang',
                     'layanan',
                     'total_berat',
                     'status',
@@ -497,12 +539,16 @@ export class FinanceService {
                     tgl_pengiriman: shipment.getDataValue('created_at'),
                     pengirim: shipment.getDataValue('nama_pengirim'),
                     penerima: shipment.getDataValue('nama_penerima'),
+                    barang: shipment.getDataValue('nama_barang') || '-',
                     layanan: shipment.getDataValue('layanan') || 'Regular',
                     qty: shipment.getDataValue('shipments') ? shipment.getDataValue('shipments').reduce((sum: number, ship: any) => sum + (ship.getDataValue('qty') || 0), 0) : pieces.length,
+                    berat: `${beratAktual} Kg`,
+                    koli: `${pieces.length} Qty`,
+                    harga: `Rp${(shipment.getDataValue('total_harga') || 0).toLocaleString('id-ID')}`,
                     berat_aktual_kg: beratAktual,
                     berat_volume_kg: totalVolumeWeight,
                     volume_m3: volumeM3,
-                    status_pengiriman: shipment.getDataValue('status'),
+                    pengiriman: shipment.getDataValue('status'),
                     status_tagihan: shipment.getDataValue('invoiceStatus'),
                     tgl_tagihan: shipment.getDataValue('date_submit'),
                     dibuat_oleh: shipment.getDataValue('orderUser')?.getDataValue('name') || 'Unknown',
@@ -691,9 +737,9 @@ export class FinanceService {
             // if (!(order.status === 'Delivered' || order.status === 'Completed')) {
             //     throw new Error(`Order ${order.id} belum delivered/completed`);
             // }
-            if (order.getDataValue('reweight_status') !== 1) {
-                throw new Error(`Order ${order.id} belum reweight final`);
-            }
+            // if (order.getDataValue('reweight_status') !== 1) {
+            //     throw new Error(`Order ${order.id} belum reweight final`);
+            // }
         }
 
         // 4. Ambil info bank default
@@ -947,8 +993,8 @@ export class FinanceService {
                     invoice_no: invoice.getDataValue('invoice_no'),
                     invoice_date: formatDate(invoice.getDataValue('invoice_date')),
                     payment_terms: invoice.getDataValue('payment_terms'),
-                    status_payment: order.getDataValue('invoiceStatus') === INVOICE_STATUS.LUNAS ? 'Paid' : 'Billed',
-                    paid_from_bank: paymentInfo ? paymentInfo.getDataValue('bank_name') : null,
+                    status_payment: order.getDataValue('invoiceStatus') === INVOICE_STATUS.LUNAS ? 'lunas' : 'ditagihkan',
+                    paid_from_bank: this.extractBankFromNotes(invoice.getDataValue('notes')) || (paymentInfo ? paymentInfo.getDataValue('bank_name') : null),
                     contract_quotation: quotationInfo ? quotationInfo.getDataValue('no_quotation') : null,
 
                     shipment_details: {
@@ -974,17 +1020,28 @@ export class FinanceService {
                         }
                     },
 
-                    billing_items: invoiceDetails.map((detail: any) => ({
-                        description: detail.getDataValue('description'),
-                        quantity: detail.getDataValue('qty'),
-                        uom: detail.getDataValue('uom'),
-                        unit_price: detail.getDataValue('unit_price'),
-                        total: detail.getDataValue('unit_price') * detail.getDataValue('qty'),
-                        remarks: detail.getDataValue('remark')
-                    })),
+                    billing_items: invoiceDetails
+                        .filter((detail: any) => detail.getDataValue('description') === 'Biaya Pengiriman Barang')
+                        .map((detail: any) => ({
+                            description: detail.getDataValue('description'),
+                            quantity: detail.getDataValue('qty'),
+                            uom: detail.getDataValue('uom'),
+                            unit_price: detail.getDataValue('unit_price'),
+                            total: detail.getDataValue('unit_price') * detail.getDataValue('qty'),
+                            remarks: detail.getDataValue('remark')
+                        })),
 
                     discount_voucher_contract: invoice.getDataValue('discount') || 0,
-                    additional_fees: [],
+                    additional_fees: invoiceDetails
+                        .filter((detail: any) => detail.getDataValue('description') !== 'Biaya Pengiriman Barang')
+                        .map((detail: any) => ({
+                            description: detail.getDataValue('description'),
+                            quantity: detail.getDataValue('qty'),
+                            uom: detail.getDataValue('uom'),
+                            unit_price: detail.getDataValue('unit_price'),
+                            total: detail.getDataValue('unit_price') * detail.getDataValue('qty'),
+                            remarks: detail.getDataValue('remark')
+                        })),
                     asuransi_amount: invoice.getDataValue('asuransi') || 0,
                     packing_amount: invoice.getDataValue('packing') || 0,
                     pph_percentage: 2,
@@ -1017,21 +1074,33 @@ export class FinanceService {
 
     async updateInvoice(invoiceNo: string, body: UpdateInvoiceDto) {
         const {
+            invoice_date,
+            payment_terms,
             status_payment,
             payment_amount,
             payment_date,
             payment_method,
             paid_attachment_url,
-            payment_terms,
+            paid_from_bank,
+            contract_quotation,
+            billing_items,
+            discount_voucher_contract,
+            asuransi_amount,
+            packing_amount,
+            pph_percentage,
+            pph_amount,
+            ppn_percentage,
+            ppn_amount,
+            gross_up,
+            total_all,
             notes,
-            update_items,
             updated_by_user_id
         } = body;
 
         try {
             // 1. Validasi user (role finance)
             const user = await this.userModel.findByPk(updated_by_user_id);
-            if (!user) { // misal level 3 = finance
+            if (!user) {
                 throw new Error('User tidak berhak mengupdate invoice');
             }
 
@@ -1052,12 +1121,37 @@ export class FinanceService {
 
             const order = invoice.getDataValue('order');
 
+            // Get payment info if exists
+            const paymentInfo = await this.paymentOrderModel.findOne({
+                where: {
+                    order_id: order.id.toString(),
+                    no_tracking: order.getDataValue('no_tracking')
+                },
+                order: [['created_at', 'DESC']]
+            });
+
             // 3. Mulai transaksi
             if (!this.orderModel.sequelize) throw new Error('Sequelize instance not found');
             return await this.orderModel.sequelize.transaction(async (t: Transaction) => {
                 const updateHistory: string[] = [];
 
-                // 4. Update Payment Status
+                // 4. Update Invoice Date
+                if (invoice_date) {
+                    await invoice.update({
+                        invoice_date: new Date(invoice_date)
+                    }, { transaction: t });
+                    updateHistory.push('Tanggal invoice diperbarui');
+                }
+
+                // 5. Update Payment Terms
+                if (payment_terms) {
+                    await invoice.update({
+                        payment_terms
+                    }, { transaction: t });
+                    updateHistory.push('Payment terms diperbarui');
+                }
+
+                // 6. Update Payment Status
                 if (status_payment) {
                     const oldStatus = order.getDataValue('invoiceStatus');
                     let newStatus = oldStatus;
@@ -1066,26 +1160,14 @@ export class FinanceService {
                     let sisaAmount = order.getDataValue('sisaAmount');
 
                     switch (status_payment) {
-                        case 'paid':
+                        case 'lunas':
                             newStatus = INVOICE_STATUS.LUNAS;
                             isUnpaid = 0;
                             isPartialPaid = 0;
                             sisaAmount = 0;
                             break;
-                        case 'partial_paid':
-                            newStatus = INVOICE_STATUS.LUNAS;
-                            isUnpaid = 0;
-                            isPartialPaid = 1;
-                            sisaAmount = Math.max(0, parseFloat(order.getDataValue('total_harga')) - (payment_amount || 0));
-                            break;
-                        case 'unpaid':
+                        case 'ditagihkan':
                             newStatus = INVOICE_STATUS.SUDAH_DITAGIH;
-                            isUnpaid = 1;
-                            isPartialPaid = 0;
-                            sisaAmount = order.getDataValue('total_harga');
-                            break;
-                        case 'cancelled':
-                            newStatus = INVOICE_STATUS.BELUM_DITAGIH;
                             isUnpaid = 1;
                             isPartialPaid = 0;
                             sisaAmount = order.getDataValue('total_harga');
@@ -1102,21 +1184,20 @@ export class FinanceService {
 
                     // Update invoice payment status
                     await invoice.update({
-                        konfirmasi_bayar: status_payment === 'paid' ? 1 : 0,
+                        konfirmasi_bayar: status_payment === 'lunas' ? 1 : 0,
                         paid_attachment: paid_attachment_url || null
                     }, { transaction: t });
 
                     // Create payment order record if payment received
-                    if (status_payment === 'paid' || status_payment === 'partial_paid') {
-                        // Generate payment order ID
+                    if (status_payment === 'lunas') {
                         const paymentOrderId = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
                         await this.paymentOrderModel.create({
                             id: paymentOrderId,
                             order_id: order.id.toString(),
                             no_tracking: order.getDataValue('no_tracking'),
-                            amount: (payment_amount || 0).toString(),
-                            bank_name: payment_method || 'Transfer Bank',
+                            amount: (payment_amount || order.getDataValue('total_harga')).toString(),
+                            bank_name: paid_from_bank || payment_method || 'Transfer Bank',
                             user_id: updated_by_user_id.toString(),
                             date: new Date(payment_date || Date.now()).toISOString().split('T')[0],
                             created_at: new Date()
@@ -1126,66 +1207,123 @@ export class FinanceService {
                     updateHistory.push(`Status pembayaran diubah dari ${oldStatus} ke ${newStatus}`);
                 }
 
-                // 5. Update General Invoice Data
-                if (payment_terms || notes) {
-                    const updateData: any = {};
-                    if (payment_terms) updateData.payment_terms = payment_terms;
-                    if (notes) updateData.notes = notes;
-
-                    await invoice.update(updateData, { transaction: t });
-                    updateHistory.push('Data umum invoice diperbarui');
-                }
-
-                // 6. Update Invoice Items
-                if (update_items && update_items.length > 0) {
-                    for (const item of update_items) {
-                        const invoiceDetail = await this.orderInvoiceDetailModel.findByPk(item.invoice_detail_id);
-                        if (invoiceDetail) {
-                            const oldData = {
-                                description: invoiceDetail.getDataValue('description'),
-                                quantity: invoiceDetail.getDataValue('qty'),
-                                unit_price: invoiceDetail.getDataValue('unit_price')
-                            };
-
-                            await invoiceDetail.update({
-                                description: item.description || invoiceDetail.getDataValue('description'),
-                                qty: item.quantity || invoiceDetail.getDataValue('qty'),
-                                uom: item.uom || invoiceDetail.getDataValue('uom'),
-                                unit_price: item.unit_price || invoiceDetail.getDataValue('unit_price'),
-                                remark: item.remarks || invoiceDetail.getDataValue('remark')
-                            }, { transaction: t });
-
-                            updateHistory.push(`Item "${oldData.description}" diperbarui`);
-                        }
-                    }
-
-                    // Recalculate invoice totals
-                    const updatedDetails = await this.orderInvoiceDetailModel.findAll({
-                        where: { invoice_id: invoice.id }
-                    });
-
-                    const subtotal = updatedDetails.reduce((sum, detail) => {
-                        return sum + (detail.getDataValue('unit_price') * detail.getDataValue('qty'));
-                    }, 0);
-
-                    const ppn = Math.round(subtotal * 0.1); // 10% PPN
-                    const pph = 0; // default 0
-                    const total = subtotal + ppn - pph;
+                // 7. Update Payment Details
+                if (paid_from_bank) {
+                    // Store paid_from_bank in notes field temporarily
+                    const currentNotes = invoice.getDataValue('notes') || '';
+                    const bankInfo = `Bank Pembayaran: ${paid_from_bank}`;
+                    const updatedNotes = currentNotes ? `${currentNotes}\n${bankInfo}` : bankInfo;
 
                     await invoice.update({
-                        vat: ppn,
-                        ppn,
-                        pph,
-                        total
+                        notes: updatedNotes
                     }, { transaction: t });
+                    updateHistory.push('Bank pembayaran diperbarui');
+                } else if (paymentInfo && status_payment === 'lunas') {
+                    // Auto-fill paid_from_bank from paymentInfo if not provided
+                    const bankNameFromPayment = paymentInfo.getDataValue('bank_name');
+                    if (bankNameFromPayment) {
+                        const currentNotes = invoice.getDataValue('notes') || '';
+                        const bankInfo = `Bank Pembayaran: ${bankNameFromPayment}`;
+                        const updatedNotes = currentNotes ? `${currentNotes}\n${bankInfo}` : bankInfo;
 
-                    updateHistory.push('Total invoice dihitung ulang');
+                        await invoice.update({
+                            notes: updatedNotes
+                        }, { transaction: t });
+                        updateHistory.push(`Bank pembayaran otomatis diisi: ${bankNameFromPayment}`);
+                    }
                 }
 
-                // 7. Create audit trail
+                // 8. Update Contract & Quotation
+                if (contract_quotation) {
+                    await invoice.update({
+                        contract_quotation
+                    }, { transaction: t });
+                    updateHistory.push('Contract quotation diperbarui');
+                }
+
+                // 9. Update Billing Items
+                if (billing_items && billing_items.length > 0) {
+                    // Delete existing invoice details
+                    await this.orderInvoiceDetailModel.destroy({
+                        where: { invoice_id: invoice.id },
+                        transaction: t
+                    });
+
+                    // Create new invoice details
+                    for (const item of billing_items) {
+                        await this.orderInvoiceDetailModel.create({
+                            invoice_id: invoice.id,
+                            description: item.description,
+                            qty: item.quantity,
+                            uom: item.uom,
+                            unit_price: item.unit_price,
+                            remark: item.remarks || ''
+                        }, { transaction: t });
+                    }
+
+                    updateHistory.push('Billing items diperbarui');
+                }
+
+                // 10. Update Additional Charges
+                const additionalCharges: any = {};
+                if (discount_voucher_contract !== undefined) {
+                    additionalCharges.discount = discount_voucher_contract;
+                    updateHistory.push('Discount voucher contract diperbarui');
+                }
+                if (asuransi_amount !== undefined) {
+                    additionalCharges.asuransi = asuransi_amount;
+                    updateHistory.push('Asuransi amount diperbarui');
+                }
+                if (packing_amount !== undefined) {
+                    additionalCharges.packing = packing_amount;
+                    updateHistory.push('Packing amount diperbarui');
+                }
+
+                if (Object.keys(additionalCharges).length > 0) {
+                    await invoice.update(additionalCharges, { transaction: t });
+                }
+
+                // 11. Update Tax Configuration
+                const taxConfig: any = {};
+                if (pph_percentage !== undefined) {
+                    taxConfig.pph_percentage = pph_percentage;
+                    updateHistory.push('PPH percentage diperbarui');
+                }
+                if (pph_amount !== undefined) {
+                    taxConfig.pph = pph_amount;
+                    updateHistory.push('PPH amount diperbarui');
+                }
+                if (ppn_percentage !== undefined) {
+                    taxConfig.ppn_percentage = ppn_percentage;
+                    updateHistory.push('PPN percentage diperbarui');
+                }
+                if (ppn_amount !== undefined) {
+                    taxConfig.ppn = ppn_amount;
+                    updateHistory.push('PPN amount diperbarui');
+                }
+
+                if (Object.keys(taxConfig).length > 0) {
+                    await invoice.update(taxConfig, { transaction: t });
+                }
+
+                // 12. Update Gross Up
+                if (gross_up !== undefined) {
+                    await invoice.update({
+                        gross_up: gross_up ? 1 : 0
+                    }, { transaction: t });
+                    updateHistory.push('Gross up diperbarui');
+                }
+
+                // 14. Update Notes
+                if (notes) {
+                    await invoice.update({
+                        notes
+                    }, { transaction: t });
+                    updateHistory.push('Notes diperbarui');
+                }
+
+                // 15. Create audit trail
                 if (updateHistory.length > 0) {
-                    // Note: OrderHistory model should be injected if needed
-                    // For now, we'll skip audit trail creation
                     console.log('Audit trail:', {
                         order_id: order.id,
                         status: 'Invoice Updated',
@@ -1296,5 +1434,262 @@ export class FinanceService {
         } catch (error) {
             throw new InternalServerErrorException(`Gagal mengambil ringkasan pendapatan: ${error.message}`);
         }
+    }
+
+    private extractBankFromNotes(notes: string): string | null {
+        if (!notes) return null;
+        const bankMatch = notes.match(/Bank Pembayaran:\s*(.*)/);
+        if (bankMatch && bankMatch[1]) {
+            return bankMatch[1].trim();
+        }
+        return null;
+    }
+
+    async updateInvoiceStatus(invoiceNo: string, body: any) {
+        const {
+            status_action,
+            updated_by_user_id
+        } = body;
+
+        try {
+            // 1. Validasi user
+            const user = await this.userModel.findByPk(updated_by_user_id);
+            if (!user) {
+                throw new Error('User tidak ditemukan');
+            }
+
+            // 2. Cari invoice berdasarkan invoice_no
+            const invoice = await this.orderInvoiceModel.findOne({
+                where: { invoice_no: invoiceNo },
+                include: [
+                    {
+                        model: this.orderModel,
+                        as: 'order'
+                    }
+                ]
+            });
+
+            if (!invoice) {
+                throw new Error('Invoice tidak ditemukan');
+            }
+
+            const order = invoice.getDataValue('order');
+            const currentStatus = order.getDataValue('invoiceStatus');
+            const updateHistory: string[] = [];
+
+            // 3. Mulai transaksi
+            if (!this.orderModel.sequelize) throw new Error('Sequelize instance not found');
+            return await this.orderModel.sequelize.transaction(async (t: any) => {
+                switch (status_action) {
+                    case 'generate':
+                        return await this.handleGenerateInvoice(order, updated_by_user_id, t, updateHistory);
+
+                    case 'submit':
+                        return await this.handleSubmitInvoice(invoice, order, updated_by_user_id, t, updateHistory);
+
+                    case 'revert_to_draft':
+                        return await this.handleRevertToDraft(invoice, order, updated_by_user_id, t, updateHistory);
+
+                    case 'update_unpaid':
+                        return await this.handleUpdateUnpaid(invoice, order, updated_by_user_id, t, updateHistory);
+
+                    default:
+                        throw new Error('Status action tidak valid');
+                }
+            });
+
+        } catch (error) {
+            throw new Error(`Error updating invoice status: ${error.message}`);
+        }
+    }
+
+    private async handleGenerateInvoice(order: any, updatedByUserId: number, transaction: any, updateHistory: string[]) {
+        // Validasi status saat ini
+        const currentStatus = order.getDataValue('invoiceStatus');
+        if (currentStatus !== INVOICE_STATUS.BELUM_PROSES) {
+            throw new Error('Invoice hanya bisa di-generate jika status order adalah belum proses');
+        }
+
+        // Cek apakah invoice sudah ada
+        const existingInvoice = await this.orderInvoiceModel.findOne({
+            where: { order_id: order.id }
+        });
+
+        if (existingInvoice) {
+            throw new Error('Invoice untuk order ini sudah ada');
+        }
+
+        // Generate invoice_no, ambil dari no tracking
+        const invoiceNo = order.getDataValue('no_tracking');
+
+        // Buat invoice baru
+        const invoice = await this.orderInvoiceModel.create({
+            order_id: order.id,
+            invoice_no: invoiceNo,
+            invoice_date: new Date(),
+            payment_terms: 'Net 30',
+            vat: 0,
+            discount: 0,
+            packing: '0',
+            asuransi: 0,
+            ppn: 0,
+            pph: 0,
+            kode_unik: 0,
+            konfirmasi_bayar: 0,
+            notes: '',
+            beneficiary_name: '',
+            acc_no: '',
+            bank_name: '',
+            bank_address: '',
+            swift_code: '',
+            paid_attachment: '',
+            payment_info: 0,
+            fm: 0,
+            lm: 0,
+            bill_to_name: order.getDataValue('nama_pengirim'),
+            bill_to_phone: order.getDataValue('phone_pengirim'),
+            bill_to_address: order.getDataValue('alamat_pengirim'),
+            create_date: new Date(),
+            created_at: new Date(),
+            updated_at: new Date(),
+            isGrossUp: 0,
+            isUnreweight: 0,
+            noFaktur: ''
+        }, { transaction });
+
+        // Buat invoice details
+        const totalHarga = order.getDataValue('total_harga');
+        await this.orderInvoiceDetailModel.create({
+            invoice_id: invoice.id,
+            description: 'Biaya Pengiriman Barang',
+            qty: 1,
+            uom: 'pcs',
+            unit_price: totalHarga,
+            remark: ''
+        }, { transaction });
+
+        // Update order status
+        await order.update({
+            invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH,
+            isUnpaid: 1,
+            isPartialPaid: 0,
+            sisaAmount: totalHarga.toString()
+        }, { transaction });
+
+        updateHistory.push('Invoice berhasil di-generate');
+        updateHistory.push('Status order diubah menjadi belum ditagih');
+
+        return {
+            message: 'Invoice berhasil di-generate',
+            success: true,
+            data: {
+                invoice_no: invoiceNo,
+                status_action: 'generate',
+                current_status: INVOICE_STATUS.BELUM_DITAGIH,
+                updates: updateHistory,
+                order_id: order.id
+            }
+        };
+    }
+
+    private async handleSubmitInvoice(invoice: any, order: any, updatedByUserId: number, transaction: any, updateHistory: string[]) {
+        // Validasi status saat ini
+        const currentStatus = order.getDataValue('invoiceStatus');
+        if (currentStatus !== INVOICE_STATUS.BELUM_DITAGIH) {
+            throw new Error('Invoice hanya bisa di-submit jika status adalah belum ditagih');
+        }
+
+        // Update invoice status
+        await invoice.update({
+            konfirmasi_bayar: 1
+        }, { transaction });
+
+        // Update order status
+        await order.update({
+            invoiceStatus: INVOICE_STATUS.SUDAH_DITAGIH
+        }, { transaction });
+
+        updateHistory.push('Invoice berhasil di-submit');
+        updateHistory.push('Status invoice diubah menjadi sudah ditagih');
+
+        return {
+            message: 'Invoice berhasil di-submit',
+            success: true,
+            data: {
+                invoice_no: invoice.getDataValue('invoice_no'),
+                status_action: 'submit',
+                current_status: INVOICE_STATUS.SUDAH_DITAGIH,
+                updates: updateHistory
+            }
+        };
+    }
+
+    private async handleRevertToDraft(invoice: any, order: any, updatedByUserId: number, transaction: any, updateHistory: string[]) {
+        // Validasi status saat ini
+        const currentStatus = order.getDataValue('invoiceStatus');
+        if (currentStatus !== INVOICE_STATUS.SUDAH_DITAGIH) {
+            throw new Error('Invoice hanya bisa di-revert jika status adalah sudah ditagih');
+        }
+
+        // Update invoice status
+        await invoice.update({
+            konfirmasi_bayar: 0
+        }, { transaction });
+
+        // Update order status
+        await order.update({
+            invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH
+        }, { transaction });
+
+        updateHistory.push('Invoice berhasil di-revert ke draft');
+
+        return {
+            message: 'Invoice berhasil di-revert ke draft',
+            success: true,
+            data: {
+                invoice_no: invoice.getDataValue('invoice_no'),
+                status_action: 'revert_to_draft',
+                current_status: INVOICE_STATUS.BELUM_DITAGIH,
+                updates: updateHistory
+            }
+        };
+    }
+
+    private async handleUpdateUnpaid(invoice: any, order: any, updatedByUserId: number, transaction: any, updateHistory: string[]) {
+        // Validasi status saat ini
+        const currentStatus = order.getDataValue('invoiceStatus');
+        if (currentStatus === INVOICE_STATUS.LUNAS) {
+            throw new Error('Invoice sudah lunas, tidak bisa di-update');
+        }
+
+        const totalHarga = order.getDataValue('total_harga');
+
+        // Update order status menjadi unpaid
+        await order.update({
+            invoiceStatus: INVOICE_STATUS.UNPAID,
+            isUnpaid: 1,
+            isPartialPaid: 0,
+            sisaAmount: totalHarga.toString()
+        }, { transaction });
+
+        // Update invoice status
+        await invoice.update({
+            konfirmasi_bayar: 0
+        }, { transaction });
+
+        updateHistory.push('Status invoice diupdate menjadi unpaid');
+        updateHistory.push(`Sisa pembayaran: ${totalHarga}`);
+
+        return {
+            message: 'Status invoice berhasil diupdate menjadi unpaid',
+            success: true,
+            data: {
+                invoice_no: invoice.getDataValue('invoice_no'),
+                status_action: 'update_unpaid',
+                current_status: INVOICE_STATUS.UNPAID,
+                updates: updateHistory,
+                sisa_amount: totalHarga
+            }
+        };
     }
 } 

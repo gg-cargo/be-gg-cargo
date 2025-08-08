@@ -1,32 +1,26 @@
-import { IsOptional, IsString, IsNumber, IsArray, IsDateString, ValidateNested, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsArray, IsDateString, ValidateNested, IsEnum, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum PaymentStatus {
-    PAID = 'paid',
-    PARTIAL_PAID = 'partial_paid',
-    UNPAID = 'unpaid',
-    CANCELLED = 'cancelled'
+    DITAGIHKAN = 'ditagihkan',
+    LUNAS = 'lunas'
 }
 
-export class UpdateInvoiceItemDto {
-    @IsNumber()
-    invoice_detail_id: number;
-
-    @IsOptional()
+export class BillingItemDto {
     @IsString()
-    description?: string;
+    description: string;
 
-    @IsOptional()
     @IsNumber()
-    quantity?: number;
+    quantity: number;
 
-    @IsOptional()
     @IsString()
-    uom?: string;
+    uom: string;
 
-    @IsOptional()
     @IsNumber()
-    unit_price?: number;
+    unit_price: number;
+
+    @IsNumber()
+    total: number;
 
     @IsOptional()
     @IsString()
@@ -34,11 +28,22 @@ export class UpdateInvoiceItemDto {
 }
 
 export class UpdateInvoiceDto {
-    // Payment Status Update
+    // Invoice Date
+    @IsOptional()
+    @IsString()
+    invoice_date?: string;
+
+    // Payment Terms
+    @IsOptional()
+    @IsString()
+    payment_terms?: string;
+
+    // Payment Status
     @IsOptional()
     @IsEnum(PaymentStatus)
     status_payment?: PaymentStatus;
 
+    // Payment Details
     @IsOptional()
     @IsNumber()
     payment_amount?: number;
@@ -55,21 +60,67 @@ export class UpdateInvoiceDto {
     @IsString()
     paid_attachment_url?: string;
 
-    // General Invoice Update
     @IsOptional()
     @IsString()
-    payment_terms?: string;
+    paid_from_bank?: string;
 
+    // Contract & Quotation
     @IsOptional()
     @IsString()
-    notes?: string;
+    contract_quotation?: string;
 
-    // Item Updates
+    // Billing Items
     @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
-    @Type(() => UpdateInvoiceItemDto)
-    update_items?: UpdateInvoiceItemDto[];
+    @Type(() => BillingItemDto)
+    billing_items?: BillingItemDto[];
+
+    // Discount & Voucher
+    @IsOptional()
+    @IsNumber()
+    discount_voucher_contract?: number;
+
+    // Additional Charges
+    @IsOptional()
+    @IsNumber()
+    asuransi_amount?: number;
+
+    @IsOptional()
+    @IsString()
+    packing_amount?: string;
+
+    // Tax Configuration
+    @IsOptional()
+    @IsNumber()
+    pph_percentage?: number;
+
+    @IsOptional()
+    @IsNumber()
+    pph_amount?: number;
+
+    @IsOptional()
+    @IsNumber()
+    ppn_percentage?: number;
+
+    @IsOptional()
+    @IsNumber()
+    ppn_amount?: number;
+
+    // Gross Up
+    @IsOptional()
+    @IsBoolean()
+    gross_up?: boolean;
+
+    // Total
+    @IsOptional()
+    @IsNumber()
+    total_all?: number;
+
+    // Notes
+    @IsOptional()
+    @IsString()
+    notes?: string;
 
     // Required field
     @IsNumber()

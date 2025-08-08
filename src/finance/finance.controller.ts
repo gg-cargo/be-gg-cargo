@@ -1,11 +1,12 @@
-import { Controller, Get, Query, UseGuards, Param, Body, Post, Patch } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Query, Body, UseGuards, ParseIntPipe, ValidationPipe } from '@nestjs/common';
 import { FinanceService } from './finance.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FinanceSummaryDto } from './dto/finance-summary.dto';
 import { FinanceShipmentsDto } from './dto/finance-shipments.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { RevenueSummaryByServiceDto } from './dto/revenue-summary-by-service.dto';
+import { InvoiceStatusActionDto } from './dto/invoice-status-action.dto';
 
 @Controller('finance')
 @UseGuards(JwtAuthGuard)
@@ -45,6 +46,11 @@ export class FinanceController {
     @Patch('invoices/:invoice_no')
     async updateInvoice(@Param('invoice_no') invoiceNo: string, @Body() body: UpdateInvoiceDto) {
         return this.financeService.updateInvoice(invoiceNo, body);
+    }
+
+    @Patch('invoices/:invoice_no/status')
+    async updateInvoiceStatus(@Param('invoice_no') invoiceNo: string, @Body() body: InvoiceStatusActionDto) {
+        return this.financeService.updateInvoiceStatus(invoiceNo, body);
     }
 
     @Get('revenue/summary-by-service')

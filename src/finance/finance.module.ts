@@ -25,7 +25,7 @@ import { Quotation } from '../models/quotation.model';
             OrderShipment,
             OrderPiece,
             Bank,
-            Quotation,
+            Quotation
         ]),
     ],
     controllers: [FinanceController],
