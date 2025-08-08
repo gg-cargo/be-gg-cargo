@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
@@ -12,6 +12,9 @@ import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CancelOrderDto } from './dto/cancel-order.dto';
+import { DeleteOrderDto } from './dto/delete-order.dto';
+import { DeleteOrderResponseDto } from './dto/delete-order-response.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -85,10 +88,10 @@ export class OrdersController {
         return this.ordersService.getOrderHistoryByOrderId(id);
     }
 
+    @Patch(':no_resi/cancel')
     @UseGuards(JwtAuthGuard)
-    @Patch(':id/cancel')
-    async cancelOrder(@Param('id', ParseIntPipe) id: number, @Req() req) {
-        return this.ordersService.cancelOrder(id, req.user.id);
+    async cancelOrder(@Param('no_resi') noResi: string, @Body() body: CancelOrderDto) {
+        return this.ordersService.cancelOrder(noResi, body);
     }
 
     @UseGuards(JwtAuthGuard)
@@ -129,5 +132,14 @@ export class OrdersController {
         @Body() updateOrderDto: UpdateOrderDto
     ): Promise<UpdateOrderResponseDto> {
         return this.ordersService.updateOrder(noResi, updateOrderDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Delete(':no_resi')
+    async deleteOrder(
+        @Param('no_resi') noResi: string,
+        @Body() deleteDto: DeleteOrderDto,
+    ): Promise<DeleteOrderResponseDto> {
+        return this.ordersService.deleteOrder(noResi, deleteDto);
     }
 } 

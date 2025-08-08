@@ -6,8 +6,10 @@ import { Order } from '../models/order.model';
 import { OrderShipment } from '../models/order-shipment.model';
 import { OrderPiece } from '../models/order-piece.model';
 import { OrderHistory } from '../models/order-history.model';
-import { OrderReferensi } from '../models/order-referensi.model';
 import { OrderList } from '../models/order-list.model';
+import { OrderReferensi } from '../models/order-referensi.model';
+import { RequestCancel } from '../models/request-cancel.model';
+import { User } from '../models/user.model';
 
 @Module({
     imports: [
@@ -16,12 +18,14 @@ import { OrderList } from '../models/order-list.model';
             OrderShipment,
             OrderPiece,
             OrderHistory,
-            OrderReferensi,
             OrderList,
-        ]),
+            OrderReferensi,
+            RequestCancel,
+            User
+        ])
     ],
     controllers: [OrdersController],
     providers: [OrdersService],
-    exports: [OrdersService],
+    exports: [OrdersService]
 })
 export class OrdersModule { } 

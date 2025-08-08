@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Transaction } from 'sequelize';
 import { Order } from '../models/order.model';
@@ -7,6 +7,8 @@ import { OrderPiece } from '../models/order-piece.model';
 import { OrderHistory } from '../models/order-history.model';
 import { OrderList } from '../models/order-list.model';
 import { OrderReferensi } from '../models/order-referensi.model';
+import { RequestCancel } from '../models/request-cancel.model';
+import { User } from '../models/user.model';
 import { CreateOrderDto, CreateOrderPieceDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
@@ -28,6 +30,8 @@ import * as PDFDocument from 'pdfkit';
 
 @Injectable()
 export class OrdersService {
+    private readonly logger = new Logger(OrdersService.name);
+
     constructor(
         @InjectModel(Order)
         private readonly orderModel: typeof Order,
@@ -41,6 +45,10 @@ export class OrdersService {
         private readonly orderListModel: typeof OrderList,
         @InjectModel(OrderReferensi)
         private readonly orderReferensiModel: typeof OrderReferensi,
+        @InjectModel(RequestCancel)
+        private readonly requestCancelModel: typeof RequestCancel,
+        @InjectModel(User)
+        private readonly userModel: typeof User,
     ) { }
 
     async createOrder(createOrderDto: CreateOrderDto, userId: number): Promise<CreateOrderResponseDto> {
@@ -778,17 +786,106 @@ export class OrdersService {
         };
     }
 
-    async cancelOrder(orderId: number, userId: number) {
-        const order = await this.orderModel.findOne({ where: { id: orderId, order_by: userId } });
-        if (!order) throw new NotFoundException('Order tidak ditemukan atau tidak milik Anda');
-        if (order.getDataValue('status') === 'dibatalkan') {
-            return { message: 'Order sudah dibatalkan', data: { order_id: orderId, status: order.status } };
+    async cancelOrder(noResi: string, body: any) {
+        const { reason, cancelled_by_user_id } = body;
+
+        this.logger.log(`Starting cancel order process for no_resi: ${noResi}, user_id: ${cancelled_by_user_id}`);
+
+        try {
+            // 1. Validasi user
+            const user = await this.userModel.findByPk(cancelled_by_user_id);
+            if (!user) {
+                this.logger.error(`User not found: ${cancelled_by_user_id}`);
+                throw new Error('User tidak ditemukan');
+            }
+
+            // 2. Cari order berdasarkan no_tracking (no_resi)
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noResi }
+            });
+            if (!order) {
+                this.logger.error(`Order not found: ${noResi}`);
+                throw new Error('Order tidak ditemukan');
+            }
+
+            const orderId = order.getDataValue('id');
+            this.logger.log(`Found order: ${orderId} with status: ${order.getDataValue('status')}`);
+
+            // 3. Validasi status order (tidak bisa dibatalkan jika sudah delivered atau cancelled)
+            const currentStatus = order.getDataValue('status');
+            if (currentStatus === 'Delivered' || currentStatus === 'Cancelled' || currentStatus === 'dibatalkan') {
+                this.logger.warn(`Order ${orderId} cannot be cancelled - current status: ${currentStatus}`);
+                throw new Error('Order tidak bisa dibatalkan karena sudah delivered atau cancelled');
+            }
+
+            const updateHistory: string[] = [];
+
+            // 4. Update order status menjadi 'Cancelled'
+            await order.update({
+                status: 'Cancelled',
+                is_gagal_pickup: 1,
+                remark_traffic: reason,
+                updated_at: new Date()
+            });
+
+            updateHistory.push('Status order diubah menjadi Cancelled');
+            updateHistory.push('Flag is_gagal_pickup diatur menjadi 1');
+
+            // 5. Buat entri baru di request_cancel
+            await this.requestCancelModel.create({
+                order_id: orderId,
+                user_id: cancelled_by_user_id,
+                reason: reason,
+                status: 0, // 0: Pending
+                created_at: new Date()
+            } as any);
+
+            updateHistory.push('Request cancel berhasil dibuat');
+
+            // 6. Update status order_pieces menjadi 0 (tidak di-pickup)
+            const pieces = await this.orderPieceModel.findAll({
+                where: { order_id: orderId }
+            });
+
+            if (pieces.length > 0) {
+                await this.orderPieceModel.update({
+                    pickup_status: 0
+                }, {
+                    where: { order_id: orderId }
+                });
+
+                updateHistory.push(`${pieces.length} pieces diupdate menjadi tidak di-pickup`);
+            }
+
+            // 7. Tambah entri riwayat di order_histories
+            await this.addOrderHistory(orderId, {
+                status: 'Order Cancelled',
+                remark: reason,
+                created_by: cancelled_by_user_id
+            } as any);
+
+            updateHistory.push('History order berhasil ditambahkan');
+
+            this.logger.log(`Order ${orderId} successfully cancelled`);
+
+            return {
+                message: 'Order berhasil dibatalkan',
+                success: true,
+                data: {
+                    order_id: orderId,
+                    no_resi: noResi,
+                    status: 'Cancelled',
+                    reason: reason,
+                    cancelled_by: user.getDataValue('name'),
+                    cancelled_at: new Date().toISOString(),
+                    updates: updateHistory
+                }
+            };
+
+        } catch (error) {
+            this.logger.error(`Error in cancelOrder: ${error.message}`, error.stack);
+            throw new Error(`Error cancelling order: ${error.message}`);
         }
-        await this.orderModel.update(
-            { status: 'dibatalkan' },
-            { where: { id: orderId, order_by: userId } }
-        );
-        return { message: 'Order berhasil dibatalkan', data: { order_id: orderId, status: 'dibatalkan' } };
     }
 
     private validateOrderData(createOrderDto: CreateOrderDto): void {
@@ -1893,5 +1990,174 @@ export class OrdersService {
             where: { id: orderId },
             transaction
         });
+    }
+
+    async deleteOrder(noResi: string, body: any) {
+        const { user_id } = body;
+
+        this.logger.log(`Starting delete order process for no_resi: ${noResi}, user_id: ${user_id}`);
+
+        try {
+            // 1. Validasi user dan otorisasi
+            const user = await this.userModel.findByPk(user_id);
+            if (!user) {
+                this.logger.error(`User not found: ${user_id}`);
+                throw new Error('User tidak ditemukan');
+            }
+
+            // // 2. Validasi level user (hanya admin yang boleh menghapus)
+            // const userLevel = user.getDataValue('level');
+            // if (userLevel !== 1) { // Assuming level 1 is admin
+            //     this.logger.error(`User ${user_id} with level ${userLevel} is not authorized to delete orders`);
+            //     throw new Error('Anda tidak memiliki izin untuk menghapus order. Hanya admin yang dapat melakukan operasi ini.');
+            // }
+
+            // 3. Cari order berdasarkan no_resi
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noResi }
+            });
+            if (!order) {
+                this.logger.error(`Order not found: ${noResi}`);
+                throw new Error('Order tidak ditemukan');
+            }
+
+            const orderId = order.getDataValue('id');
+            const currentStatus = order.getDataValue('status');
+
+            this.logger.log(`Found order: ${orderId} with status: ${currentStatus}`);
+
+            // 4. Validasi status order (hanya Draft atau Cancelled yang boleh dihapus)
+            if (currentStatus !== 'Draft' && currentStatus !== 'Cancelled' && currentStatus !== 'draft' && currentStatus !== 'cancelled') {
+                this.logger.warn(`Order ${orderId} cannot be deleted - current status: ${currentStatus}`);
+                throw new Error(`Order tidak bisa dihapus karena status saat ini adalah '${currentStatus}'. Hanya order dengan status 'Draft' atau 'Cancelled' yang dapat dihapus.`);
+            }
+
+            const deletedTables: string[] = [];
+            const deletedRecordsCount: any = {
+                order_pieces: 0,
+                order_shipments: 0,
+                order_invoices: 0,
+                request_cancel: 0,
+                order_delivery_notes: 0,
+                order_histories: 0
+            };
+
+            // 5. Catat riwayat sebelum menghapus
+            await this.addOrderHistory(orderId, {
+                status: 'Order Deleted',
+                remark: `Order dihapus oleh ${user.getDataValue('name')} (ID: ${user_id}) pada ${new Date().toISOString()}`,
+                created_by: user_id
+            } as any);
+
+            // 6. Hapus data dari tabel anak secara berurutan
+
+            // 6.1. Hapus order_pieces
+            const deletedPieces = await this.orderPieceModel.destroy({
+                where: { order_id: orderId }
+            });
+            deletedRecordsCount.order_pieces = deletedPieces;
+            if (deletedPieces > 0) {
+                deletedTables.push('order_pieces');
+                this.logger.log(`Deleted ${deletedPieces} order_pieces for order ${orderId}`);
+            }
+
+            // 6.2. Hapus order_shipments
+            const deletedShipments = await this.orderShipmentModel.destroy({
+                where: { order_id: orderId }
+            });
+            deletedRecordsCount.order_shipments = deletedShipments;
+            if (deletedShipments > 0) {
+                deletedTables.push('order_shipments');
+                this.logger.log(`Deleted ${deletedShipments} order_shipments for order ${orderId}`);
+            }
+
+            // 6.3. Hapus order_invoices dan order_invoice_details
+            if (this.orderModel.sequelize?.models.OrderInvoice) {
+                const orderInvoices = await this.orderModel.sequelize.models.OrderInvoice.findAll({
+                    where: { order_id: orderId }
+                });
+
+                if (orderInvoices && orderInvoices.length > 0) {
+                    for (const invoice of orderInvoices) {
+                        // Hapus order_invoice_details terlebih dahulu
+                        if (this.orderModel.sequelize?.models.OrderInvoiceDetail) {
+                            const deletedInvoiceDetails = await this.orderModel.sequelize.models.OrderInvoiceDetail.destroy({
+                                where: { invoice_id: invoice.getDataValue('id') }
+                            });
+
+                            if (deletedInvoiceDetails && deletedInvoiceDetails > 0) {
+                                this.logger.log(`Deleted ${deletedInvoiceDetails} order_invoice_details for invoice ${invoice.getDataValue('id')}`);
+                            }
+                        }
+                    }
+
+                    // Hapus order_invoices
+                    const deletedInvoices = await this.orderModel.sequelize.models.OrderInvoice.destroy({
+                        where: { order_id: orderId }
+                    });
+                    deletedRecordsCount.order_invoices = deletedInvoices || 0;
+                    if (deletedInvoices && deletedInvoices > 0) {
+                        deletedTables.push('order_invoices');
+                        this.logger.log(`Deleted ${deletedInvoices} order_invoices for order ${orderId}`);
+                    }
+                }
+            }
+
+            // 6.4. Hapus request_cancel
+            const deletedRequestCancel = await this.requestCancelModel.destroy({
+                where: { order_id: orderId }
+            });
+            deletedRecordsCount.request_cancel = deletedRequestCancel;
+            if (deletedRequestCancel > 0) {
+                deletedTables.push('request_cancel');
+                this.logger.log(`Deleted ${deletedRequestCancel} request_cancel for order ${orderId}`);
+            }
+
+            // 6.5. Hapus order_delivery_notes
+            if (this.orderModel.sequelize?.models.OrderDeliveryNote) {
+                const deletedDeliveryNotes = await this.orderModel.sequelize.models.OrderDeliveryNote.destroy({
+                    where: { no_tracking: noResi }
+                });
+                deletedRecordsCount.order_delivery_notes = deletedDeliveryNotes || 0;
+                if (deletedDeliveryNotes && deletedDeliveryNotes > 0) {
+                    deletedTables.push('order_delivery_notes');
+                    this.logger.log(`Deleted ${deletedDeliveryNotes} order_delivery_notes for order ${orderId}`);
+                }
+            }
+
+            // 6.6. Hapus order_histories (setelah mencatat riwayat penghapusan)
+            const deletedHistories = await this.orderHistoryModel.destroy({
+                where: { order_id: orderId }
+            });
+            deletedRecordsCount.order_histories = deletedHistories;
+            if (deletedHistories > 0) {
+                deletedTables.push('order_histories');
+                this.logger.log(`Deleted ${deletedHistories} order_histories for order ${orderId}`);
+            }
+
+            // 7. Terakhir, hapus order
+            await order.destroy();
+            deletedTables.push('orders');
+            this.logger.log(`Deleted order ${orderId}`);
+
+            this.logger.log(`Order ${orderId} successfully deleted by user ${user_id}`);
+
+            return {
+                message: 'Order berhasil dihapus',
+                success: true,
+                data: {
+                    order_id: orderId,
+                    no_resi: noResi,
+                    deleted_by: user.getDataValue('name'),
+                    deleted_at: new Date().toISOString(),
+                    deleted_tables: deletedTables,
+                    deleted_records_count: deletedRecordsCount
+                }
+            };
+
+        } catch (error) {
+            this.logger.error(`Error in deleteOrder: ${error.message}`, error.stack);
+            throw new Error(`Error deleting order: ${error.message}`);
+        }
     }
 } 
