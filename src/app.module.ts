@@ -3,18 +3,6 @@ import { SequelizeModule } from '@nestjs/sequelize';
 import { AuthModule } from './auth/auth.module';
 import { OrdersModule } from './orders/orders.module';
 import { HealthModule } from './health/health.module';
-import { User } from './models/user.model';
-import { DumpOtp } from './models/dump-otp.model';
-import { PasswordReset } from './models/password-reset.model';
-import { Level } from './models/level.model';
-import { Order } from './models/order.model';
-import { OrderShipment } from './models/order-shipment.model';
-import { OrderPiece } from './models/order-piece.model';
-import { OrderHistory } from './models/order-history.model';
-import { OrderReferensi } from './models/order-referensi.model';
-import { OrderInvoice } from './models/order-invoice.model';
-import { OrderInvoiceDetail } from './models/order-invoice-detail.model';
-import { OrderDeliveryNote } from './models/order-delivery-note.model';
 import { UsersAddressModule } from './users-address/users-address.module';
 import { FileModule } from './file/file.module';
 import { CityModule } from './city/city.module';
@@ -23,6 +11,7 @@ import { DriversModule } from './drivers/drivers.module';
 import { TrackingsModule } from './trackings/trackings.module';
 import { FinanceModule } from './finance/finance.module';
 import { UsersModule } from './users/users.module';
+import { BanksModule } from './banks/banks.module';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -61,6 +50,7 @@ console.log('[DB CONFIG]', dbConfig);
     TrackingsModule,
     FinanceModule,
     UsersModule,
+    BanksModule,
   ],
   controllers: [],
   providers: [],
