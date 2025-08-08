@@ -2,6 +2,7 @@ export const INVOICE_STATUS = {
     BELUM_PROSES: 'belum proses',
     BELUM_DITAGIH: 'belum ditagih',
     SUDAH_DITAGIH: 'sudah ditagih',
+    UNPAID: 'unpaid',
     LUNAS: 'lunas',
     // Legacy status untuk backward compatibility
     DRAFT: 'draft',
@@ -16,6 +17,7 @@ export const INVOICE_STATUS_LABELS = {
     [INVOICE_STATUS.BELUM_PROSES]: 'Belum Proses',
     [INVOICE_STATUS.BELUM_DITAGIH]: 'Belum Ditagih',
     [INVOICE_STATUS.SUDAH_DITAGIH]: 'Sudah Ditagih',
+    [INVOICE_STATUS.UNPAID]: 'Unpaid',
     [INVOICE_STATUS.LUNAS]: 'Lunas',
     [INVOICE_STATUS.DRAFT]: 'Draft',
     [INVOICE_STATUS.SUCCESS]: 'Success',
@@ -27,6 +29,7 @@ export const INVOICE_STATUS_DESCRIPTIONS = {
     [INVOICE_STATUS.BELUM_PROSES]: 'Order dibuat',
     [INVOICE_STATUS.BELUM_DITAGIH]: 'Sesudah reweight, cancel/edit',
     [INVOICE_STATUS.SUDAH_DITAGIH]: 'Submit/create tagihan',
+    [INVOICE_STATUS.UNPAID]: 'Invoice belum dibayar',
     [INVOICE_STATUS.LUNAS]: 'Customer bayar',
     [INVOICE_STATUS.DRAFT]: 'Draft order',
     [INVOICE_STATUS.SUCCESS]: 'Payment successful',
