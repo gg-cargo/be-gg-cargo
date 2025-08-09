@@ -993,6 +993,7 @@ export class FinanceService {
                     invoice_no: invoice.getDataValue('invoice_no'),
                     invoice_date: formatDate(invoice.getDataValue('invoice_date')),
                     payment_terms: invoice.getDataValue('payment_terms'),
+                    status_invoice: order.getDataValue('invoiceStatus'),
                     status_payment: order.getDataValue('invoiceStatus') === INVOICE_STATUS.LUNAS ? 'lunas' : 'ditagihkan',
                     paid_from_bank: this.extractBankFromNotes(invoice.getDataValue('notes')) || (paymentInfo ? paymentInfo.getDataValue('bank_name') : null),
                     contract_quotation: quotationInfo ? quotationInfo.getDataValue('no_quotation') : null,
