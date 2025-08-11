@@ -87,8 +87,8 @@ export class UpdateInvoiceDto {
     asuransi_amount?: number;
 
     @IsOptional()
-    @IsString()
-    packing_amount?: string;
+    @IsNumber()
+    packing_amount?: number;
 
     // Tax Configuration
     @IsOptional()
