@@ -412,23 +412,22 @@ export class FinanceService {
         // Billing status filter
         if (billing_status) {
             switch (billing_status) {
+                case 'belum proses':
+                    whereCondition.invoiceStatus = INVOICE_STATUS.BELUM_PROSES;
+                    break;
+                case 'belum ditagih':
+                    whereCondition.invoiceStatus = INVOICE_STATUS.BELUM_DITAGIH;
+                    break;
+                case 'sudah ditagih':
+                    whereCondition.invoiceStatus = INVOICE_STATUS.SUDAH_DITAGIH;
+                    break;
                 case 'unpaid':
                     whereCondition.invoiceStatus = { [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS] };
                     whereCondition.isUnpaid = 1;
                     whereCondition.isPartialPaid = 0;
                     break;
-                case 'billed':
-                    whereCondition.invoiceStatus = { [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS] };
-                    whereCondition.isUnpaid = 0;
-                    break;
-                case 'paid':
-                    whereCondition.invoiceStatus = { [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS] };
-                    whereCondition.isUnpaid = 0;
-                    whereCondition.isPartialPaid = 0;
-                    break;
-                case 'partial_paid':
-                    whereCondition.invoiceStatus = { [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS] };
-                    whereCondition.isPartialPaid = 1;
+                case 'lunas':
+                    whereCondition.invoiceStatus = INVOICE_STATUS.LUNAS;
                     break;
             }
         }

@@ -19,7 +19,7 @@ export class FinanceShipmentsDto {
     search?: string;
 
     @IsOptional()
-    @IsIn(['unpaid', 'billed', 'paid', 'partial_paid'])
+    @IsIn(['belum proses', 'belum ditagih', 'sudah ditagih', 'unpaid', 'lunas'])
     billing_status?: string;
 
     @IsOptional()
