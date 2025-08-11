@@ -54,11 +54,11 @@ export class OrderInvoice extends Model {
     discount: number;
 
     @Column({
-        type: DataType.STRING(50),
+        type: DataType.INTEGER,
         allowNull: false,
-        defaultValue: '0',
+        defaultValue: 0,
     })
-    packing: string;
+    packing: number;
 
     @Column({
         type: DataType.INTEGER,
