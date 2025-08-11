@@ -10,6 +10,7 @@ import { OrderList } from '../models/order-list.model';
 import { OrderReferensi } from '../models/order-referensi.model';
 import { RequestCancel } from '../models/request-cancel.model';
 import { User } from '../models/user.model';
+import { TransactionPayment } from '../models/transaction-payment.model';
 
 @Module({
     imports: [
@@ -21,7 +22,8 @@ import { User } from '../models/user.model';
             OrderList,
             OrderReferensi,
             RequestCancel,
-            User
+            User,
+            TransactionPayment
         ])
     ],
     controllers: [OrdersController],

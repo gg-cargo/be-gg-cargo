@@ -3,6 +3,7 @@ import { User } from './user.model';
 import { OrderShipment } from './order-shipment.model';
 import { OrderPiece } from './order-piece.model';
 import { OrderInvoice } from './order-invoice.model';
+import { TransactionPayment } from './transaction-payment.model';
 import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 
 @Table({
@@ -1071,6 +1072,9 @@ export class Order extends Model {
 
     @HasOne(() => OrderInvoice, { foreignKey: 'order_id', as: 'orderInvoice' })
     orderInvoice: OrderInvoice;
+
+    @HasMany(() => TransactionPayment, { foreignKey: 'order_id', as: 'transactionPayments' })
+    transactionPayments: TransactionPayment[];
 
     total_koli: any;
 } 
