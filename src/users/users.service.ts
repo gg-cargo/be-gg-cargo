@@ -9,7 +9,9 @@ import { ListUsersDto } from './dto/list-users.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ChangeMyPasswordDto } from './dto/change-my-password.dto';
 import { ListUsersResponseDto, UserResponseDto, PaginationDto, CreateUserResponseDto, UpdateUserResponseDto, ChangePasswordResponseDto } from './dto/user-response.dto';
+import { ChangeMyPasswordResponseDto } from './dto/change-my-password-response.dto';
 import { UserDetailResponseDto } from './dto/user-detail-response.dto';
 import { Op, Sequelize } from 'sequelize';
 import * as bcrypt from 'bcrypt';
@@ -551,6 +553,60 @@ export class UsersService {
 
         return {
             message,
+            success: true,
+        };
+    }
+
+    async changeMyPassword(currentUserId: number, changeMyPasswordDto: ChangeMyPasswordDto): Promise<ChangeMyPasswordResponseDto> {
+        // Validasi password baru dan konfirmasi password
+        if (changeMyPasswordDto.new_password !== changeMyPasswordDto.confirm_new_password) {
+            throw new BadRequestException('Konfirmasi password baru tidak cocok');
+        }
+
+        // Ambil current user
+        const currentUser = await this.userModel.findByPk(currentUserId);
+        if (!currentUser) {
+            throw new NotFoundException('User tidak ditemukan');
+        }
+
+        // Validasi password user ada
+        if (!currentUser.getDataValue('password')) {
+            throw new BadRequestException('User tidak memiliki password yang valid');
+        }
+
+        // Validasi old_password tidak kosong
+        if (!changeMyPasswordDto.old_password || changeMyPasswordDto.old_password.trim() === '') {
+            throw new BadRequestException('Password lama tidak boleh kosong');
+        }
+
+
+
+        // Verifikasi password lama
+        const isOldPasswordValid = await bcrypt.compare(changeMyPasswordDto.old_password, currentUser.getDataValue('password'));
+        if (!isOldPasswordValid) {
+            throw new BadRequestException('Password lama tidak valid');
+        }
+
+        // Hash password baru
+        const saltRounds = 10;
+        const hashedNewPassword = await bcrypt.hash(changeMyPasswordDto.new_password, saltRounds);
+
+        // Update password
+        await this.userModel.update(
+            {
+                password: hashedNewPassword,
+                updated_at: new Date(),
+            },
+            {
+                where: { id: currentUserId }
+            }
+        );
+
+        // TODO: Hapus semua token otentikasi yang masih aktif untuk user ini
+        // Ini bisa diimplementasikan jika ada tabel oauth_access_tokens atau similar
+
+        return {
+            message: 'Password berhasil diubah. Silakan login ulang dengan password baru.',
             success: true,
         };
     }

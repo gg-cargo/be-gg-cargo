@@ -4,7 +4,9 @@ import { ListUsersDto } from './dto/list-users.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ChangeMyPasswordDto } from './dto/change-my-password.dto';
 import { ListUsersResponseDto, CreateUserResponseDto, UpdateUserResponseDto, ChangePasswordResponseDto } from './dto/user-response.dto';
+import { ChangeMyPasswordResponseDto } from './dto/change-my-password-response.dto';
 import { UserDetailResponseDto } from './dto/user-detail-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -36,6 +38,15 @@ export class UsersController {
     ): Promise<ChangePasswordResponseDto> {
         const userId = req.user.id;
         return this.usersService.changePassword(userId, changePasswordDto);
+    }
+
+    @Patch('me/password')
+    async changeMyPassword(
+        @Request() req,
+        @Body() changeMyPasswordDto: ChangeMyPasswordDto
+    ): Promise<ChangeMyPasswordResponseDto> {
+        const userId = req.user.id;
+        return this.usersService.changeMyPassword(userId, changeMyPasswordDto);
     }
 
     @Patch(':id')
