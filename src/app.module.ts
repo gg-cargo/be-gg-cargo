@@ -1,58 +1,44 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
+import { ConfigModule } from '@nestjs/config';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 import { OrdersModule } from './orders/orders.module';
+import { FinanceModule } from './finance/finance.module';
+import { PickupsModule } from './pickups/pickups.module';
+import { TrackingsModule } from './trackings/trackings.module';
+import { CityModule } from './city/city.module';
+import { BanksModule } from './banks/banks.module';
+import { DriversModule } from './drivers/drivers.module';
+import { FileModule } from './file/file.module';
 import { HealthModule } from './health/health.module';
 import { UsersAddressModule } from './users-address/users-address.module';
-import { FileModule } from './file/file.module';
-import { CityModule } from './city/city.module';
-import { PickupsModule } from './pickups/pickups.module';
-import { DriversModule } from './drivers/drivers.module';
-import { TrackingsModule } from './trackings/trackings.module';
-import { FinanceModule } from './finance/finance.module';
-import { UsersModule } from './users/users.module';
-import { BanksModule } from './banks/banks.module';
-import * as dotenv from 'dotenv';
-dotenv.config();
-
-const dbConfig = {
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  username: process.env.DB_USERNAME,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_DATABASE,
-  dialect: process.env.DB_DIALECT || 'mysql',
-};
-
-console.log('[DB CONFIG]', dbConfig);
+import { PaymentsModule } from './payments/payments.module';
+import { databaseConfig } from './config/database';
 
 @Module({
   imports: [
-    SequelizeModule.forRoot({
-      dialect: 'mysql',
-      host: dbConfig.host,
-      port: dbConfig.port ? parseInt(dbConfig.port) : 3306,
-      username: dbConfig.username,
-      password: dbConfig.password,
-      database: dbConfig.database,
-      autoLoadModels: true,
-      synchronize: false,
-      logging: false,
+    ConfigModule.forRoot({
+      isGlobal: true,
     }),
+    SequelizeModule.forRoot(databaseConfig),
     AuthModule,
+    UsersModule,
     OrdersModule,
+    FinanceModule,
+    PickupsModule,
+    TrackingsModule,
+    CityModule,
+    BanksModule,
+    DriversModule,
+    FileModule,
     HealthModule,
     UsersAddressModule,
-    FileModule,
-    CityModule,
-    PickupsModule,
-    DriversModule,
-    TrackingsModule,
-    FinanceModule,
-    UsersModule,
-    BanksModule,
+    PaymentsModule,
   ],
-  controllers: [],
-  providers: [],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule { }
