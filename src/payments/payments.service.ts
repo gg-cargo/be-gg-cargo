@@ -128,7 +128,7 @@ export class PaymentsService {
                         bank: bankCode
                     },
                     custom_expiry: {
-                        unit: 'day',
+                        expiry_unit: 'day',
                         expiry_duration: 2
                     }
                 };
@@ -291,9 +291,20 @@ export class PaymentsService {
                 return false;
             }
 
-            // Buat signature key sesuai dokumentasi Midtrans
-            const signatureString = `${notification.transaction_id}${notification.status_code}${notification.gross_amount}${serverKey}`;
+            // Buat signature key sesuai dokumentasi Midtrans yang benar
+            // Formula: SHA512(order_id + status_code + gross_amount + server_key)
+            const signatureString = `${notification.order_id}${notification.status_code}${notification.gross_amount}${serverKey}`;
             const expectedSignature = crypto.createHash('sha512').update(signatureString).digest('hex');
+
+            // Log untuk debugging
+            console.log('Signature validation debug:');
+            console.log('Order ID:', notification.order_id);
+            console.log('Status Code:', notification.status_code);
+            console.log('Gross Amount:', notification.gross_amount);
+            console.log('Server Key (first 10 chars):', serverKey.substring(0, 10) + '...');
+            console.log('Expected Signature:', expectedSignature);
+            console.log('Received Signature:', notification.signature_key);
+            console.log('Signature Match:', notification.signature_key === expectedSignature);
 
             return notification.signature_key === expectedSignature;
         } catch (error) {
