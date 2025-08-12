@@ -12,6 +12,8 @@ import { OrderShipment } from '../models/order-shipment.model';
 import { OrderPiece } from '../models/order-piece.model';
 import { Bank } from '../models/bank.model';
 import { Quotation } from '../models/quotation.model';
+import { TransactionPayment } from '../models/transaction-payment.model';
+import { OrderHistory } from '../models/order-history.model';
 
 @Module({
     imports: [
@@ -25,7 +27,9 @@ import { Quotation } from '../models/quotation.model';
             OrderShipment,
             OrderPiece,
             Bank,
-            Quotation
+            Quotation,
+            TransactionPayment,
+            OrderHistory
         ]),
     ],
     controllers: [FinanceController],
