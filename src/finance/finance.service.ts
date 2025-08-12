@@ -1320,6 +1320,15 @@ export class FinanceService {
                     updateHistory.push('Gross up diperbarui');
                 }
 
+                if (total_all !== undefined && total_all > 0) {
+                    await order.update({
+                        total_harga: total_all,
+                        updated_at: new Date()
+                    }, { transaction: t });
+                    updateHistory.push(`Order total harga diperbarui: Rp ${total_all.toLocaleString()}`);
+                }
+
+
                 // 14. Update Notes
                 if (notes) {
                     await invoice.update({
