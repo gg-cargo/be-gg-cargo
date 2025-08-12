@@ -31,19 +31,20 @@ export class PaymentsService {
     ) { }
 
     async createVa(createVaDto: CreateVaDto): Promise<CreateVaResponseDto> {
-        const { order_id, payment_method, created_by_user_id } = createVaDto;
+        const { order_id, payment_method } = createVaDto;
 
         try {
-            // 1. Validasi user
-            const user = await this.userModel.findByPk(created_by_user_id);
-            if (!user) {
-                throw new NotFoundException('User tidak ditemukan');
-            }
 
             // 2. Validasi order
             const order = await this.orderModel.findByPk(order_id);
             if (!order) {
-                throw new NotFoundException('Order tidak ditemukan');
+                throw new BadRequestException('Order tidak ditemukan');
+            }
+
+            // Validasi total_harga tidak boleh 0 atau negatif
+            const totalHarga = Number(order.getDataValue('total_harga')) || 0;
+            if (totalHarga <= 0) {
+                throw new BadRequestException(`Order dengan ID ${order_id} memiliki total harga yang tidak valid (Rp ${totalHarga.toLocaleString()}). Total harga harus lebih dari 0 untuk dapat membuat Virtual Account. Silakan hubungi customer service untuk informasi lebih lanjut.`);
             }
 
             // 3. Cek apakah sudah ada transaksi pembayaran aktif
@@ -185,7 +186,6 @@ export class PaymentsService {
                     date: new Date(),
                     time: new Date().toTimeString().slice(0, 8),
                     remark: `${isRegeneration ? 'VA Regenerated' : 'VA Created'}: ${vaBank?.toUpperCase()}:${vaNumber} expired at ${expireTime}`,
-                    created_by: created_by_user_id,
                     created_at: new Date()
                 }, { transaction: t });
 
@@ -398,6 +398,61 @@ export class PaymentsService {
                 return 'Payment Cancelled';
             default:
                 return 'Payment Status Updated';
+        }
+    }
+
+    /**
+     * Mendapatkan status pembayaran berdasarkan no_tracking
+     * @param noTracking Nomor tracking/resi order
+     * @returns Status pembayaran order
+     */
+    async getPaymentStatus(noTracking: string): Promise<{ message: string; data: { no_tracking: string; payment_status: string } }> {
+        try {
+            // Cari order berdasarkan no_tracking
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noTracking },
+                attributes: ['id', 'no_tracking', 'payment_status', 'payment_expire_time']
+            });
+
+            if (!order) {
+                throw new NotFoundException(`Order dengan no_tracking ${noTracking} tidak ditemukan`);
+            }
+
+            const paymentStatus = order.getDataValue('payment_status');
+            const expireTime = order.getDataValue('payment_expire_time');
+
+            // Cek apakah status pending sudah expired
+            let finalStatus = paymentStatus;
+            if (paymentStatus === 'pending' && expireTime) {
+                const now = new Date();
+                const expireDate = new Date(expireTime);
+
+                if (now > expireDate) {
+                    finalStatus = 'expired';
+
+                    // Update status di database jika expired
+                    await order.update({
+                        payment_status: 'expired',
+                        updated_at: new Date()
+                    });
+                }
+            }
+
+            return {
+                message: 'Status pembayaran berhasil diambil',
+                data: {
+                    no_tracking: noTracking,
+                    payment_status: finalStatus || 'pending'
+                }
+            };
+
+        } catch (error) {
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+
+            console.error('Error getting payment status:', error);
+            throw new InternalServerErrorException('Gagal mendapatkan status pembayaran');
         }
     }
 }

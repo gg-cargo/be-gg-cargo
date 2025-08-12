@@ -16,7 +16,9 @@ import { FileModule } from './file/file.module';
 import { HealthModule } from './health/health.module';
 import { UsersAddressModule } from './users-address/users-address.module';
 import { PaymentsModule } from './payments/payments.module';
+import { InvoicesModule } from './invoices/invoices.module';
 import { databaseConfig } from './config/database';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { databaseConfig } from './config/database';
     HealthModule,
     UsersAddressModule,
     PaymentsModule,
+    InvoicesModule,
+    WhatsappModule,
   ],
   controllers: [AppController],
   providers: [AppService],

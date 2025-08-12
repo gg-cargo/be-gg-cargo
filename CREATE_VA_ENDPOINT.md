@@ -47,6 +47,13 @@ Endpoint untuk membuat transaksi pembayaran melalui Midtrans Core API, menggener
 }
 ```
 
+```json
+{
+    "statusCode": 400,
+    "message": "Order dengan ID 12345 memiliki total harga yang tidak valid (Rp 0). Total harga harus lebih dari 0 untuk dapat membuat Virtual Account. Silakan hubungi customer service untuk informasi lebih lanjut."
+}
+```
+
 ### 404 Not Found
 ```json
 {
@@ -71,7 +78,9 @@ Endpoint untuk membuat transaksi pembayaran melalui Midtrans Core API, menggener
 - Periksa apakah `order_id` valid di tabel `orders`
 - Cek apakah order sudah memiliki transaksi pembayaran aktif
 
-### 2. Persiapan Data Midtrans
+### 2. Validasi Data Order
+- Validasi `order_id` ada di tabel `orders`
+- Validasi `total_harga` > 0 (tidak boleh 0 atau negatif)
 - Query tabel `orders` untuk mendapatkan:
   - `no_tracking`: sebagai order_id unik Midtrans
   - `total_harga`: sebagai gross_amount transaksi
