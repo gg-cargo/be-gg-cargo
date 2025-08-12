@@ -36,6 +36,13 @@ export class TransactionPayment extends Model {
 
     @Column({
         type: DataType.STRING(255),
+        allowNull: true,
+        defaultValue: null,
+    })
+    no_tracking: string;
+
+    @Column({
+        type: DataType.STRING(255),
         allowNull: false,
     })
     sid: string;
@@ -52,6 +59,13 @@ export class TransactionPayment extends Model {
         defaultValue: null,
     })
     bank_code: string;
+
+    @Column({
+        type: DataType.STRING(100),
+        allowNull: true,
+        defaultValue: null,
+    })
+    bank_name: string;
 
     @Column({
         type: DataType.STRING(100),
