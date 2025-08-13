@@ -282,7 +282,8 @@ POST /whatsapp/send-media
 ### **1. Unauthorized (401)**
 ```json
 {
-  "success": false,
+  "statusCode": 401,
+  "message": "Unauthorized: [error dari wweb service]",
   "error": "Unauthorized"
 }
 ```
@@ -291,8 +292,9 @@ POST /whatsapp/send-media
 ### **2. WhatsApp Not Ready (409)**
 ```json
 {
-  "success": false,
-  "error": "WhatsApp belum siap. Scan QR terlebih dahulu."
+  "statusCode": 409,
+  "message": "WhatsApp belum siap: [error dari wweb service]",
+  "error": "Conflict"
 }
 ```
 **Solusi**: Gunakan endpoint `/qr` untuk scan QR code
@@ -300,12 +302,9 @@ POST /whatsapp/send-media
 ### **3. QR Not Available (404)**
 ```json
 {
-  "success": false,
-  "error": "QR belum tersedia. Gunakan /refresh-qr untuk memunculkan QR baru.",
-  "status": {
-    "isReady": false,
-    "hasQRCode": false
-  }
+  "statusCode": 404,
+  "message": "QR code tidak tersedia: [error dari wweb service]",
+  "error": "Not Found"
 }
 ```
 **Solusi**: Gunakan endpoint `/refresh-qr` atau `/force-init`
@@ -313,11 +312,71 @@ POST /whatsapp/send-media
 ### **4. Timeout (408)**
 ```json
 {
-  "success": false,
-  "error": "Timeout menunggu QR code. Coba lagi."
+  "statusCode": 408,
+  "message": "Timeout menunggu QR code: [error dari wweb service]",
+  "error": "Request Timeout"
 }
 ```
 **Solusi**: Coba lagi atau gunakan `/force-init`
+
+### **5. Service Unavailable (503)**
+```json
+{
+  "statusCode": 503,
+  "message": "Tidak dapat terhubung ke wweb service. Pastikan service berjalan.",
+  "error": "Service Unavailable"
+}
+```
+**Solusi**: Periksa apakah wweb service berjalan
+
+### **6. Internal Server Error (500)**
+```json
+{
+  "statusCode": 500,
+  "message": "Internal server error dari wweb service: [error dari wweb service]",
+  "error": "Internal Server Error"
+}
+```
+**Solusi**: Periksa logs wweb service atau gunakan `/force-init`
+
+### **7. Bad Request (400)**
+```json
+{
+  "statusCode": 400,
+  "message": "Network error: [error detail]",
+  "error": "Bad Request"
+}
+```
+**Solusi**: Periksa konfigurasi jaringan dan WWEB_BASE_URL
+
+### **8. Error Message Priority**
+```typescript
+// Priority untuk error message dari wweb service:
+// 1. data.error (primary error field)
+// 2. data.message (alternative message field)  
+// 3. data.status_message (status message field)
+// 4. Fallback message (default error message)
+
+const apiErrorMessage = data?.error || data?.message || data?.status_message;
+```
+
+**Contoh Error Response dari wweb service:**
+```json
+// Response dari wweb service
+{
+  "success": false,
+  "error": "The request could not be completed due to a conflict with the current state of the target resource, please try again",
+  "status_code": "406",
+  "status_message": "The request could not be completed due to a conflict with the current state of the target resource, please try again"
+}
+
+// Error yang akan dikirim ke client
+{
+  "statusCode": 409,
+  "message": "WhatsApp belum siap: The request could not be completed due to a conflict with the current state of the target resource, please try again",
+  "error": "Conflict"
+}
+```
 
 ---
 
@@ -377,12 +436,50 @@ try {
   });
   console.log('Pesan terkirim:', result);
 } catch (error) {
-  if (error.response?.status === 409) {
+  // Handle specific error types
+  if (error.message?.includes('belum siap')) {
     console.log('WhatsApp belum ready, scan QR dulu');
+    // Auto-refresh QR
+    await whatsappService.refreshQrCode();
+  } else if (error.message?.includes('tidak dapat terhubung')) {
+    console.error('Service down, cek wweb service');
+  } else if (error.message?.includes('timeout')) {
+    console.error('Request timeout, coba lagi');
   } else {
-    console.error('Error:', error.message);
+    console.error('Unexpected error:', error.message);
   }
 }
+```
+
+### **2. Robust Error Handling with Retry**
+```typescript
+const sendMessageWithRetry = async (phone: string, message: string, maxRetries = 3) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await whatsappService.sendText({ phoneNumber: phone, message });
+      return result;
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error; // Give up after max retries
+      }
+      
+      if (error.message?.includes('belum siap')) {
+        console.log(`Attempt ${attempt}: WhatsApp not ready, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+        continue;
+      }
+      
+      if (error.message?.includes('timeout')) {
+        console.log(`Attempt ${attempt}: Timeout, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        continue;
+      }
+      
+      // For other errors, don't retry
+      throw error;
+    }
+  }
+};
 ```
 
 ### **2. Status Checking**
@@ -421,6 +518,30 @@ if (status.hasQRCode === false && status.isReady === false) {
 - Track message status
 - Monitor delivery success rate
 - Log failed deliveries
+
+### **4. Error Monitoring**
+- Track error types and frequencies
+- Monitor service availability
+- Alert on critical errors
+- Log detailed error information
+
+### **5. Error Logging Structure**
+```typescript
+// Error log format
+{
+  timestamp: '2025-01-27T10:30:00.000Z',
+  method: 'sendText',
+  error: 'WhatsApp belum siap. Scan QR terlebih dahulu.',
+  statusCode: 409,
+  userAgent: 'Mozilla/5.0...',
+  requestId: 'req_123456',
+  stackTrace: '...',
+  context: {
+    phoneNumber: '6281234567890',
+    messageLength: 25
+  }
+}
+```
 
 ---
 
