@@ -116,7 +116,7 @@ if (paymentUuid) {
 
 ### **4. Pembaruan Database**
 - **Tabel `orders`**: Update `payment_status` menjadi 'cancelled'
-- **Tabel `transaction_payment`**: Update `updated_at`
+- **Tabel `transaction_payment`**: **HAPUS** entry transaksi payment (destroy)
 - **Database Transaction**: Gunakan Sequelize transaction untuk consistency
 
 ```typescript
@@ -165,7 +165,7 @@ await this.orderHistoryModel.create({
 |-------|-------|-------|-------------|
 | `orders` | `payment_status` | 'cancelled' | Status pembayaran diubah menjadi dibatalkan |
 | `orders` | `updated_at` | Current timestamp | Waktu update terakhir |
-| `transaction_payment` | `updated_at` | Current timestamp | Waktu update transaksi payment |
+| `transaction_payment` | `*` | **DELETED** | Entry transaksi payment dihapus |
 | `order_histories` | `status` | 'Payment Cancelled' | Status baru untuk audit trail |
 | `order_histories` | `remark` | 'VA payment cancelled via public endpoint' | Keterangan pembatalan |
 
@@ -176,9 +176,8 @@ UPDATE orders
 SET payment_status = 'cancelled', updated_at = NOW() 
 WHERE no_tracking = ?;
 
--- Update transaction_payment
-UPDATE transaction_payment 
-SET updated_at = NOW() 
+-- Delete transaction_payment
+DELETE FROM transaction_payment 
 WHERE no_tracking = ?;
 
 -- Insert order_histories

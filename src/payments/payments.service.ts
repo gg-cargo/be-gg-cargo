@@ -580,11 +580,10 @@ export class PaymentsService {
                     updated_at: new Date()
                 }, { transaction: t });
 
-                // 7. Update transaction_payment jika ada
+                // 7. Hapus entry transaction_payment
                 if (transactionPayment) {
-                    await transactionPayment.update({
-                        updated_at: new Date()
-                    }, { transaction: t });
+                    await transactionPayment.destroy({ transaction: t });
+                    console.log(`Transaction payment entry untuk ${no_tracking} berhasil dihapus`);
                 }
 
                 // 8. Tulis order_histories untuk audit trail
