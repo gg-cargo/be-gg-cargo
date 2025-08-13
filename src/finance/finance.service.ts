@@ -1576,70 +1576,11 @@ export class FinanceService {
             throw new Error('Invoice hanya bisa di-generate jika status order adalah belum proses');
         }
 
-        // Cek apakah invoice sudah ada
-        const existingInvoice = await this.orderInvoiceModel.findOne({
-            where: { order_id: order.id }
-        });
-
-        if (existingInvoice) {
-            throw new Error('Invoice untuk order ini sudah ada');
-        }
-
-        // Generate invoice_no, ambil dari no tracking
-        const invoiceNo = order.getDataValue('no_tracking');
-
-        // Buat invoice baru
-        const invoice = await this.orderInvoiceModel.create({
-            order_id: order.id,
-            invoice_no: invoiceNo,
-            invoice_date: new Date(),
-            payment_terms: 'Net 30',
-            vat: 0,
-            discount: 0,
-            packing: '0',
-            asuransi: 0,
-            ppn: 0,
-            pph: 0,
-            kode_unik: 0,
-            konfirmasi_bayar: 0,
-            notes: '',
-            beneficiary_name: '',
-            acc_no: '',
-            bank_name: '',
-            bank_address: '',
-            swift_code: '',
-            paid_attachment: '',
-            payment_info: 0,
-            fm: 0,
-            lm: 0,
-            bill_to_name: order.getDataValue('nama_pengirim'),
-            bill_to_phone: order.getDataValue('phone_pengirim'),
-            bill_to_address: order.getDataValue('alamat_pengirim'),
-            create_date: new Date(),
-            created_at: new Date(),
-            updated_at: new Date(),
-            isGrossUp: 0,
-            isUnreweight: 0,
-            noFaktur: ''
-        }, { transaction });
-
-        // Buat invoice details
-        const totalHarga = order.getDataValue('total_harga');
-        await this.orderInvoiceDetailModel.create({
-            invoice_id: invoice.id,
-            description: 'Biaya Pengiriman Barang',
-            qty: 1,
-            uom: 'pcs',
-            unit_price: totalHarga,
-            remark: ''
-        }, { transaction });
-
         // Update order status
         await order.update({
             invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH,
             isUnpaid: 1,
             isPartialPaid: 0,
-            sisaAmount: totalHarga.toString()
         }, { transaction });
 
         updateHistory.push('Invoice berhasil di-generate');
@@ -1649,7 +1590,7 @@ export class FinanceService {
             message: 'Invoice berhasil di-generate',
             success: true,
             data: {
-                invoice_no: invoiceNo,
+                invoice_no: order.getDataValue('no_tracking'),
                 status_action: 'generate',
                 current_status: INVOICE_STATUS.BELUM_DITAGIH,
                 updates: updateHistory,
