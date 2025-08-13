@@ -9,7 +9,7 @@ export class TransactionPaymentDataDto {
     no_tracking: string;
 
     @IsString()
-    link_payment: string;
+    payment_link: string;
 
     @IsString()
     transaction_id: string;
@@ -20,11 +20,11 @@ export class TransactionPaymentDataDto {
 
     @IsOptional()
     @IsString()
-    no_va?: string;
+    va_number?: string;
 
     @IsOptional()
     @IsString()
-    expired_at?: string;
+    expiry_time?: string;
 }
 
 export class GetTransactionPaymentByTrackingResponseDto {

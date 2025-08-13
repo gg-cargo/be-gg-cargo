@@ -488,11 +488,11 @@ export class PaymentsService {
             const responseData: TransactionPaymentDataDto = {
                 price: transactionPayment.getDataValue('price'),
                 no_tracking: transactionPayment.getDataValue('no_tracking'),
-                link_payment: transactionPayment.getDataValue('link_payment'),
+                payment_link: transactionPayment.getDataValue('link_payment'),
                 transaction_id: transactionPayment.getDataValue('sid'),
                 bank_name: `${transactionPayment.getDataValue('bank_name')} Virtual Account`,
-                no_va: transactionPayment.getDataValue('no_va'),
-                expired_at: transactionPayment.getDataValue('expired_at'),
+                va_number: transactionPayment.getDataValue('no_va'),
+                expiry_time: transactionPayment.getDataValue('expired_at'),
             };
 
             return {
