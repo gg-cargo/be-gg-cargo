@@ -129,7 +129,7 @@ export class PaymentsService {
                         bank: bankCode
                     },
                     custom_expiry: {
-                        expiry_unit: 'day',
+                        unit: 'day',
                         expiry_duration: 2
                     }
                 };
