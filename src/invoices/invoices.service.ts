@@ -71,7 +71,8 @@ export class InvoicesService {
                 to: to_emails,
                 cc: cc_emails,
                 subject: emailSubject,
-                html: emailContent
+                html: emailContent,
+                from: 'GG KARGO <no-reply@99delivery.id>'
             });
 
             // 5. Log pengiriman email (opsional)
@@ -109,10 +110,10 @@ export class InvoicesService {
 
         // Replace placeholder dengan data dinamis
         let emailContent = body
-            .replace('[nama_penerima]', customerName || 'Customer')
-            .replace('[no_tracking]', trackingNumber || 'N/A')
-            .replace('[total_harga]', this.formatCurrency(totalAmount || 0))
-            .replace('[email_penerima]', customerEmail || 'N/A');
+            .replace(/\[nama_penerima\]/g, customerName || 'Customer')
+            .replace(/\[no_tracking\]/g, trackingNumber || 'N/A')
+            .replace(/\[total_harga\]/g, this.formatCurrency(totalAmount || 0))
+            .replace(/\[email_penerima\]/g, customerEmail || 'N/A');
 
         // Tambahkan download link jika diminta
         if (sendDownloadLink) {
@@ -164,6 +165,7 @@ export class InvoicesService {
         cc?: string[];
         subject: string;
         html: string;
+        from?: string;
     }): Promise<{ id: string }> {
         const domain = this.configService.get('MAILGUN_DOMAIN');
         const apiKey = this.configService.get('MAILGUN_API_KEY');
@@ -173,8 +175,9 @@ export class InvoicesService {
         }
 
         const formData = new FormData();
-        formData.append('from', 'no-reply@99delivery.id');
+        formData.append('from', emailData.from || 'GG KARGO <no-reply@99delivery.id>');
         formData.append('to', emailData.to.join(','));
+        formData.append('h:Content-Type', 'text/html; charset=UTF-8');
 
         if (emailData.cc && emailData.cc.length > 0) {
             formData.append('cc', emailData.cc.join(','));

@@ -14,7 +14,7 @@
     "to_emails": ["fkri.haikal234@gmail.com"],
     "cc_emails": ["admin@xpdcargo.id"],
     "subject": "Invoice [invoice_no] - [no_tracking]",
-    "body": "Yth Customer MYXPDC Mr/Mrs. [nama_penerima], Kami infokan tagihan (Invoice) Anda sudah terbit, berikut adalah tagihan Anda dengan nomor tracking [no_tracking] sebesar [total_harga]. Harap segera lakukan proses pembayaran...",
+    "body": "<p>Yth Customer MYXPDC Mr/Mrs. [nama_penerima],</p><p>Kami infokan tagihan (Invoice) Anda sudah terbit, berikut adalah tagihan Anda dengan nomor tracking <strong>[no_tracking]</strong> sebesar <strong>[total_harga]</strong>.</p><p>Harap segera lakukan proses pembayaran...</p>",
     "send_download_link": true,
     "sent_by_user_id": 20
 }
@@ -27,7 +27,7 @@
 | `to_emails` | string[] | ✅ | Array email penerima utama |
 | `cc_emails` | string[] | ❌ | Array email CC (opsional) |
 | `subject` | string | ✅ | Subject email dengan placeholder |
-| `body` | string | ✅ | Isi email dengan placeholder |
+| `body` | string | ✅ | Isi email dengan HTML content dan placeholder |
 | `send_download_link` | boolean | ✅ | Apakah menyertakan link download PDF |
 | `sent_by_user_id` | number | ✅ | ID user yang mengirim email |
 
@@ -96,7 +96,8 @@ WHERE oi.invoice_no = ?
 ```
 
 ### **4. Pembuatan Konten Email**
-- **Dynamic Content**: Replace placeholder dengan data dari database
+- **HTML Content**: Support HTML tags seperti `<p>`, `<strong>`, `<em>`, `<ul>`, `<ol>`, `<li>`
+- **Dynamic Content**: Replace placeholder dengan data dari database menggunakan regex global
 - **Download Link**: Generate link ke endpoint download PDF jika diminta
 - **Email Template**: Tambahkan footer dan styling HTML
 
@@ -104,6 +105,7 @@ WHERE oi.invoice_no = ?
 - **API Call**: POST ke `https://api.mailgun.net/v3/{domain}/messages`
 - **Authentication**: Basic auth dengan API key
 - **Payload**: Multipart form-data dengan konten email
+- **Sender**: `GG KARGO <no-reply@99delivery.id>` (Nama perusahaan yang muncul di email)
 
 ### **6. Response dan Logging**
 - **Success**: Return message_id dari Mailgun
@@ -149,7 +151,12 @@ APP_URL=http://localhost:3000
 
 ## **📧 Email Template Features**
 
-### **1. Dynamic Placeholders**
+### **1. HTML Content Support**
+- **HTML Tags**: Support semua HTML tags standar (`<p>`, `<strong>`, `<em>`, `<ul>`, `<ol>`, `<li>`, `<br>`, `<hr>`)
+- **Inline Styling**: Support CSS inline styles
+- **Rich Text**: Bold, italic, underline, lists, paragraphs
+
+### **2. Dynamic Placeholders**
 - `[nama_penerima]` → Customer name
 - `[no_tracking]` → Tracking number
 - `[total_harga]` → Formatted currency (IDR)
@@ -168,6 +175,32 @@ APP_URL=http://localhost:3000
 - Responsive design
 - Brand colors dan styling
 - Footer dengan company info
+
+### **4. HTML Content Examples**
+```html
+<!-- Basic HTML -->
+<p>Yth Customer [nama_penerima],</p>
+<p>Invoice Anda sudah terbit dengan nomor <strong>[invoice_no]</strong></p>
+
+<!-- Rich Text Formatting -->
+<p><strong>Total Tagihan:</strong> [total_harga]</p>
+<p><em>Harap segera lakukan pembayaran</em></p>
+
+<!-- Lists -->
+<ul>
+    <li>Invoice: [invoice_no]</li>
+    <li>Tracking: [no_tracking]</li>
+    <li>Amount: [total_harga]</li>
+</ul>
+
+<!-- Mixed Content -->
+<p>Detail order:</p>
+<ol>
+    <li><strong>Invoice Number:</strong> [invoice_no]</li>
+    <li><strong>Tracking Number:</strong> [no_tracking]</li>
+    <li><strong>Total Amount:</strong> [total_harga]</li>
+</ol>
+```
 
 ## **🔒 Security & Validation**
 

@@ -15,7 +15,7 @@ class SendMediaBodyDto {
 
 @Controller('whatsapp')
 export class WhatsappController {
-  constructor(private readonly service: WhatsappService) {}
+  constructor(private readonly service: WhatsappService) { }
 
   @Get('status')
   async status() {
