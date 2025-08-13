@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 
 class SendTextBodyDto {
@@ -13,13 +13,38 @@ class SendMediaBodyDto {
   filePath?: string;
 }
 
+class QrOptionsDto {
+  type?: 'dataurl' | 'svg' | 'text';
+}
+
 @Controller('whatsapp')
 export class WhatsappController {
   constructor(private readonly service: WhatsappService) { }
 
+  @Get('health')
+  async health() {
+    return this.service.getHealth();
+  }
+
   @Get('status')
   async status() {
     return this.service.getStatus();
+  }
+
+  @Get('qr')
+  async getQrCode(@Query('type') type?: string) {
+    const options: QrOptionsDto = type ? { type: type as any } : {};
+    return this.service.getQrCode(options);
+  }
+
+  @Post('refresh-qr')
+  async refreshQrCode() {
+    return this.service.refreshQrCode();
+  }
+
+  @Post('force-init')
+  async forceInit() {
+    return this.service.forceInit();
   }
 
   @Post('send-text')
@@ -36,4 +61,12 @@ export class WhatsappController {
   async logout() {
     return this.service.logout();
   }
+
+  @Post('cleanup')
+  async cleanup() {
+    return this.service.cleanup();
+  }
 }
+
+
+

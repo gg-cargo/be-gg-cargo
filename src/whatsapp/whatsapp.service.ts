@@ -14,6 +14,10 @@ interface SendMediaDto {
   filePath?: string;
 }
 
+interface QrOptionsDto {
+  type?: 'dataurl' | 'svg' | 'text';
+}
+
 @Injectable()
 export class WhatsappService {
   private baseUrl: string;
@@ -35,6 +39,27 @@ export class WhatsappService {
     return data;
   }
 
+  async getHealth() {
+    const { data } = await this.http.get('/health');
+    return data;
+  }
+
+  async getQrCode(options?: QrOptionsDto) {
+    const params = options?.type ? { type: options.type } : {};
+    const { data } = await this.http.get('/qr', { params });
+    return data;
+  }
+
+  async refreshQrCode() {
+    const { data } = await this.http.post('/refresh-qr');
+    return data;
+  }
+
+  async forceInit() {
+    const { data } = await this.http.post('/force-init');
+    return data;
+  }
+
   async sendText(dto: SendTextDto) {
     const { data } = await this.http.post('/send-text', dto);
     return data;
@@ -47,6 +72,11 @@ export class WhatsappService {
 
   async logout() {
     const { data } = await this.http.post('/logout');
+    return data;
+  }
+
+  async cleanup() {
+    const { data } = await this.http.post('/cleanup');
     return data;
   }
 }
