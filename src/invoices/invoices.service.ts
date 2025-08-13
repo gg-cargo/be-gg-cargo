@@ -117,11 +117,11 @@ export class InvoicesService {
 
         // Tambahkan download link jika diminta
         if (sendDownloadLink) {
-            const downloadUrl = `${this.configService.get('APP_URL')}/invoices/${invoiceNo}/download-pdf`;
+            const downloadUrl = `${this.configService.get('APP_URL')}/pdf/invoice-${invoiceNo}.pdf`;
             emailContent += `
                 <br><br>
                 <p>Untuk mengunduh invoice lengkap, silakan klik link berikut:</p>
-                <p><a href="${downloadUrl}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Download Invoice PDF</a></p>
+                <p><a href="${downloadUrl}" style="background-color: #1A723B; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Download Invoice PDF</a></p>
             `;
         }
 
