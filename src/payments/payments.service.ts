@@ -489,6 +489,8 @@ export class PaymentsService {
                 price: transactionPayment.getDataValue('price'),
                 no_tracking: transactionPayment.getDataValue('no_tracking'),
                 link_payment: transactionPayment.getDataValue('link_payment'),
+                transaction_id: transactionPayment.getDataValue('sid'),
+                bank_name: `${transactionPayment.getDataValue('bank_name')} Virtual Account`,
                 no_va: transactionPayment.getDataValue('no_va'),
                 expired_at: transactionPayment.getDataValue('expired_at'),
             };

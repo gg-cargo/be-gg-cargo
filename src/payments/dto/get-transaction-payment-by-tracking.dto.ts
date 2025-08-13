@@ -11,6 +11,13 @@ export class TransactionPaymentDataDto {
     @IsString()
     link_payment: string;
 
+    @IsString()
+    transaction_id: string;
+
+    @IsOptional()
+    @IsString()
+    bank_name?: string;
+
     @IsOptional()
     @IsString()
     no_va?: string;
@@ -21,9 +28,6 @@ export class TransactionPaymentDataDto {
 }
 
 export class GetTransactionPaymentByTrackingResponseDto {
-    @IsString()
     message: string;
-
-    @IsString()
     data: TransactionPaymentDataDto;
 }

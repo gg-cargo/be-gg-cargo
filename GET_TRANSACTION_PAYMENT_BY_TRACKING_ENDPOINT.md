@@ -24,19 +24,13 @@ GET /payments/GG250723523676/transaction
 {
     "message": "Data transaction payment berhasil ditemukan",
     "data": {
-        "id": 123,
-        "user_id": 20,
-        "order_id": 456,
         "price": "50000",
         "no_tracking": "GG250723523676",
-        "sid": "bec1f974-26ed-45ba-8843-630e60943813",
         "link_payment": "https://99delivery.id/payment/456",
-        "bank_code": "BCA",
+        "transaction_id": "bec1f974-26ed-45ba-8843-630e60943813",
         "bank_name": "BCA",
         "no_va": "07308114312153859668506",
-        "expired_at": "2025-01-29T10:48:00+07:00",
-        "created_at": "2025-01-27T10:48:00.000Z",
-        "updated_at": "2025-01-27T10:48:00.000Z"
+        "expired_at": "2025-01-29T10:48:00+07:00"
     }
 }
 ```
@@ -109,19 +103,13 @@ WHERE tp.no_tracking = ?
 ### **Fields yang Diambil:**
 | Table | Field | Description |
 |-------|-------|-------------|
-| `transaction_payment` | `id` | ID transaksi payment |
-| `transaction_payment` | `user_id` | ID user yang membuat transaksi |
-| `transaction_payment` | `order_id` | ID order terkait |
 | `transaction_payment` | `price` | Harga transaksi |
 | `transaction_payment` | `no_tracking` | Nomor tracking order |
-| `transaction_payment` | `sid` | Session ID dari Midtrans |
 | `transaction_payment` | `link_payment` | Link pembayaran |
-| `transaction_payment` | `bank_code` | Kode bank |
+| `transaction_payment` | `sid` → `transaction_id` | Transaction ID dari Midtrans |
 | `transaction_payment` | `bank_name` | Nama bank |
 | `transaction_payment` | `no_va` | Nomor Virtual Account |
 | `transaction_payment` | `expired_at` | Waktu expired VA |
-| `transaction_payment` | `created_at` | Waktu dibuat |
-| `transaction_payment` | `updated_at` | Waktu diupdate |
 
 ### **Relationships:**
 ```sql
@@ -169,19 +157,13 @@ curl -X GET "http://localhost:3000/payments/INVALID-TRACKING/transaction"
 ### **TransactionPaymentDataDto:**
 ```typescript
 {
-    id: number;              // ID transaksi payment
-    user_id: number;         // ID user
-    order_id: number;        // ID order
     price: string;           // Harga transaksi
     no_tracking: string;     // Nomor tracking
-    sid: string;             // Session ID Midtrans
     link_payment: string;    // Link pembayaran
-    bank_code?: string;      // Kode bank (opsional)
+    transaction_id: string;  // Transaction ID dari Midtrans
     bank_name?: string;      // Nama bank (opsional)
     no_va?: string;          // Nomor VA (opsional)
     expired_at?: string;     // Waktu expired (opsional)
-    created_at: string;      // Waktu dibuat
-    updated_at: string;      // Waktu diupdate
 }
 ```
 
@@ -192,6 +174,8 @@ curl -X GET "http://localhost:3000/payments/INVALID-TRACKING/transaction"
     data: TransactionPaymentDataDto; // Data transaction payment
 }
 ```
+
+**Note**: Struktur response ini konsisten dengan endpoint `POST /payments/midtrans/va` (createVA).
 
 ## **⚠️ Error Handling**
 
@@ -309,6 +293,7 @@ async function getTransactionPayment(trackingNumber) {
 // Usage
 const transactionData = await getTransactionPayment('GG250723523676');
 if (transactionData) {
+    console.log('Transaction ID:', transactionData.transaction_id);
     console.log('VA Number:', transactionData.no_va);
     console.log('Bank:', transactionData.bank_name);
     console.log('Price:', transactionData.price);
@@ -362,12 +347,12 @@ function TransactionPaymentDetail({ trackingNumber }) {
             <h3>Transaction Payment Details</h3>
             <div>
                 <p><strong>Tracking Number:</strong> {transactionData.no_tracking}</p>
+                <p><strong>Transaction ID:</strong> {transactionData.transaction_id}</p>
                 <p><strong>VA Number:</strong> {transactionData.no_va}</p>
                 <p><strong>Bank:</strong> {transactionData.bank_name}</p>
                 <p><strong>Price:</strong> Rp {parseInt(transactionData.price).toLocaleString()}</p>
                 <p><strong>Payment Link:</strong> <a href={transactionData.link_payment} target="_blank" rel="noopener noreferrer">Click here</a></p>
                 <p><strong>Expired At:</strong> {new Date(transactionData.expired_at).toLocaleString()}</p>
-                <p><strong>Created At:</strong> {new Date(transactionData.created_at).toLocaleString()}</p>
             </div>
         </div>
     );
