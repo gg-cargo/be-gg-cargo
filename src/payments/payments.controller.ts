@@ -1,6 +1,6 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Get, Param } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
-import { CreateVaDto, CreateVaResponseDto, MidtransNotificationDto, PaymentStatusResponseDto } from './dto';
+import { CreateVaDto, CreateVaResponseDto, MidtransNotificationDto, PaymentStatusResponseDto, GetTransactionPaymentByTrackingResponseDto, CancelPaymentDto, CancelPaymentResponseDto } from './dto';
 
 @Controller('payments')
 export class PaymentsController {
@@ -35,5 +35,17 @@ export class PaymentsController {
     @HttpCode(HttpStatus.OK)
     async getPaymentStatus(@Param('no_tracking') noTracking: string): Promise<PaymentStatusResponseDto> {
         return this.paymentsService.getPaymentStatus(noTracking);
+    }
+
+    @Get(':no_tracking/transaction')
+    @HttpCode(HttpStatus.OK)
+    async getTransactionPaymentByTracking(@Param('no_tracking') noTracking: string): Promise<GetTransactionPaymentByTrackingResponseDto> {
+        return this.paymentsService.getTransactionPaymentByTracking(noTracking);
+    }
+
+    @Post('cancel')
+    @HttpCode(HttpStatus.OK)
+    async cancelPayment(@Body() cancelPaymentDto: CancelPaymentDto): Promise<CancelPaymentResponseDto> {
+        return this.paymentsService.cancelPayment(cancelPaymentDto);
     }
 }

@@ -8,7 +8,7 @@ import { OrderHistory } from '../models/order-history.model';
 import { User } from '../models/user.model';
 import { PaymentOrder } from '../models/payment-order.model';
 import { Saldo } from '../models/saldo.model';
-import { CreateVaDto, CreateVaResponseDto, MidtransNotificationDto } from './dto';
+import { CreateVaDto, CreateVaResponseDto, MidtransNotificationDto, GetTransactionPaymentByTrackingResponseDto, TransactionPaymentDataDto, CancelPaymentDto, CancelPaymentResponseDto } from './dto';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -453,6 +453,166 @@ export class PaymentsService {
 
             console.error('Error getting payment status:', error);
             throw new InternalServerErrorException('Gagal mendapatkan status pembayaran');
+        }
+    }
+
+    /**
+     * Mendapatkan data transaction payment berdasarkan no_tracking
+     * @param noTracking Nomor tracking/resi order
+     * @returns Data transaction payment
+     */
+    async getTransactionPaymentByTracking(noTracking: string): Promise<GetTransactionPaymentByTrackingResponseDto> {
+        try {
+            // Cari transaction payment berdasarkan no_tracking
+            const transactionPayment = await this.transactionPaymentModel.findOne({
+                where: { no_tracking: noTracking },
+                include: [
+                    {
+                        model: Order,
+                        as: 'order',
+                        attributes: ['id', 'no_tracking', 'payment_status', 'total_harga']
+                    },
+                    {
+                        model: User,
+                        as: 'user',
+                        attributes: ['id', 'name', 'email', 'phone']
+                    }
+                ]
+            });
+
+            if (!transactionPayment) {
+                throw new NotFoundException(`Transaction payment dengan no_tracking ${noTracking} tidak ditemukan`);
+            }
+
+            // Format response data
+            const responseData: TransactionPaymentDataDto = {
+                price: transactionPayment.getDataValue('price'),
+                no_tracking: transactionPayment.getDataValue('no_tracking'),
+                link_payment: transactionPayment.getDataValue('link_payment'),
+                no_va: transactionPayment.getDataValue('no_va'),
+                expired_at: transactionPayment.getDataValue('expired_at'),
+            };
+
+            return {
+                message: 'Data transaction payment berhasil ditemukan',
+                data: responseData
+            };
+
+        } catch (error) {
+            console.error('Error getting transaction payment by tracking:', error);
+
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Gagal mengambil data transaction payment');
+        }
+    }
+
+    /**
+     * Membatalkan transaksi pembayaran berdasarkan no_tracking
+     * @param cancelPaymentDto Data untuk membatalkan pembayaran
+     * @returns Response pembatalan pembayaran
+     */
+    async cancelPayment(cancelPaymentDto: CancelPaymentDto): Promise<CancelPaymentResponseDto> {
+        const { no_tracking } = cancelPaymentDto;
+
+        try {
+            // 1. Validasi order berdasarkan no_tracking
+            const order = await this.orderModel.findOne({
+                where: { no_tracking },
+                attributes: ['id', 'no_tracking', 'payment_status', 'payment_uuid']
+            });
+
+            if (!order) {
+                throw new NotFoundException(`Order dengan no_tracking ${no_tracking} tidak ditemukan`);
+            }
+
+            // 2. Validasi payment_status
+            const paymentStatus = order.getDataValue('payment_status');
+            if (paymentStatus !== 'pending') {
+                throw new BadRequestException(`Pembayaran tidak dapat dibatalkan. Status pembayaran saat ini: ${paymentStatus}. Hanya pembayaran dengan status 'pending' yang dapat dibatalkan.`);
+            }
+
+            // 3. Cek apakah ada transaksi payment yang aktif
+            const transactionPayment = await this.transactionPaymentModel.findOne({
+                where: { no_tracking }
+            });
+
+            if (!transactionPayment) {
+                throw new BadRequestException(`Tidak ada transaksi pembayaran aktif untuk order dengan no_tracking ${no_tracking}`);
+            }
+
+            // 4. Mulai transaksi database
+            if (!this.orderModel.sequelize) {
+                throw new InternalServerErrorException('Sequelize instance not found');
+            }
+
+            return await this.orderModel.sequelize.transaction(async (t: Transaction) => {
+                const orderId = order.getDataValue('id');
+                const paymentUuid = order.getDataValue('payment_uuid');
+
+                // 5. Panggil Midtrans Core API untuk expire transaksi
+                if (paymentUuid) {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-var-requires
+                        const Midtrans = require('midtrans-client');
+                        const snap = new Midtrans.CoreApi({
+                            isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
+                            serverKey: process.env.MIDTRANS_SERVER_KEY,
+                            clientKey: process.env.MIDTRANS_CLIENT_KEY,
+                        });
+
+                        // Expire transaksi di Midtrans
+                        await snap.transaction.cancel(paymentUuid);
+                        console.log(`Midtrans transaction ${paymentUuid} expired successfully`);
+                    } catch (midtransError) {
+                        console.error('Error expiring Midtrans transaction:', midtransError);
+                        // Lanjutkan proses meskipun Midtrans gagal, karena kita tetap ingin update database
+                    }
+                }
+
+                // 6. Update status order menjadi 'cancelled'
+                await order.update({
+                    payment_status: 'cancelled',
+                    updated_at: new Date()
+                }, { transaction: t });
+
+                // 7. Update transaction_payment jika ada
+                if (transactionPayment) {
+                    await transactionPayment.update({
+                        updated_at: new Date()
+                    }, { transaction: t });
+                }
+
+                // 8. Tulis order_histories untuk audit trail
+                await this.orderHistoryModel.create({
+                    order_id: orderId,
+                    status: 'Payment Cancelled',
+                    provinsi: '-',
+                    kota: '-',
+                    date: new Date(),
+                    time: new Date().toTimeString().slice(0, 8),
+                    remark: 'VA payment cancelled via public endpoint',
+                    created_by: 0, // System user
+                    created_at: new Date()
+                }, { transaction: t });
+
+                return {
+                    message: 'Pembayaran berhasil dibatalkan.'
+                };
+            });
+
+        } catch (error) {
+            console.error('Error cancelling payment:', error);
+
+            if (error instanceof BadRequestException || error instanceof NotFoundException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException(
+                `Gagal membatalkan pembayaran: ${error.message}`
+            );
         }
     }
 }
