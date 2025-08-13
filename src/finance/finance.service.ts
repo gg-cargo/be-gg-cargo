@@ -991,7 +991,12 @@ export class FinanceService {
 
             const ppnAmount = invoice.getDataValue('ppn') || 0;
             const pphAmount = invoice.getDataValue('pph') || 0;
-            const totalAll = subtotal + ppnAmount - pphAmount;
+            const discountVoucherContract = invoice.getDataValue('discount') || 0;
+            const asuransiAmount = invoice.getDataValue('asuransi') || 0;
+            const packingAmount = invoice.getDataValue('packing') || 0;
+
+            // Rumus: totalAll = (SUM(billing_items[].total)) - discount_voucher_contract + asuransi_amount + packing_amount + ppn_amount - pph_amount
+            const totalAll = subtotal - discountVoucherContract + asuransiAmount + packingAmount + ppnAmount - pphAmount;
 
             const response = {
                 invoice_data: {
