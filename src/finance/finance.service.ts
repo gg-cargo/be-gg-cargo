@@ -1098,7 +1098,6 @@ export class FinanceService {
             ppn_percentage,
             ppn_amount,
             gross_up,
-            total_all,
             notes,
             updated_by_user_id
         } = body;
@@ -1320,14 +1319,66 @@ export class FinanceService {
                     updateHistory.push('Gross up diperbarui');
                 }
 
-                if (total_all !== undefined && total_all > 0) {
-                    await order.update({
-                        total_harga: total_all,
-                        updated_at: new Date()
-                    }, { transaction: t });
-                    updateHistory.push(`Order total harga diperbarui: Rp ${total_all.toLocaleString()}`);
+                // 13. Hitung dan Update Total Harga Order
+                let calculatedTotalHarga = 0;
+                let calculationDetails: string[] = [];
+
+                // Hitung subtotal dari billing items
+                if (billing_items && billing_items.length > 0) {
+                    const billingItemsTotal = billing_items.reduce((sum, item) => {
+                        const itemTotal = (item.quantity || 0) * (item.unit_price || 0);
+                        return sum + itemTotal;
+                    }, 0);
+                    calculatedTotalHarga = billingItemsTotal;
+                    calculationDetails.push(`Subtotal billing items: Rp ${billingItemsTotal.toLocaleString()}`);
+                } else {
+                    // Jika tidak ada billing items, gunakan total_harga yang ada
+                    calculatedTotalHarga = order.getDataValue('total_harga') || 0;
+                    calculationDetails.push(`Menggunakan total harga existing: Rp ${calculatedTotalHarga.toLocaleString()}`);
                 }
 
+                // Kurangi discount voucher contract
+                if (discount_voucher_contract !== undefined && discount_voucher_contract > 0) {
+                    calculatedTotalHarga -= discount_voucher_contract;
+                    calculationDetails.push(`Kurangi discount: -Rp ${discount_voucher_contract.toLocaleString()}`);
+                }
+
+                // Tambah asuransi amount
+                if (asuransi_amount !== undefined && asuransi_amount > 0) {
+                    calculatedTotalHarga += asuransi_amount;
+                    calculationDetails.push(`Tambah asuransi: +Rp ${asuransi_amount.toLocaleString()}`);
+                }
+
+                // Tambah packing amount
+                if (packing_amount !== undefined && packing_amount > 0) {
+                    calculatedTotalHarga += packing_amount;
+                    calculationDetails.push(`Tambah packing: +Rp ${packing_amount.toLocaleString()}`);
+                }
+
+                // Tambah PPN amount
+                if (ppn_amount !== undefined && ppn_amount > 0) {
+                    calculatedTotalHarga += ppn_amount;
+                    calculationDetails.push(`Tambah PPN: +Rp ${ppn_amount.toLocaleString()}`);
+                }
+
+                // Kurangi PPH amount
+                if (pph_amount !== undefined && pph_amount > 0) {
+                    calculatedTotalHarga -= pph_amount;
+                    calculationDetails.push(`Kurangi PPH: -Rp ${pph_amount.toLocaleString()}`);
+                }
+
+                // Update order total_harga dengan hasil perhitungan
+                if (calculatedTotalHarga > 0) {
+                    await order.update({
+                        total_harga: calculatedTotalHarga,
+                        updated_at: new Date()
+                    }, { transaction: t });
+
+                    updateHistory.push(`Total harga order diperbarui: Rp ${calculatedTotalHarga.toLocaleString()}`);
+                    updateHistory.push(`Detail perhitungan: ${calculationDetails.join(' → ')}`);
+                } else {
+                    updateHistory.push(`Warning: Total harga hasil perhitungan tidak valid (Rp ${calculatedTotalHarga.toLocaleString()})`);
+                }
 
                 // 14. Update Notes
                 if (notes) {
