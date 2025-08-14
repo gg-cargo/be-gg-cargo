@@ -1,22 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { ConfigService } from '@nestjs/config';
-
-interface SendTextDto {
-  phoneNumber: string;
-  message: string;
-}
-
-interface SendMediaDto {
-  phoneNumber: string;
-  caption?: string;
-  fileUrl?: string;
-  filePath?: string;
-}
-
-interface QrOptionsDto {
-  type?: 'dataurl' | 'svg' | 'text';
-}
+import { SendTextDto, SendMediaDto, QrOptionsDto } from './dto';
 
 @Injectable()
 export class WhatsappService {
@@ -25,7 +10,7 @@ export class WhatsappService {
   private http: AxiosInstance;
 
   constructor(private readonly config: ConfigService) {
-    this.baseUrl = this.config.get<string>('WWEB_BASE_URL', 'http://wweb:3001');
+    this.baseUrl = this.config.get<string>('WWEB_BASE_URL', 'https://sedekahku.99delivery.id');
     this.apiKey = this.config.get<string>('WWEB_API_KEY');
     this.http = axios.create({
       baseURL: this.baseUrl,

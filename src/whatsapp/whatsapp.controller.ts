@@ -1,21 +1,6 @@
 import { Body, Controller, Get, Post, Query, UnauthorizedException, NotFoundException, RequestTimeoutException, ConflictException, InternalServerErrorException, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
-
-class SendTextBodyDto {
-  phoneNumber!: string;
-  message!: string;
-}
-
-class SendMediaBodyDto {
-  phoneNumber!: string;
-  caption?: string;
-  fileUrl?: string;
-  filePath?: string;
-}
-
-class QrOptionsDto {
-  type?: 'dataurl' | 'svg' | 'text';
-}
+import { SendTextDto, SendMediaDto, QrOptionsDto } from './dto';
 
 @Controller('whatsapp')
 export class WhatsappController {
@@ -68,16 +53,17 @@ export class WhatsappController {
   }
 
   @Post('send-text')
-  async sendText(@Body() body: SendTextBodyDto) {
+  async sendText(@Body() body: SendTextDto) {
     try {
-      return await this.service.sendText(body);
+      const sendText = await this.service.sendText(body);
+      return sendText;
     } catch (error) {
       throw this.handleWhatsAppError(error);
     }
   }
 
   @Post('send-media')
-  async sendMedia(@Body() body: SendMediaBodyDto) {
+  async sendMedia(@Body() body: SendMediaDto) {
     try {
       return await this.service.sendMedia(body);
     } catch (error) {
