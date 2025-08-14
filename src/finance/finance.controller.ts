@@ -57,4 +57,9 @@ export class FinanceController {
     async getRevenueSummaryByService(@Query() query: RevenueSummaryByServiceDto) {
         return this.financeService.getRevenueSummaryByService(query);
     }
+
+    @Get('shipments/export/excel')
+    async exportFinanceShipmentsToExcel(@Query() query: FinanceShipmentsDto) {
+        return this.financeService.exportFinanceShipmentsToExcel(query);
+    }
 } 

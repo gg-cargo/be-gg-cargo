@@ -20,6 +20,8 @@ import { RevenueSummaryByServiceResponseDto, ServiceSummaryDto, GrandTotalDto } 
 import { Transaction } from 'sequelize';
 import { generateInvoicePDF } from './helpers/generate-invoice-pdf.helper';
 import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const XLSX = require('xlsx');
 
 @Injectable()
 export class FinanceService {
@@ -577,6 +579,76 @@ export class FinanceService {
             };
         } catch (error) {
             throw new Error(`Error getting finance shipments: ${error.message}`);
+        }
+    }
+
+    /**
+     * Export data finance shipments ke Excel
+     */
+    async exportFinanceShipmentsToExcel(query: FinanceShipmentsDto) {
+        try {
+            // Gunakan method getFinanceShipments yang sudah ada untuk mendapatkan data
+            const result = await this.getFinanceShipments(query);
+
+            if (!result.success || !result.data?.shipments) {
+                throw new Error('Tidak ada data shipments untuk diekspor');
+            }
+
+            const shipments = result.data.shipments;
+            const worksheetName = 'Finance Shipments';
+
+            // Transform data untuk Excel
+            const data = shipments.map((shipment: any) => ({
+                'No': shipment.no,
+                'Order ID': shipment.order_id,
+                'No Resi': shipment.resi,
+                'Tanggal Pengiriman': shipment.tgl_pengiriman,
+                'Pengirim': shipment.pengirim,
+                'Penerima': shipment.penerima,
+                'Barang': shipment.barang,
+                'Layanan': shipment.layanan,
+                'Qty': shipment.qty,
+                'Berat (Kg)': shipment.berat_aktual_kg,
+                'Berat Volume (Kg)': shipment.berat_volume_kg,
+                'Volume (M³)': shipment.volume_m3,
+                'Koli': shipment.koli,
+                'Harga': shipment.harga,
+                'Status Pengiriman': shipment.pengiriman,
+                'Status Tagihan': shipment.status_tagihan,
+                'Tanggal Tagihan': shipment.tgl_tagihan,
+                'Dibuat Oleh': shipment.dibuat_oleh,
+                'Total Harga': shipment.total_harga,
+                'Sisa Tagihan': shipment.sisa_tagihan,
+            }));
+
+            // Generate filename dengan timestamp
+            const currentDate = new Date();
+            const timestamp = currentDate.toISOString().replace(/[:.]/g, '-').split('T')[0];
+            const fileName = `finance-shipments-${timestamp}.xlsx`;
+
+            // Buat Excel file
+            const worksheet = XLSX.utils.json_to_sheet(data);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, worksheetName);
+
+            // Simpan file
+            const filePath = `public/excel/${fileName}`;
+            XLSX.writeFile(workbook, filePath);
+
+            return {
+                message: 'Data finance shipments berhasil diekspor ke Excel',
+                success: true,
+                data: {
+                    file_name: fileName,
+                    url: `/excel/${fileName}`,
+                    total_records: shipments.length,
+                    export_date: currentDate.toISOString()
+                }
+            };
+
+        } catch (error) {
+            console.error('Error exporting finance shipments to Excel:', error);
+            throw new Error(`Gagal mengekspor data ke Excel: ${error.message}`);
         }
     }
 
