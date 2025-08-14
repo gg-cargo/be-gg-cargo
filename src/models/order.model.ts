@@ -979,6 +979,12 @@ export class Order extends Model {
     billing_phone: string;
 
     @Column({
+        type: DataType.STRING(255),
+        allowNull: true,
+    })
+    billing_email: string;
+
+    @Column({
         type: DataType.TEXT,
         allowNull: true,
     })

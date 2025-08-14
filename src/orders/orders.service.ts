@@ -102,6 +102,7 @@ export class OrdersService {
                 billing_name: createOrderDto.billing_name,
                 billing_phone: createOrderDto.billing_phone,
                 billing_address: createOrderDto.billing_address,
+                billing_email: createOrderDto.billing_email,
 
                 //surat jalan
                 isSuratJalanBalik: createOrderDto.isSuratJalanBalik || "0",

@@ -133,6 +133,9 @@ export class CreateOrderDto {
     billing_phone?: string;
     @IsString()
     @IsOptional()
+    billing_email?: string;
+    @IsString()
+    @IsOptional()
     billing_address?: string;
 
     // provinsi
