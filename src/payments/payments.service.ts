@@ -10,6 +10,7 @@ import { PaymentOrder } from '../models/payment-order.model';
 import { Saldo } from '../models/saldo.model';
 import { CreateVaDto, CreateVaResponseDto, MidtransNotificationDto, GetTransactionPaymentByTrackingResponseDto, TransactionPaymentDataDto, CancelPaymentDto, CancelPaymentResponseDto } from './dto';
 import * as crypto from 'crypto';
+import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 
 @Injectable()
 export class PaymentsService {
@@ -317,6 +318,7 @@ export class PaymentsService {
         // Update orders
         await order.update({
             payment_status: 'paid',
+            invoiceStatus: INVOICE_STATUS.LUNAS,
             isUnpaid: 0,
             isPartialPaid: 0,
             sisaAmount: '0'
