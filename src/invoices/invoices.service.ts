@@ -63,7 +63,7 @@ export class InvoicesService {
             }
 
             // 3. Siapkan konten email
-            const emailContent = this.buildEmailContent(body, order, send_download_link, invoice_no);
+            const emailContent = await this.buildEmailContent(body, order, send_download_link, invoice_no);
             const emailSubject = this.buildEmailSubject(subject, invoice_no, order.getDataValue('no_tracking'));
 
             // 4. Kirim email melalui Mailgun
@@ -102,7 +102,7 @@ export class InvoicesService {
     /**
      * Membuat konten email dengan data dinamis
      */
-    private buildEmailContent(body: string, order: any, sendDownloadLink: boolean, invoiceNo: string): string {
+    private async buildEmailContent(body: string, order: any, sendDownloadLink: boolean, invoiceNo: string): Promise<string> {
         const trackingNumber = order.getDataValue('no_tracking');
         const customerName = order.getDataValue('nama_penerima');
         const totalAmount = order.getDataValue('total_harga');
@@ -115,21 +115,35 @@ export class InvoicesService {
             .replace(/\[total_harga\]/g, this.formatCurrency(totalAmount || 0))
             .replace(/\[email_penerima\]/g, customerEmail || 'N/A');
 
-        // Tambahkan download link jika diminta
+        // Generate invoice PDF jika diminta
         if (sendDownloadLink) {
-            const downloadUrl = `${this.configService.get('APP_URL')}/pdf/invoice-${invoiceNo}.pdf`;
-            emailContent += `
-                <br><br>
-                <p>Untuk mengunduh invoice lengkap, silakan klik link berikut:</p>
-                <p><a href="${downloadUrl}" style="background-color: #1A723B; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Download Invoice PDF</a></p>
-            `;
+            try {
+                // Generate invoice PDF terlebih dahulu
+                const invoiceData = await this.buildInvoiceData(order, invoiceNo);
+                const pdfPath = await this.generateInvoicePDF(invoiceData);
+
+                // Gunakan path PDF yang sudah di-generate
+                const downloadUrl = `${this.configService.get('APP_URL')}${pdfPath}`;
+                emailContent += `
+                    <br><br>
+                    <p>Untuk mengunduh invoice lengkap, silakan klik link berikut:</p>
+                    <p><a href="${downloadUrl}" style="background-color: #1A723B; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Download Invoice PDF</a></p>
+                `;
+            } catch (error) {
+                console.error('Error generating invoice PDF:', error);
+                // Jika gagal generate PDF, tambahkan pesan error
+                emailContent += `
+                    <br><br>
+                    <p style="color: #ff0000;">Maaf, invoice PDF tidak dapat di-generate saat ini. Silakan hubungi customer service untuk bantuan.</p>
+                `;
+            }
         }
 
         // Tambahkan footer
         emailContent += `
             <br><br>
             <hr>
-            <p style="font-size: 12px; color: #666;">
+            <p style="font-size: 12px; color: 666;">
                 Email ini dikirim otomatis oleh sistem GG Kargo.<br>
                 Jika ada pertanyaan, silakan hubungi customer service kami.
             </p>
@@ -155,6 +169,81 @@ export class InvoicesService {
             style: 'currency',
             currency: 'IDR'
         }).format(amount);
+    }
+
+    /**
+     * Membuat data invoice untuk generate PDF
+     */
+    private async buildInvoiceData(order: any, invoiceNo: string): Promise<any> {
+        // Ambil data order invoice
+        const orderInvoice = await this.orderInvoiceModel.findOne({
+            where: { order_id: order.getDataValue('id') }
+        });
+
+        if (!orderInvoice) {
+            throw new Error('Order invoice tidak ditemukan');
+        }
+
+        // Build invoice data sesuai format yang dibutuhkan generateInvoicePDF
+        return {
+            invoice_details: {
+                no_invoice: invoiceNo,
+                tgl_invoice: orderInvoice.getDataValue('invoice_date') || new Date(),
+                detail_pengiriman: {
+                    layanan: order.getDataValue('layanan') || 'Regular',
+                    pengirim: order.getDataValue('nama_pengirim') || '-',
+                    alamat_pengirim: order.getDataValue('alamat_pengirim') || '-',
+                    provinsi_pengirim: order.getDataValue('provinsi_pengirim') || '-',
+                    kota_pengirim: order.getDataValue('kota_pengirim') || '-',
+                    kecamatan_pengirim: order.getDataValue('kecamatan_pengirim') || '-',
+                    kelurahan_pengirim: order.getDataValue('kelurahan_pengirim') || '-',
+                    kodepos_pengirim: order.getDataValue('kodepos_pengirim') || '-',
+                    no_telepon_pengirim: order.getDataValue('no_telepon_pengirim') || '-',
+                    penerima: order.getDataValue('nama_penerima') || '-',
+                    alamat_penerima: order.getDataValue('alamat_penerima') || '-',
+                    provinsi_penerima: order.getDataValue('provinsi_penerima') || '-',
+                    kota_penerima: order.getDataValue('kota_penerima') || '-',
+                    kecamatan_penerima: order.getDataValue('kecamatan_penerima') || '-',
+                    kelurahan_penerima: order.getDataValue('kelurahan_penerima') || '-',
+                    kodepos_penerima: order.getDataValue('kodepos_penerima') || '-',
+                    no_telepon_penerima: order.getDataValue('no_telepon_penerima') || '-',
+                },
+                item_tagihan: [
+                    {
+                        deskripsi: `Pengiriman ${order.getDataValue('layanan') || 'Regular'}`,
+                        qty: 1,
+                        uom: 'pcs',
+                        harga_satuan: Number(order.getDataValue('total_harga')) || 0,
+                        total: Number(order.getDataValue('total_harga')) || 0
+                    }
+                ],
+                subtotal_layanan: Number(order.getDataValue('total_harga')) || 0,
+                pph: 0, // Sesuaikan dengan perhitungan PPH yang sebenarnya
+                ppn: 0, // Sesuaikan dengan perhitungan PPN yang sebenarnya
+                total_akhir_tagihan: Number(order.getDataValue('total_harga')) || 0,
+                info_rekening_bank: {
+                    nama_bank: 'Bank Central Asia (BCA)',
+                    nama_pemilik_rek: 'PT. GG KARGO',
+                    no_rekening: '1234567890',
+                    swift_code: 'CENAIDJA'
+                },
+                notes: 'Terima kasih telah menggunakan layanan GG KARGO'
+            }
+        };
+    }
+
+    /**
+     * Generate invoice PDF menggunakan helper
+     */
+    private async generateInvoicePDF(invoiceData: any): Promise<string> {
+        try {
+            // Import helper function
+            const { generateInvoicePDF } = await import('../finance/helpers/generate-invoice-pdf.helper');
+            return await generateInvoicePDF(invoiceData);
+        } catch (error) {
+            console.error('Error importing generateInvoicePDF helper:', error);
+            throw new Error('Gagal generate invoice PDF');
+        }
     }
 
     /**
