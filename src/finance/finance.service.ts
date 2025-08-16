@@ -949,7 +949,7 @@ export class FinanceService {
 
                 // Update status order
                 await order.update({
-                    invoiceStatus: INVOICE_STATUS.BELUM_PROSES,
+                    invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH,
                     isUnpaid: 1,
                     date_submit: invoice_date,
                     noFaktur: invoice_no
