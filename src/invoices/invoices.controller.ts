@@ -16,5 +16,11 @@ export class InvoicesController {
     async getInvoiceByTracking(@Param('no_tracking') noTracking: string): Promise<GetInvoiceByTrackingResponseDto> {
         return this.invoicesService.getInvoiceByTracking(noTracking);
     }
+
+
+    @Get(':invoice_no/send-data')
+    async getInvoiceSendData(@Param('invoice_no') invoiceNo: string) {
+        return this.invoicesService.getInvoiceSendData(invoiceNo);
+    }
 }
 

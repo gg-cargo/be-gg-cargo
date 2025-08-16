@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Order } from '../models/order.model';
 import { OrderInvoice } from '../models/order-invoice.model';
 import { User } from '../models/user.model';
-import { SendEmailDto, SendEmailResponseDto, GetInvoiceByTrackingResponseDto, InvoiceByTrackingDataDto } from './dto';
+import { SendEmailDto, SendEmailResponseDto, GetInvoiceByTrackingResponseDto, InvoiceByTrackingDataDto, GetInvoiceSendDataResponseDto, InvoiceSendDataDto } from './dto';
 import * as FormData from 'form-data';
 import axios from 'axios';
 
@@ -72,7 +72,7 @@ export class InvoicesService {
                 cc: cc_emails,
                 subject: emailSubject,
                 html: emailContent,
-                from: 'GG KARGO <no-reply@99delivery.id>'
+                from: 'GG Kargo <no-reply@99delivery.id>'
             });
 
             // 5. Log pengiriman email (opsional)
@@ -366,6 +366,94 @@ export class InvoicesService {
             }
 
             throw new InternalServerErrorException('Gagal mengambil data invoice');
+        }
+    }
+
+    async getInvoiceSendData(invoiceNo: string): Promise<GetInvoiceSendDataResponseDto> {
+        try {
+            // 1. Cari invoice berdasarkan invoice_no
+            const invoice = await this.orderModel.sequelize?.models.OrderInvoice.findOne({
+                where: { invoice_no: invoiceNo },
+                include: [
+                    {
+                        model: this.orderModel,
+                        as: 'order',
+                        attributes: [
+                            'id',
+                            'no_tracking',
+                            'billing_name',
+                            'billing_email',
+                            'billing_phone',
+                            'nama_penerima',
+                            'email_penerima',
+                            'no_telepon_penerima'
+                        ]
+                    }
+                ]
+            });
+
+            if (!invoice) {
+                throw new NotFoundException(`Invoice dengan nomor ${invoiceNo} tidak ditemukan`);
+            }
+
+            const order = invoice.getDataValue('order');
+            if (!order) {
+                throw new NotFoundException(`Order tidak ditemukan untuk invoice ${invoiceNo}`);
+            }
+
+            // 2. Ambil data yang diperlukan
+            const noTracking = order.getDataValue('no_tracking');
+            const billingName = order.getDataValue('billing_name') || order.getDataValue('nama_penerima');
+            const billingEmail = order.getDataValue('billing_email') || order.getDataValue('email_penerima');
+            const billingNomer = order.getDataValue('billing_phone') || order.getDataValue('no_telepon_penerima');
+            const harga = invoice.getDataValue('amount') || 0;
+
+            // 3. Buat subject email
+            const emailSubject = `Invoice ${noTracking}`;
+
+            // 4. Buat body email (HTML format)
+            const bodyEmail = `<p>Yth Customer GG Kargo Mr/Mrs. ${billingName}</p>
+<p>Kami infokan tagihan(invoice) Anda sudah terbit, Berikut adalah tagihan Anda dengan nomor tracking ${noTracking} sebesar<b>Rp${harga.toLocaleString('id-ID')}.</b></p>
+<p>Harap segera lakukan proses pembayaran atau konfirmasi harga pada kami.</p>
+<p><b>Pembayaran dapat dilakukan melalui:<br/>Virtual Account yang terdapat pada Aplikasi GG Kargo</b></p>
+<p>Terima kasih atas kerja samanya.</p>`;
+
+            // 5. Buat body WhatsApp (plain text format)
+            const bodyWa = `Yth. Mr/Mrs. ${billingName}, 
+
+Tagihan Anda sudah terbit dengan nomor invoice ${invoiceNo}, harap segera lakukan proses pembayaran.
+
+Total Tagihan Invoice : *Rp${harga.toLocaleString('id-ID')}*
+
+Mohon dapat dilakukan pembayaran melalui:
+Virtual Account yang terdapat pada aplikasi GG Kargo
+
+Terima kasih atas kerja samanya.
+GG Kargo`;
+
+            // 6. Buat response
+            const invoiceData: InvoiceSendDataDto = {
+                invoice_no: invoiceNo,
+                no_tracking: noTracking,
+                billing_name: billingName,
+                billing_email: billingEmail,
+                billing_nomer: billingNomer,
+                harga: harga,
+                email_subject: emailSubject,
+                body_email: bodyEmail,
+                body_wa: bodyWa
+            };
+
+            return {
+                status: 'success',
+                invoice_data: invoiceData
+            };
+
+        } catch (error) {
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new InternalServerErrorException(`Error getting invoice send data: ${error.message}`);
         }
     }
 }
