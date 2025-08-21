@@ -11,6 +11,12 @@ import { OrderReferensi } from '../models/order-referensi.model';
 import { RequestCancel } from '../models/request-cancel.model';
 import { User } from '../models/user.model';
 import { TransactionPayment } from '../models/transaction-payment.model';
+import { OrderInvoice } from '../models/order-invoice.model';
+import { OrderInvoiceDetail } from '../models/order-invoice-detail.model';
+import { Bank } from '../models/bank.model';
+import { Level } from '../models/level.model';
+import { FileLog } from '../models/file-log.model';
+import { FileService } from '../file/file.service';
 
 @Module({
     imports: [
@@ -23,11 +29,16 @@ import { TransactionPayment } from '../models/transaction-payment.model';
             OrderReferensi,
             RequestCancel,
             User,
-            TransactionPayment
+            TransactionPayment,
+            OrderInvoice,
+            OrderInvoiceDetail,
+            Bank,
+            Level,
+            FileLog
         ])
     ],
     controllers: [OrdersController],
-    providers: [OrdersService],
+    providers: [OrdersService, FileService],
     exports: [OrdersService]
 })
 export class OrdersModule { } 

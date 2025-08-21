@@ -1,4 +1,8 @@
-import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import type { File } from 'multer';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
@@ -105,11 +109,27 @@ export class OrdersController {
 
     @UseGuards(JwtAuthGuard)
     @Patch(':order_id/bypass-reweight')
+    @UseInterceptors(FileInterceptor('proof_image', {
+        storage: diskStorage({
+            destination: 'public/uploads',
+            filename: (req, file, cb) => {
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+                cb(null, uniqueSuffix + extname(file.originalname));
+            },
+        }),
+    }))
     async bypassReweight(
         @Param('order_id', ParseIntPipe) orderId: number,
         @Body() bypassDto: BypassReweightDto,
+        @UploadedFile() proofImage: File,
     ): Promise<BypassReweightResponseDto> {
-        return this.ordersService.bypassReweight(orderId, bypassDto);
+        // Gabungkan file dengan DTO
+        const bypassData = {
+            ...bypassDto,
+            proof_image: proofImage
+        };
+
+        return this.ordersService.bypassReweight(orderId, bypassData);
     }
 
     @UseGuards(JwtAuthGuard)

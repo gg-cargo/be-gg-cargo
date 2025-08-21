@@ -1,5 +1,6 @@
 import { IsString, IsNotEmpty, IsOptional, IsIn, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
+import type { File } from 'multer';
 
 export class BypassReweightDto {
     @IsString({ message: 'Status bypass reweight harus berupa string' })
@@ -14,4 +15,7 @@ export class BypassReweightDto {
     @IsNumber({}, { message: 'ID user harus berupa angka' })
     @Type(() => Number)
     updated_by_user_id: number;
+
+    @IsOptional()
+    proof_image?: File;
 } 

@@ -35,6 +35,7 @@ export class FileService {
                 },
             };
         } catch (err) {
+            console.log(err);
             throw new HttpException('Gagal menyimpan file log', HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

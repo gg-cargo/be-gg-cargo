@@ -27,6 +27,12 @@ import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 import { Op, fn, col, literal } from 'sequelize';
 import * as XLSX from 'xlsx';
 import * as PDFDocument from 'pdfkit';
+import { OrderInvoice } from '../models/order-invoice.model';
+import { OrderInvoiceDetail } from '../models/order-invoice-detail.model';
+import { Bank } from '../models/bank.model';
+import { Level } from '../models/level.model';
+import { FileLog } from '../models/file-log.model';
+import { FileService } from '../file/file.service';
 
 @Injectable()
 export class OrdersService {
@@ -49,7 +55,492 @@ export class OrdersService {
         private readonly requestCancelModel: typeof RequestCancel,
         @InjectModel(User)
         private readonly userModel: typeof User,
+        @InjectModel(OrderInvoice)
+        private readonly orderInvoiceModel: typeof OrderInvoice,
+        @InjectModel(OrderInvoiceDetail)
+        private readonly orderInvoiceDetailModel: typeof OrderInvoiceDetail,
+        @InjectModel(Bank)
+        private readonly bankModel: typeof Bank,
+        @InjectModel(Level)
+        private readonly levelModel: typeof Level,
+        @InjectModel(FileLog)
+        private readonly fileLogModel: typeof FileLog,
+        private readonly fileService: FileService,
     ) { }
+
+    /**
+     * Helper function untuk menyimpan foto bukti bypass reweight
+     */
+    private async saveProofImage(
+        proofImage: File,
+        orderId: number,
+        userId: number,
+        transaction: Transaction
+    ): Promise<FileLog> {
+        try {
+            // Upload file menggunakan FileService
+            const uploadResult = await this.fileService.createFileLog(
+                proofImage,
+                userId,
+                'bypass_reweight_proof'
+            );
+
+            // Assign file (set is_assigned = 1)
+            await this.fileService.assignFile(uploadResult.data.id);
+
+            // Ambil file log yang sudah dibuat
+            const fileLog = await this.fileLogModel.findByPk(uploadResult.data.id);
+            if (!fileLog) {
+                throw new Error('File log tidak ditemukan setelah upload');
+            }
+
+            return fileLog;
+        } catch (error) {
+            console.error('Error saving proof image:', error);
+            throw error;
+        }
+        // Note: FileService tidak menggunakan transaction, jadi kita tidak bisa rollback file upload
+        // Jika ada error setelah file upload, file akan tetap tersimpan di storage
+    }
+
+    /**
+     * Helper function untuk auto-create invoice ketika bypass reweight diaktifkan
+     */
+    private async autoCreateInvoice(orderId: number, transaction: Transaction): Promise<any> {
+        try {
+            // Ambil data order
+            const order = await this.orderModel.findByPk(orderId, {
+                transaction,
+                include: [
+                    { model: this.orderPieceModel, as: 'pieces' },
+                    { model: this.orderInvoiceModel, as: 'orderInvoice' }
+                ]
+            });
+
+            if (!order) {
+                throw new Error('Order tidak ditemukan');
+            }
+
+            // Validasi apakah sudah ada invoice
+            if (order.getDataValue('orderInvoice') && order.getDataValue('orderInvoice').getDataValue('invoice_no')) {
+                return null; // Sudah ada invoice
+            }
+
+            // Ambil info bank default
+            const bank = await this.bankModel.findOne({ transaction });
+            if (!bank) {
+                throw new Error('Info bank perusahaan belum diatur');
+            }
+
+            // Generate invoice number berdasarkan no_tracking
+            const noTracking = order.getDataValue('no_tracking');
+            let invoice_no = noTracking;
+
+            // Cek apakah sudah ada invoice dengan no_tracking yang sama
+            const existingInvoice = await this.orderInvoiceModel.findOne({
+                where: {
+                    [Op.or]: [
+                        { invoice_no: noTracking },
+                        { invoice_no: { [Op.like]: `${noTracking}-%` } }
+                    ]
+                },
+                order: [['invoice_no', 'DESC']],
+                transaction
+            });
+
+            if (existingInvoice && existingInvoice.invoice_no !== noTracking) {
+                // Jika ada invoice dengan format no_tracking-xxx, gunakan format berikutnya
+                const match = existingInvoice.invoice_no.match(new RegExp(`${noTracking}-(\\d+)`));
+                if (match) {
+                    const nextNumber = parseInt(match[1], 10) + 1;
+                    invoice_no = `${noTracking}-${String(nextNumber).padStart(3, '0')}`;
+                } else {
+                    invoice_no = `${noTracking}-001`;
+                }
+            }
+
+            const now = new Date();
+            const invoice_date = now.toISOString().split('T')[0];
+
+            // Komponen biaya
+            const items: {
+                description: string;
+                qty: number;
+                uom: string;
+                unit_price: number;
+                remark: string;
+            }[] = [];
+
+            // Hitung chargeable weight berdasarkan order shipments
+            let totalWeight = 0;
+            let totalVolume = 0;
+            let totalBeratVolume = 0;
+
+            // Ambil semua shipments untuk order ini
+            const orderShipments = await this.orderShipmentModel.findAll({
+                where: { order_id: orderId },
+                attributes: ['qty', 'berat', 'panjang', 'lebar', 'tinggi'],
+                transaction
+            });
+
+            // Hitung total weight dan volume dari shipments
+            orderShipments.forEach((shipment) => {
+                const qty = Number(shipment.getDataValue('qty')) || 0;
+                const berat = Number(shipment.getDataValue('berat')) || 0;
+                const panjang = Number(shipment.getDataValue('panjang')) || 0;
+                const lebar = Number(shipment.getDataValue('lebar')) || 0;
+                const tinggi = Number(shipment.getDataValue('tinggi')) || 0;
+
+                // Hitung per item
+                const itemWeight = berat * qty;
+                let itemVolume = 0;
+                let itemBeratVolume = 0;
+
+                if (panjang && lebar && tinggi) {
+                    itemVolume = this.calculateVolume(panjang, lebar, tinggi) * qty;
+                    itemBeratVolume = this.calculateBeratVolume(panjang, lebar, tinggi) * qty;
+                }
+
+                // Akumulasi total
+                totalWeight += itemWeight;
+                totalVolume += itemVolume;
+                totalBeratVolume += itemBeratVolume;
+            });
+
+            // Chargeable weight = max(total berat aktual, total berat volume)
+            const chargeableWeight = Math.max(totalWeight, totalBeratVolume);
+
+            // Biaya Pengiriman
+            items.push({
+                description: 'Biaya Pengiriman Barang',
+                qty: chargeableWeight,
+                uom: 'kg',
+                unit_price: order.total_harga || 0,
+                remark: `Berat terberat: ${chargeableWeight.toFixed(2)} kg (Aktual: ${totalWeight.toFixed(2)} kg, Volume: ${totalBeratVolume.toFixed(2)} kg)`
+            });
+
+            // Biaya Asuransi
+            if (order.asuransi === 1) {
+                items.push({
+                    description: 'Biaya Asuransi',
+                    qty: 1,
+                    uom: 'pcs',
+                    unit_price: Math.round((order.harga_barang || 0) * 0.002),
+                    remark: ''
+                });
+            }
+
+            // Biaya Packing
+            if (order.packing === 1) {
+                items.push({
+                    description: 'Biaya Packing',
+                    qty: 1,
+                    uom: 'pcs',
+                    unit_price: 5000,
+                    remark: ''
+                });
+            }
+
+            // Diskon (jika ada)
+            if (order.voucher) {
+                items.push({
+                    description: 'Diskon',
+                    qty: 1,
+                    uom: 'voucher',
+                    unit_price: -10000,
+                    remark: order.voucher
+                });
+            }
+
+            // Hitung total
+            const subtotal = items.reduce((sum, i) => sum + i.unit_price * i.qty, 0);
+            const ppn = Math.round(subtotal * 0.1); // 10% PPN
+            const pph = 0;
+            const kode_unik = Math.floor(100 + Math.random() * 900);
+
+            // Insert ke order_invoices
+            const invoice = await this.orderInvoiceModel.create({
+                order_id: orderId,
+                invoice_no,
+                invoice_date,
+                payment_terms: 'Net 30',
+                vat: ppn,
+                discount: 0,
+                packing: order.packing,
+                asuransi: order.asuransi,
+                ppn,
+                pph,
+                kode_unik,
+                notes: 'Invoice otomatis dibuat dari bypass reweight',
+                beneficiary_name: bank.account_name,
+                acc_no: bank.no_account,
+                bank_name: bank.bank_name,
+                bank_address: '',
+                swift_code: '',
+                payment_info: 0,
+                fm: 0,
+                lm: 0,
+                bill_to_name: order.getDataValue('billing_name') || order.getDataValue('nama_pengirim'),
+                bill_to_phone: order.getDataValue('billing_phone') || order.getDataValue('no_telepon_pengirim'),
+                bill_to_address: order.getDataValue('billing_address') || order.getDataValue('alamat_pengirim'),
+                create_date: now,
+                noFaktur: '',
+            }, { transaction });
+
+            // Insert ke order_invoice_details
+            for (const item of items) {
+                await this.orderInvoiceDetailModel.create({
+                    invoice_id: invoice.id,
+                    description: item.description || '',
+                    qty: item.qty || 0,
+                    uom: item.uom || '',
+                    unit_price: item.unit_price || 0,
+                    remark: item.remark || ''
+                }, { transaction });
+            }
+
+            return {
+                invoice_no: invoice.invoice_no,
+                invoice_id: invoice.id,
+                total_amount: subtotal + ppn - pph
+            };
+
+        } catch (error) {
+            console.error('Error auto-create invoice:', error);
+            throw error;
+        }
+    }
+
+    async bypassReweight(orderId: number, bypassDto: BypassReweightDto): Promise<BypassReweightResponseDto> {
+        const {
+            bypass_reweight_status,
+            reason,
+            updated_by_user_id,
+            proof_image,
+        } = bypassDto;
+
+        // Validasi order exists
+        const order = await this.orderModel.findByPk(orderId, {
+            include: [
+                {
+                    model: this.orderPieceModel,
+                    as: 'pieces',
+                    attributes: ['id', 'reweight_status'],
+                },
+            ],
+        });
+
+        if (!order) {
+            throw new NotFoundException('Order tidak ditemukan');
+        }
+
+        // Validasi user authorization (hanya Admin/Super Admin)
+        // Note: Implementasi validasi level user bisa ditambahkan sesuai kebutuhan
+        // const user = await this.userModel.findByPk(updated_by_user_id, {
+        //     include: [{ model: this.levelModel, as: 'levelData' }]
+        // });
+        // if (!user || !['Admin', 'Super Admin'].includes(user.levelData?.nama)) {
+        //     throw new BadRequestException('Anda tidak memiliki izin untuk melakukan bypass reweight');
+        // }
+
+        // Validasi foto bukti wajib jika bypass diaktifkan
+        if (bypass_reweight_status === 'true' && !proof_image) {
+            throw new BadRequestException('Foto bukti wajib diupload saat mengaktifkan bypass reweight');
+        }
+
+        // Validasi format file jika ada
+        if (proof_image) {
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+            if (!allowedTypes.includes(proof_image.mimetype)) {
+                throw new BadRequestException('Format file tidak didukung. Gunakan JPG, PNG, atau GIF');
+            }
+
+            // Validasi ukuran file (max 5MB)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (proof_image.size > maxSize) {
+                throw new BadRequestException('Ukuran file terlalu besar. Maksimal 5MB');
+            }
+        }
+
+        // Validasi status order untuk bypass
+        const currentBypassStatus = order.getDataValue('bypass_reweight');
+        const currentReweightStatus = order.getDataValue('reweight_status');
+
+        // Jika order sudah di-reweight dan bypass diaktifkan, berikan warning
+        if (currentReweightStatus === 1 && bypass_reweight_status === 'true') {
+            console.warn(`Order ${orderId} sudah di-reweight, bypass reweight diaktifkan`);
+        }
+
+        // Mulai transaction
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const now = new Date();
+            const isBypassEnabled = bypass_reweight_status === 'true';
+
+            // 1. Update order bypass status
+            await this.orderModel.update(
+                {
+                    bypass_reweight: bypass_reweight_status,
+                    remark_reweight: reason || (isBypassEnabled ? 'Bypass reweight diaktifkan' : 'Bypass reweight dinonaktifkan'),
+                    updated_at: now,
+                },
+                {
+                    where: { id: orderId },
+                    transaction,
+                }
+            );
+
+            let orderPiecesUpdated = 0;
+
+            // 2. Update order_pieces jika bypass diaktifkan
+            if (isBypassEnabled) {
+                // Set semua pieces menjadi reweighted
+                const updateResult = await this.orderPieceModel.update(
+                    {
+                        reweight_status: 1,
+                        reweight_by: updated_by_user_id,
+                        updatedAt: now,
+                    },
+                    {
+                        where: {
+                            order_id: orderId,
+                            reweight_status: 0 // Hanya update yang belum di-reweight
+                        },
+                        transaction,
+                    }
+                );
+                orderPiecesUpdated = updateResult[0];
+
+                // Update order reweight status
+                await this.orderModel.update(
+                    {
+                        reweight_status: 1,
+                        isUnreweight: 0,
+                        invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH, // Update invoiceStatus menjadi "belum ditagih"
+                    },
+                    {
+                        where: { id: orderId },
+                        transaction,
+                    }
+                );
+            } else {
+                // Jika bypass dinonaktifkan, reset reweight status pieces yang belum di-reweight manual
+                const updateResult = await this.orderPieceModel.update(
+                    {
+                        reweight_status: 0,
+                        reweight_by: null,
+                        updatedAt: now,
+                    },
+                    {
+                        where: {
+                            order_id: orderId,
+                            reweight_by: updated_by_user_id // Reset hanya yang di-bypass
+                        },
+                        transaction,
+                    }
+                );
+                orderPiecesUpdated = updateResult[0];
+
+                // Check if any pieces still need reweight
+                const remainingPieces = await this.orderPieceModel.count({
+                    where: {
+                        order_id: orderId,
+                        reweight_status: 0
+                    },
+                    transaction,
+                });
+
+                if (remainingPieces > 0) {
+                    // Reset order reweight status jika masih ada pieces yang belum di-reweight
+                    await this.orderModel.update(
+                        {
+                            reweight_status: 0,
+                            isUnreweight: 1,
+                        },
+                        {
+                            where: { id: orderId },
+                            transaction,
+                        }
+                    );
+                }
+            }
+
+            // 3. Simpan foto bukti jika bypass diaktifkan
+            let proofImageData: FileLog | null = null;
+            if (isBypassEnabled && proof_image) {
+                try {
+                    proofImageData = await this.saveProofImage(proof_image, orderId, updated_by_user_id, transaction);
+                } catch (proofError) {
+                    console.error(`Gagal menyimpan foto bukti untuk order ${orderId}:`, proofError.message);
+                    throw new Error('Gagal menyimpan foto bukti. Proses bypass reweight dibatalkan.');
+                }
+            }
+
+            // 4. Auto-create invoice jika bypass diaktifkan dan status berubah menjadi BELUM_DITAGIH
+            let invoiceData: {
+                invoice_no: string;
+                invoice_id: number;
+                total_amount: number;
+            } | null = null;
+            if (isBypassEnabled) {
+                try {
+                    invoiceData = await this.autoCreateInvoice(orderId, transaction);
+                } catch (invoiceError) {
+                    console.warn(`Gagal auto-create invoice untuk order ${orderId}:`, invoiceError.message);
+                    // Lanjutkan proses meskipun invoice gagal dibuat
+                }
+            }
+
+            // 5. Create order_histories
+            const statusText = isBypassEnabled ? 'Reweight Bypass Enabled' : 'Reweight Bypass Disabled';
+            const historyRemark = `${statusText} oleh User ID ${updated_by_user_id}${reason ? ` dengan alasan: ${reason}` : ''}${proofImageData ? ` - Foto bukti: ${proofImageData.file_name}` : ''}${invoiceData ? ` - Invoice otomatis dibuat: ${invoiceData.invoice_no}` : ''}`;
+
+            await this.orderHistoryModel.create(
+                {
+                    order_id: orderId,
+                    status: statusText,
+                    remark: historyRemark,
+                    provinsi: order.getDataValue('provinsi_pengirim') || '',
+                    kota: order.getDataValue('kota_pengirim') || '',
+                    date: now.toISOString().split('T')[0],
+                    time: now.toTimeString().split(' ')[0],
+                    created_by: updated_by_user_id,
+                },
+                { transaction }
+            );
+
+            await transaction.commit();
+
+            return {
+                message: `Bypass reweight berhasil ${isBypassEnabled ? 'diaktifkan' : 'dinonaktifkan'}`,
+                success: true,
+                data: {
+                    order_id: orderId,
+                    no_tracking: order.getDataValue('no_tracking'),
+                    bypass_reweight_status,
+                    reason,
+                    updated_by_user: `User ID ${updated_by_user_id}`,
+                    updated_at: now,
+                    order_pieces_updated: orderPiecesUpdated,
+                    proof_image: proofImageData ? {
+                        file_name: proofImageData.file_name,
+                        file_path: proofImageData.file_path,
+                        file_id: proofImageData.id
+                    } : null,
+                    invoice_created: invoiceData ? {
+                        invoice_no: invoiceData.invoice_no,
+                        invoice_id: invoiceData.invoice_id,
+                        total_amount: invoiceData.total_amount
+                    } : null,
+                },
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            throw new InternalServerErrorException(error.message);
+        }
+    }
 
     async createOrder(createOrderDto: CreateOrderDto, userId: number): Promise<CreateOrderResponseDto> {
         // Validasi tambahan
@@ -1065,181 +1556,6 @@ export class OrdersService {
                     dimensi_baru: `${panjang}x${lebar}x${tinggi}`,
                     reweight_status: 1,
                     order_reweight_completed: allReweighted,
-                },
-            };
-
-        } catch (error) {
-            await transaction.rollback();
-            throw new InternalServerErrorException(error.message);
-        }
-    }
-
-    async bypassReweight(orderId: number, bypassDto: BypassReweightDto): Promise<BypassReweightResponseDto> {
-        const {
-            bypass_reweight_status,
-            reason,
-            updated_by_user_id,
-        } = bypassDto;
-
-        // Validasi order exists
-        const order = await this.orderModel.findByPk(orderId, {
-            include: [
-                {
-                    model: this.orderPieceModel,
-                    as: 'pieces',
-                    attributes: ['id', 'reweight_status'],
-                },
-            ],
-        });
-
-        if (!order) {
-            throw new NotFoundException('Order tidak ditemukan');
-        }
-
-        // Validasi user authorization (hanya Admin/Super Admin)
-        // Note: Implementasi validasi level user bisa ditambahkan sesuai kebutuhan
-        // const user = await this.userModel.findByPk(updated_by_user_id, {
-        //     include: [{ model: this.levelModel, as: 'levelData' }]
-        // });
-        // if (!user || !['Admin', 'Super Admin'].includes(user.levelData?.nama)) {
-        //     throw new BadRequestException('Anda tidak memiliki izin untuk melakukan bypass reweight');
-        // }
-
-        // Validasi status order untuk bypass
-        const currentBypassStatus = order.getDataValue('bypass_reweight');
-        const currentReweightStatus = order.getDataValue('reweight_status');
-
-        // Jika order sudah di-reweight dan bypass diaktifkan, berikan warning
-        if (currentReweightStatus === 1 && bypass_reweight_status === 'true') {
-            console.warn(`Order ${orderId} sudah di-reweight, bypass reweight diaktifkan`);
-        }
-
-        // Mulai transaction
-        const transaction = await this.orderModel.sequelize!.transaction();
-
-        try {
-            const now = new Date();
-            const isBypassEnabled = bypass_reweight_status === 'true';
-
-            // 1. Update order bypass status
-            await this.orderModel.update(
-                {
-                    bypass_reweight: bypass_reweight_status,
-                    remark_reweight: reason || (isBypassEnabled ? 'Bypass reweight diaktifkan' : 'Bypass reweight dinonaktifkan'),
-                    updated_at: now,
-                },
-                {
-                    where: { id: orderId },
-                    transaction,
-                }
-            );
-
-            let orderPiecesUpdated = 0;
-
-            // 2. Update order_pieces jika bypass diaktifkan
-            if (isBypassEnabled) {
-                // Set semua pieces menjadi reweighted
-                const updateResult = await this.orderPieceModel.update(
-                    {
-                        reweight_status: 1,
-                        reweight_by: updated_by_user_id,
-                        updatedAt: now,
-                    },
-                    {
-                        where: {
-                            order_id: orderId,
-                            reweight_status: 0 // Hanya update yang belum di-reweight
-                        },
-                        transaction,
-                    }
-                );
-                orderPiecesUpdated = updateResult[0];
-
-                // Update order reweight status
-                await this.orderModel.update(
-                    {
-                        reweight_status: 1,
-                        isUnreweight: 0,
-                        invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH, // Update invoiceStatus menjadi "belum ditagih"
-                    },
-                    {
-                        where: { id: orderId },
-                        transaction,
-                    }
-                );
-            } else {
-                // Jika bypass dinonaktifkan, reset reweight status pieces yang belum di-reweight manual
-                const updateResult = await this.orderPieceModel.update(
-                    {
-                        reweight_status: 0,
-                        reweight_by: null,
-                        updatedAt: now,
-                    },
-                    {
-                        where: {
-                            order_id: orderId,
-                            reweight_by: updated_by_user_id // Reset hanya yang di-bypass
-                        },
-                        transaction,
-                    }
-                );
-                orderPiecesUpdated = updateResult[0];
-
-                // Check if any pieces still need reweight
-                const remainingPieces = await this.orderPieceModel.count({
-                    where: {
-                        order_id: orderId,
-                        reweight_status: 0
-                    },
-                    transaction,
-                });
-
-                if (remainingPieces > 0) {
-                    // Reset order reweight status jika masih ada pieces yang belum di-reweight
-                    await this.orderModel.update(
-                        {
-                            reweight_status: 0,
-                            isUnreweight: 1,
-                        },
-                        {
-                            where: { id: orderId },
-                            transaction,
-                        }
-                    );
-                }
-            }
-
-            // 3. Create order_histories
-            const statusText = isBypassEnabled ? 'Reweight Bypass Enabled' : 'Reweight Bypass Disabled';
-            const historyRemark = `${statusText} oleh User ID ${updated_by_user_id}${reason ? ` dengan alasan: ${reason}` : ''}`;
-
-            await this.orderHistoryModel.create(
-                {
-                    order_id: orderId,
-                    status: statusText,
-                    remark: historyRemark,
-                    provinsi: order.getDataValue('provinsi_pengirim') || '',
-                    kota: order.getDataValue('kota_pengirim') || '',
-                    date: now.toISOString().split('T')[0],
-                    time: now.toTimeString().split(' ')[0],
-                    created_by: updated_by_user_id,
-                },
-                { transaction }
-            );
-
-            await transaction.commit();
-
-            return {
-                message: `Bypass reweight berhasil ${isBypassEnabled ? 'diaktifkan' : 'dinonaktifkan'}`,
-                success: true,
-                data: {
-                    order_id: orderId,
-                    no_tracking: order.getDataValue('no_tracking'),
-                    bypass_reweight_status,
-                    reason,
-                    updated_by_user: `User ID ${updated_by_user_id}`,
-                    updated_at: now,
-                    order_pieces_updated: orderPiecesUpdated,
                 },
             };
 
