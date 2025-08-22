@@ -251,7 +251,6 @@ export async function generateResiPDF(data: any): Promise<string> {
                 width: 520,
                 stack: [
                     { text: 'Resi diproses oleh sistem GG Kargo', style: 'footerItalic' },
-                    { text: 'Halaman 1 dari 1', alignment: 'center', fontSize: 9 },
                 ],
             },
         ],
