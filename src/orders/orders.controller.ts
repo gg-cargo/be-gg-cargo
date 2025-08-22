@@ -242,12 +242,28 @@ export class OrdersController {
     }))
     async bypassReweight(
         @Param('order_id', ParseIntPipe) orderId: number,
-        @Body() bypassDto: BypassReweightDto,
+        @Body() body: any,
         @UploadedFile() proofImage: File,
     ): Promise<BypassReweightResponseDto> {
-        // Gabungkan file dengan DTO
+        // Parse bypass_reweight_status dari body
+        const bypass_reweight_status = body.bypass_reweight_status;
+        const reason = body.reason;
+        const updated_by_user_id = parseInt(body.updated_by_user_id, 10);
+
+        // Validasi basic
+        if (!bypass_reweight_status || !['true', 'false'].includes(bypass_reweight_status)) {
+            throw new BadRequestException('Status bypass reweight wajib diisi dan harus "true" atau "false"');
+        }
+
+        if (!updated_by_user_id || isNaN(updated_by_user_id)) {
+            throw new BadRequestException('User ID harus berupa angka');
+        }
+
+        // Gabungkan data
         const bypassData = {
-            ...bypassDto,
+            bypass_reweight_status,
+            reason,
+            updated_by_user_id,
             proof_image: proofImage
         };
 
