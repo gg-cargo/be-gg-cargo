@@ -1,5 +1,5 @@
-import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete, UseInterceptors, UploadedFile } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException } from '@nestjs/common';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import type { File } from 'multer';
@@ -11,6 +11,8 @@ import { UpdateOrderResponseDto } from './dto/order-response.dto';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
 import { ReweightPieceDto } from './dto/reweight-piece.dto';
 import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
+import { ReweightBulkDto } from './dto/reweight-bulk.dto';
+import { ReweightBulkResponseDto } from './dto/reweight-bulk-response.dto';
 import { EstimatePriceDto } from './dto/estimate-price.dto';
 import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
@@ -105,6 +107,63 @@ export class OrdersController {
         @Body() reweightDto: ReweightPieceDto,
     ): Promise<ReweightPieceResponseDto> {
         return this.ordersService.reweightPiece(pieceId, reweightDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('pieces/bulk-reweight')
+    @UseInterceptors(FilesInterceptor('images', 5, {
+        storage: diskStorage({
+            destination: 'public/uploads',
+            filename: (req, file, cb) => {
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+                cb(null, uniqueSuffix + extname(file.originalname));
+            },
+        }),
+        fileFilter: (req, file, cb) => {
+            // Hanya terima file gambar
+            if (file.mimetype.startsWith('image/')) {
+                cb(null, true);
+            } else {
+                cb(new BadRequestException('Hanya file gambar yang diperbolehkan'), false);
+            }
+        },
+    }))
+    async reweightBulk(
+        @Body() body: any,
+        @UploadedFiles() images: File[],
+    ): Promise<ReweightBulkResponseDto> {
+        // Parse pieces dari JSON string
+        let pieces;
+        try {
+            pieces = typeof body.pieces === 'string' ? JSON.parse(body.pieces) : body.pieces;
+        } catch (error) {
+            throw new BadRequestException('Invalid JSON format for pieces');
+        }
+
+        // Parse user ID
+        const reweight_by_user_id = parseInt(body.reweight_by_user_id, 10);
+        if (isNaN(reweight_by_user_id)) {
+            throw new BadRequestException('User ID harus berupa angka');
+        }
+
+        // Validasi basic
+        if (!pieces || !Array.isArray(pieces) || pieces.length === 0) {
+            throw new BadRequestException('Pieces harus berupa array dan tidak boleh kosong');
+        }
+
+        // Validasi images
+        if (images && images.length > 5) {
+            throw new BadRequestException('Maksimal 5 gambar yang diperbolehkan');
+        }
+
+        // Buat DTO object
+        const reweightBulkDto: ReweightBulkDto = {
+            pieces,
+            reweight_by_user_id,
+            images: images || []
+        };
+
+        return this.ordersService.reweightBulk(reweightBulkDto);
     }
 
     @UseGuards(JwtAuthGuard)

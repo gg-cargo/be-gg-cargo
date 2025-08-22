@@ -18,6 +18,8 @@ import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
 import { ReweightPieceDto } from './dto/reweight-piece.dto';
 import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
+import { ReweightBulkDto } from './dto/reweight-bulk.dto';
+import { ReweightBulkResponseDto } from './dto/reweight-bulk-response.dto';
 import { EstimatePriceDto } from './dto/estimate-price.dto';
 import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
@@ -75,14 +77,15 @@ export class OrdersService {
         proofImage: File,
         orderId: number,
         userId: number,
-        transaction: Transaction
+        transaction: Transaction,
+        usedFor: string = 'bypass_reweight_proof'
     ): Promise<FileLog> {
         try {
             // Upload file menggunakan FileService
             const uploadResult = await this.fileService.createFileLog(
                 proofImage,
                 userId,
-                'bypass_reweight_proof'
+                usedFor
             );
 
             // Assign file (set is_assigned = 1)
@@ -1439,6 +1442,222 @@ export class OrdersService {
         return volume * 250;
     }
 
+    /**
+     * Bulk reweight untuk multiple pieces dengan auto-create invoice
+     */
+    async reweightBulk(reweightBulkDto: ReweightBulkDto): Promise<ReweightBulkResponseDto> {
+        const { pieces, reweight_by_user_id, images } = reweightBulkDto;
+
+        // Validasi jumlah images (max 5)
+        if (images && images.length > 5) {
+            throw new BadRequestException('Maksimal 5 gambar yang bisa diupload');
+        }
+
+        // Validasi pieces tidak kosong
+        if (!pieces || pieces.length === 0) {
+            throw new BadRequestException('Pieces tidak boleh kosong');
+        }
+
+        // Validasi semua pieces ada
+        const pieceIds = pieces.map(p => p.piece_id);
+        const existingPieces = await this.orderPieceModel.findAll({
+            where: { id: pieceIds },
+            include: [
+                {
+                    model: this.orderModel,
+                    as: 'order',
+                    attributes: ['id', 'no_tracking', 'provinsi_pengirim', 'kota_pengirim'],
+                },
+            ],
+        });
+
+        if (existingPieces.length !== pieces.length) {
+            throw new BadRequestException('Beberapa pieces tidak ditemukan');
+        }
+
+        // Validasi semua pieces dari order yang sama
+        const orderIds = [...new Set(existingPieces.map(p => p.getDataValue('order_id')))];
+        if (orderIds.length > 1) {
+            throw new BadRequestException('Semua pieces harus dari order yang sama');
+        }
+
+        const orderId = orderIds[0];
+
+        // Validasi pieces belum di-reweight
+        for (const piece of existingPieces) {
+            if (piece.getDataValue('reweight_status') === 1) {
+                throw new BadRequestException(`Piece ${piece.id} sudah di-reweight sebelumnya`);
+            }
+        }
+
+        // Mulai transaction
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const now = new Date();
+            const piecesDetails: {
+                piece_id: number;
+                berat_lama: number;
+                berat_baru: number;
+                dimensi_lama: string;
+                dimensi_baru: string;
+            }[] = [];
+            let imagesUploaded: {
+                file_name: string;
+                file_path: string;
+                file_id: number;
+            }[] = [];
+
+            // 1. Upload images jika ada
+            if (images && images.length > 0) {
+                for (const image of images) {
+                    try {
+                        const fileLog = await this.saveProofImage(image, orderId, reweight_by_user_id, transaction, `bulk_reweight_proof_order_id_${orderId}`);
+                        imagesUploaded.push({
+                            file_name: fileLog.file_name,
+                            file_path: fileLog.file_path,
+                            file_id: fileLog.id
+                        });
+                    } catch (imageError) {
+                        console.warn(`Gagal upload image: ${imageError.message}`);
+                        // Lanjutkan proses meskipun image gagal upload
+                    }
+                }
+            }
+
+            // 2. Update semua pieces
+            for (const pieceData of pieces) {
+                const existingPiece = existingPieces.find(p => p.id === pieceData.piece_id);
+                if (!existingPiece) continue;
+
+                // Simpan data lama untuk history
+                const oldBerat = existingPiece.getDataValue('berat');
+                const oldPanjang = existingPiece.getDataValue('panjang');
+                const oldLebar = existingPiece.getDataValue('lebar');
+                const oldTinggi = existingPiece.getDataValue('tinggi');
+
+                // Update piece
+                await this.orderPieceModel.update(
+                    {
+                        berat: pieceData.berat,
+                        panjang: pieceData.panjang,
+                        lebar: pieceData.lebar,
+                        tinggi: pieceData.tinggi,
+                        reweight_status: 1,
+                        reweight_by: reweight_by_user_id,
+                        updatedAt: now,
+                    },
+                    {
+                        where: { id: pieceData.piece_id },
+                        transaction,
+                    }
+                );
+
+                piecesDetails.push({
+                    piece_id: pieceData.piece_id,
+                    berat_lama: oldBerat,
+                    berat_baru: pieceData.berat,
+                    dimensi_lama: `${oldPanjang}x${oldLebar}x${oldTinggi}`,
+                    dimensi_baru: `${pieceData.panjang}x${pieceData.lebar}x${pieceData.tinggi}`,
+                });
+            }
+
+            // 3. Update order_shipments dengan data terbaru dari pieces
+            await this.updateOrderShipmentsFromPieces(orderId, transaction);
+
+            // 4. Check if all pieces in the order have been reweighted
+            const unreweightedCount = await this.orderPieceModel.count({
+                where: {
+                    order_id: orderId,
+                    reweight_status: { [Op.ne]: 1 }
+                },
+                transaction,
+            });
+
+            const totalPieces = await this.orderPieceModel.count({
+                where: { order_id: orderId },
+                transaction,
+            });
+
+            const allReweighted = unreweightedCount === 0 && totalPieces > 0;
+
+            // 5. Update order reweight status if all pieces are reweighted
+            if (allReweighted) {
+                await this.orderModel.update(
+                    {
+                        reweight_status: 1,
+                        isUnreweight: 0,
+                        remark_reweight: 'Semua pieces telah di-reweight',
+                        invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH,
+                    },
+                    {
+                        where: { id: orderId },
+                        transaction,
+                    }
+                );
+
+                // Update order status based on pieces
+                await this.updateOrderStatusFromPieces(orderId, transaction);
+            }
+
+            // 6. Auto-create invoice jika semua pieces sudah di-reweight
+            let invoiceData: {
+                invoice_no: string;
+                invoice_id: number;
+                total_amount: number;
+            } | null = null;
+            if (allReweighted) {
+                try {
+                    invoiceData = await this.autoCreateInvoice(orderId, transaction);
+                } catch (invoiceError) {
+                    console.warn(`Gagal auto-create invoice untuk order ${orderId}:`, invoiceError.message);
+                    // Lanjutkan proses meskipun invoice gagal dibuat
+                }
+            }
+
+            // 7. Create order history
+            const statusText = 'Bulk Reweight Completed';
+            const historyRemark = `Bulk reweight ${pieces.length} pieces oleh User ID ${reweight_by_user_id}${imagesUploaded.length > 0 ? ` - ${imagesUploaded.length} images uploaded` : ''}${invoiceData ? ` - Invoice otomatis dibuat: ${invoiceData.invoice_no}` : ''}`;
+
+            await this.orderHistoryModel.create(
+                {
+                    order_id: orderId,
+                    status: statusText,
+                    remark: historyRemark,
+                    provinsi: existingPieces[0].order?.getDataValue('provinsi_pengirim') || '',
+                    kota: existingPieces[0].order?.getDataValue('kota_pengirim') || '',
+                    date: now.toISOString().split('T')[0],
+                    time: now.toTimeString().split(' ')[0],
+                    created_by: reweight_by_user_id,
+                },
+                { transaction }
+            );
+
+            await transaction.commit();
+
+            return {
+                message: `Bulk reweight berhasil untuk ${pieces.length} pieces`,
+                success: true,
+                data: {
+                    pieces_updated: pieces.length,
+                    order_id: orderId,
+                    order_reweight_completed: allReweighted,
+                    images_uploaded: imagesUploaded.length > 0 ? imagesUploaded : undefined,
+                    invoice_created: invoiceData ? {
+                        invoice_no: invoiceData.invoice_no,
+                        invoice_id: invoiceData.invoice_id,
+                        total_amount: invoiceData.total_amount
+                    } : null,
+                    pieces_details: piecesDetails,
+                },
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            throw new InternalServerErrorException(error.message);
+        }
+    }
+
     async reweightPiece(pieceId: number, reweightDto: ReweightPieceDto): Promise<ReweightPieceResponseDto> {
         const {
             berat,
@@ -2307,6 +2526,64 @@ export class OrdersService {
             where: { id: orderId },
             transaction
         });
+    }
+
+    /**
+     * Update order_shipments dengan data terbaru dari pieces
+     */
+    private async updateOrderShipmentsFromPieces(orderId: number, transaction: Transaction): Promise<void> {
+        try {
+            // Ambil semua pieces yang sudah di-reweight untuk order ini
+            const pieces = await this.orderPieceModel.findAll({
+                where: {
+                    order_id: orderId,
+                    reweight_status: 1
+                },
+                attributes: ['berat', 'panjang', 'lebar', 'tinggi'],
+                transaction
+            });
+
+            if (pieces.length === 0) return;
+
+            // Hitung total weight dan volume
+            let totalWeight = 0;
+            let totalVolume = 0;
+
+            pieces.forEach((piece) => {
+                const berat = Number(piece.getDataValue('berat')) || 0;
+                const panjang = Number(piece.getDataValue('panjang')) || 0;
+                const lebar = Number(piece.getDataValue('lebar')) || 0;
+                const tinggi = Number(piece.getDataValue('tinggi')) || 0;
+
+                totalWeight += berat;
+                if (panjang && lebar && tinggi) {
+                    totalVolume += this.calculateVolume(panjang, lebar, tinggi);
+                }
+            });
+
+            // Update order_shipments dengan data terbaru
+            await this.orderShipmentModel.update(
+                {
+                    berat: totalWeight,
+                    panjang: pieces[0]?.getDataValue('panjang') || 0,
+                    lebar: pieces[0]?.getDataValue('lebar') || 0,
+                    tinggi: pieces[0]?.getDataValue('tinggi') || 0,
+                    berat_reweight: totalWeight,
+                    panjang_reweight: pieces[0]?.getDataValue('panjang') || 0,
+                    lebar_reweight: pieces[0]?.getDataValue('lebar') || 0,
+                    tinggi_reweight: pieces[0]?.getDataValue('tinggi') || 0,
+                    qty_reweight: pieces.length,
+                },
+                {
+                    where: { order_id: orderId },
+                    transaction,
+                }
+            );
+
+        } catch (error) {
+            console.error('Error updating order shipments from pieces:', error);
+            throw error;
+        }
     }
 
     async deleteOrder(noResi: string, body: any) {
