@@ -3360,7 +3360,7 @@ export class OrdersService {
                 {
                     reweight_status: 1, // Completed/Final
                     total_berat: chargeableWeight,
-                    status: 'OUT_FOR_DELIVERY',
+                    status: ORDER_STATUS.OUT_FOR_DELIVERY,
                     invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH,
                     updatedAt: new Date()
                 },
