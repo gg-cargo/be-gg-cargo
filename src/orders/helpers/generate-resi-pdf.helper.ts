@@ -209,22 +209,31 @@ export async function generateResiPDF(data: any): Promise<string> {
             {
                 table: {
                     widths: [50, 80, 80, 80, 80],
-                    body: [
-                        [
+                    body: ((ringkasanArr) => {
+                        const header = [
                             { text: 'QTY', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
                             { text: 'BERAT (kg)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
                             { text: 'PANJANG (cm)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
                             { text: 'LEBAR (cm)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
                             { text: 'TINGGI (cm)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
-                        ],
-                        [
-                            { text: data.ringkasan?.qty || '-', alignment: 'center', fontSize: 10 },
-                            { text: data.ringkasan?.berat || '-', alignment: 'center', fontSize: 10 },
-                            { text: data.ringkasan?.panjang || '-', alignment: 'center', fontSize: 10 },
-                            { text: data.ringkasan?.lebar || '-', alignment: 'center', fontSize: 10 },
-                            { text: data.ringkasan?.tinggi || '-', alignment: 'center', fontSize: 10 },
-                        ],
-                    ],
+                        ];
+                        const rows = Array.isArray(ringkasanArr) && ringkasanArr.length > 0
+                            ? ringkasanArr.map((item) => [
+                                { text: (item?.qty ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                                { text: (item?.berat ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                                { text: (item?.panjang ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                                { text: (item?.lebar ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                                { text: (item?.tinggi ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                            ])
+                            : [[
+                                { text: '-', alignment: 'center', fontSize: 10 },
+                                { text: '-', alignment: 'center', fontSize: 10 },
+                                { text: '-', alignment: 'center', fontSize: 10 },
+                                { text: '-', alignment: 'center', fontSize: 10 },
+                                { text: '-', alignment: 'center', fontSize: 10 },
+                            ]];
+                        return [header, ...rows];
+                    })(data.ringkasan)
                 },
                 layout: 'lightHorizontalLines',
                 margin: [0, 0, 0, 8],

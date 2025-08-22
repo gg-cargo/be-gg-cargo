@@ -16,6 +16,7 @@ import { OrderInvoiceDetail } from '../models/order-invoice-detail.model';
 import { Bank } from '../models/bank.model';
 import { Level } from '../models/level.model';
 import { FileLog } from '../models/file-log.model';
+import { ReweightCorrectionRequest } from '../models/reweight-correction-request.model';
 import { FileService } from '../file/file.service';
 
 @Module({
@@ -34,7 +35,8 @@ import { FileService } from '../file/file.service';
             OrderInvoiceDetail,
             Bank,
             Level,
-            FileLog
+            FileLog,
+            ReweightCorrectionRequest
         ])
     ],
     controllers: [OrdersController],

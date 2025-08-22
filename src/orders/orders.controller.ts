@@ -18,6 +18,10 @@ import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
 import { OpsOrdersQueryDto, OpsOrdersResponseDto } from './dto/ops-orders.dto';
+import { AvailableDriversQueryDto, AvailableDriversResponseDto } from './dto/available-drivers.dto';
+import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
+import { SubmitReweightDto, SubmitReweightResponseDto } from './dto/submit-reweight.dto';
+import { EditReweightRequestDto, EditReweightRequestResponseDto } from './dto/edit-reweight-request.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { DeleteOrderDto } from './dto/delete-order.dto';
@@ -108,6 +112,14 @@ export class OrdersController {
         return this.ordersService.getOpsOrders(query, userId);
     }
 
+    @UseGuards(JwtAuthGuard)
+    @Get('ops/drivers/available-for-pickup')
+    async getAvailableDriversForPickup(
+        @Query() query: AvailableDriversQueryDto
+    ): Promise<AvailableDriversResponseDto> {
+        return this.ordersService.getAvailableDriversForPickup(query);
+    }
+
     @Patch(':no_resi/cancel')
     @UseGuards(JwtAuthGuard)
     async cancelOrder(@Param('no_resi') noResi: string, @Body() body: CancelOrderDto) {
@@ -121,6 +133,43 @@ export class OrdersController {
         @Body() reweightDto: ReweightPieceDto,
     ): Promise<ReweightPieceResponseDto> {
         return this.ordersService.reweightPiece(pieceId, reweightDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('ops/orders/assign-driver')
+    async assignDriverToOrder(
+        @Body() assignDriverDto: AssignDriverDto,
+        @Request() req: any
+    ): Promise<AssignDriverResponseDto> {
+        // Override assigned_by_user_id dengan user yang sedang login
+        assignDriverDto.assigned_by_user_id = req.user?.id;
+        return this.ordersService.assignDriverToOrder(assignDriverDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':order_id/reweight/submit')
+    async submitReweight(
+        @Param('order_id', ParseIntPipe) orderId: number,
+        @Body() submitReweightDto: SubmitReweightDto,
+        @Request() req: any
+    ): Promise<SubmitReweightResponseDto> {
+        // Override submitted_by_user_id dengan user yang sedang login
+        submitReweightDto.submitted_by_user_id = req.user?.id;
+        return this.ordersService.submitReweight(orderId, submitReweightDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post(':order_id/reweight/edit-request')
+    async editReweightRequest(
+        @Param('order_id', ParseIntPipe) orderId: number,
+        @Body() editReweightRequestDto: EditReweightRequestDto,
+        @Request() req: any
+    ): Promise<EditReweightRequestResponseDto> {
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new BadRequestException('User ID tidak ditemukan');
+        }
+        return this.ordersService.editReweightRequest(orderId, editReweightRequestDto, userId);
     }
 
     @UseGuards(JwtAuthGuard)

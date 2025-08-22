@@ -30,6 +30,7 @@ export class CustomerDto {
 
 export class OrderOpsDto {
     no: number;
+    order_id: number;
     no_resi: string;
     customer: CustomerDto;
     alamat_pickup: string;

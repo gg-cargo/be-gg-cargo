@@ -25,6 +25,10 @@ import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
 import { OpsOrdersQueryDto, OpsOrdersResponseDto, OrderOpsDto, CustomerDto, PaginationDto } from './dto/ops-orders.dto';
+import { AvailableDriversQueryDto, AvailableDriversResponseDto, AvailableDriverDto, DriverLocationDto } from './dto/available-drivers.dto';
+import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
+import { SubmitReweightDto, SubmitReweightResponseDto } from './dto/submit-reweight.dto';
+import { EditReweightRequestDto, EditReweightRequestResponseDto } from './dto/edit-reweight-request.dto';
 import { ORDER_STATUS, getOrderStatusFromPieces } from '../common/constants/order-status.constants';
 import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 import { Op, fn, col, literal } from 'sequelize';
@@ -35,6 +39,7 @@ import { OrderInvoiceDetail } from '../models/order-invoice-detail.model';
 import { Bank } from '../models/bank.model';
 import { Level } from '../models/level.model';
 import { FileLog } from '../models/file-log.model';
+import { ReweightCorrectionRequest } from '../models/reweight-correction-request.model';
 import { FileService } from '../file/file.service';
 
 @Injectable()
@@ -68,6 +73,8 @@ export class OrdersService {
         private readonly levelModel: typeof Level,
         @InjectModel(FileLog)
         private readonly fileLogModel: typeof FileLog,
+        @InjectModel(ReweightCorrectionRequest)
+        private readonly reweightCorrectionRequestModel: typeof ReweightCorrectionRequest,
         private readonly fileService: FileService,
     ) { }
 
@@ -754,10 +761,19 @@ export class OrdersService {
             await order.save();
         }
 
-        // 4. Hitung ringkasan koli menggunakan logika yang sama dengan frontend
+        // 4. Hitung ringkasan koli dan siapkan data item per shipment
         let totalWeight = 0;
         let totalQty = 0;
         let totalVolume = 0;
+
+        // Siapkan array untuk item shipment
+        const shipmentItems: Array<{
+            qty: number;
+            berat: number;
+            panjang: number;
+            lebar: number;
+            tinggi: number;
+        }> = [];
 
         for (const s of shipments) {
             const qty = Number(s.qty) || 0;
@@ -770,6 +786,15 @@ export class OrdersService {
             totalWeight += berat * qty;
             const volume = (panjang * lebar * tinggi * qty) / 1000000;
             totalVolume += volume;
+
+            // Tambahkan item shipment ke array
+            shipmentItems.push({
+                qty: qty,
+                berat: berat,
+                panjang: panjang,
+                lebar: lebar,
+                tinggi: tinggi
+            });
         }
 
         const volumeWeight = totalVolume * 250;
@@ -812,12 +837,7 @@ export class OrdersService {
                 berat_volume: beratVolume,
                 kubikasi: kubikasi,
             },
-            ringkasan: {
-                qty: totalQty,
-                berat: totalWeight,
-                volume: totalVolume,
-                volumeWeight: volumeWeight,
-            },
+            ringkasan: shipmentItems, // Array item shipment satu-satu
         };
 
         // 6. Generate PDF
@@ -1484,13 +1504,6 @@ export class OrdersService {
 
         const orderId = orderIds[0];
 
-        // Validasi pieces belum di-reweight
-        for (const piece of existingPieces) {
-            if (piece.getDataValue('reweight_status') === 1) {
-                throw new BadRequestException(`Piece ${piece.id} sudah di-reweight sebelumnya`);
-            }
-        }
-
         // Mulai transaction
         const transaction = await this.orderModel.sequelize!.transaction();
 
@@ -1566,74 +1579,6 @@ export class OrdersService {
             // 3. Update order_shipments dengan data terbaru dari pieces
             await this.updateOrderShipmentsFromPieces(orderId, transaction);
 
-            // 4. Check if all pieces in the order have been reweighted
-            const unreweightedCount = await this.orderPieceModel.count({
-                where: {
-                    order_id: orderId,
-                    reweight_status: { [Op.ne]: 1 }
-                },
-                transaction,
-            });
-
-            const totalPieces = await this.orderPieceModel.count({
-                where: { order_id: orderId },
-                transaction,
-            });
-
-            const allReweighted = unreweightedCount === 0 && totalPieces > 0;
-
-            // 5. Update order reweight status if all pieces are reweighted
-            if (allReweighted) {
-                await this.orderModel.update(
-                    {
-                        reweight_status: 1,
-                        isUnreweight: 0,
-                        remark_reweight: 'Semua pieces telah di-reweight',
-                        invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH,
-                    },
-                    {
-                        where: { id: orderId },
-                        transaction,
-                    }
-                );
-
-                // Update order status based on pieces
-                await this.updateOrderStatusFromPieces(orderId, transaction);
-            }
-
-            // 6. Auto-create invoice jika semua pieces sudah di-reweight
-            let invoiceData: {
-                invoice_no: string;
-                invoice_id: number;
-                total_amount: number;
-            } | null = null;
-            if (allReweighted) {
-                try {
-                    invoiceData = await this.autoCreateInvoice(orderId, transaction);
-                } catch (invoiceError) {
-                    console.warn(`Gagal auto-create invoice untuk order ${orderId}:`, invoiceError.message);
-                    // Lanjutkan proses meskipun invoice gagal dibuat
-                }
-            }
-
-            // 7. Create order history
-            const statusText = 'Bulk Reweight Completed';
-            const historyRemark = `Bulk reweight ${pieces.length} pieces oleh User ID ${reweight_by_user_id}${imagesUploaded.length > 0 ? ` - ${imagesUploaded.length} images uploaded` : ''}${invoiceData ? ` - Invoice otomatis dibuat: ${invoiceData.invoice_no}` : ''}`;
-
-            await this.orderHistoryModel.create(
-                {
-                    order_id: orderId,
-                    status: statusText,
-                    remark: historyRemark,
-                    provinsi: existingPieces[0].order?.getDataValue('provinsi_pengirim') || '',
-                    kota: existingPieces[0].order?.getDataValue('kota_pengirim') || '',
-                    date: now.toISOString().split('T')[0],
-                    time: now.toTimeString().split(' ')[0],
-                    created_by: reweight_by_user_id,
-                },
-                { transaction }
-            );
-
             await transaction.commit();
 
             return {
@@ -1642,13 +1587,8 @@ export class OrdersService {
                 data: {
                     pieces_updated: pieces.length,
                     order_id: orderId,
-                    order_reweight_completed: allReweighted,
+                    order_reweight_completed: true,
                     images_uploaded: imagesUploaded.length > 0 ? imagesUploaded : undefined,
-                    invoice_created: invoiceData ? {
-                        invoice_no: invoiceData.invoice_no,
-                        invoice_id: invoiceData.invoice_id,
-                        total_amount: invoiceData.total_amount
-                    } : null,
                     pieces_details: piecesDetails,
                 },
             };
@@ -2816,7 +2756,7 @@ export class OrdersService {
                         statusFilter = {
                             [Op.and]: [
                                 { reweight_status: 0 },
-                                { status_pickup: 'Picked Up' }
+                                { status_pickup: 'Assigned' }
                             ]
                         };
                         break;
@@ -2948,7 +2888,7 @@ export class OrdersService {
 
                     if ((!statusPickup || statusPickup === 'siap pickup') && isGagalPickup === 0) {
                         statusOps = 'order jemput';
-                    } else if (reweightStatus === 0 && statusPickup === 'Picked Up') {
+                    } else if (reweightStatus === 0 && statusPickup === 'Assigned') {
                         statusOps = 'reweight';
                     } else if (reweightStatus === 1 && status !== 'In Transit' && status !== 'Delivered') {
                         statusOps = 'menunggu pengiriman';
@@ -2962,6 +2902,7 @@ export class OrdersService {
 
                     return {
                         no: offset + index + 1,
+                        order_id: order.getDataValue('id'),
                         no_resi: order.getDataValue('no_tracking'),
                         customer: {
                             nama: order.getDataValue('nama_pengirim'),
@@ -2994,6 +2935,654 @@ export class OrdersService {
 
         } catch (error) {
             this.logger.error(`Error in getOpsOrders: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    /**
+     * Mendapatkan daftar kurir yang tersedia untuk pickup berdasarkan order
+     */
+    async getAvailableDriversForPickup(
+        query: AvailableDriversQueryDto
+    ): Promise<AvailableDriversResponseDto> {
+        try {
+            // 1. Ambil data order untuk mendapatkan lokasi dan service center
+            const order = await this.orderModel.findByPk(query.order_id, {
+                attributes: [
+                    'id',
+                    'latlngAsal',
+                    'svc_source_id',
+                    'hub_source_id',
+                    'status_pickup',
+                    'is_gagal_pickup'
+                ]
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            // Validasi status order
+            const statusPickup = order.getDataValue('status_pickup');
+            const isGagalPickup = order.getDataValue('is_gagal_pickup');
+
+            if ((statusPickup && statusPickup !== 'siap pickup') || isGagalPickup === 1) {
+                throw new BadRequestException('Order tidak dalam status yang dapat ditugaskan untuk pickup');
+            }
+
+            // 2. Parse lokasi order
+            let orderLocation: DriverLocationDto = { lat: 0, lng: 0 };
+            const latlngAsal = order.getDataValue('latlngAsal');
+            if (latlngAsal) {
+                try {
+                    // Handle format string langsung "lat,lng"
+                    if (typeof latlngAsal === 'string' && latlngAsal.includes(',')) {
+                        const [lat, lng] = latlngAsal.split(',').map(coord => parseFloat(coord.trim()));
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            orderLocation = { lat, lng };
+                        }
+                    } else {
+                        // Handle format JSON
+                        const latlngData = JSON.parse(latlngAsal);
+
+                        // Handle format array of objects dengan field latlng
+                        if (Array.isArray(latlngData) && latlngData.length > 0) {
+                            // Ambil koordinat pertama (lokasi asal)
+                            const firstLocation = latlngData[0];
+                            if (firstLocation.latlng) {
+                                const [lat, lng] = firstLocation.latlng.split(',').map(coord => parseFloat(coord.trim()));
+                                if (!isNaN(lat) && !isNaN(lng)) {
+                                    orderLocation = { lat, lng };
+                                }
+                            }
+                        } else if (latlngData.lat && latlngData.lng) {
+                            // Handle format object langsung {lat: x, lng: y}
+                            orderLocation = { lat: latlngData.lat, lng: latlngData.lng };
+                        }
+                    }
+                } catch (error) {
+                    this.logger.warn(`Invalid latlng format for order ${query.order_id}: ${latlngAsal}`);
+                }
+            }
+
+            const svcSourceId = order.getDataValue('svc_source_id');
+            const hubSourceId = order.getDataValue('hub_source_id');
+
+            // 3. Cari kurir yang memenuhi kriteria
+            const driverWhereClause: any = {
+                level: { [Op.eq]: 8 },
+                aktif: 1,
+                status_app: 1,
+                freeze_saldo: 0,
+                freeze_gps: 0
+            };
+
+            // Filter berdasarkan service center atau hub
+            if (query.hub_id) {
+                driverWhereClause.hub_id = query.hub_id;
+            } else if (svcSourceId) {
+                driverWhereClause.service_center_id = svcSourceId;
+            } else if (hubSourceId) {
+                driverWhereClause.hub_id = hubSourceId;
+            }
+
+            const drivers = await this.userModel.findAll({
+                where: driverWhereClause,
+                attributes: [
+                    'id',
+                    'name',
+                    'phone',
+                    'latlng',
+                    'service_center_id',
+                    'hub_id'
+                ]
+            });
+
+            // 4. Filter dan hitung beban kerja kurir
+            const availableDrivers: AvailableDriverDto[] = [];
+
+            for (const driver of drivers) {
+                const driverId = driver.getDataValue('id');
+
+                // Hitung tugas yang sedang berjalan (pickup tasks saja untuk saat ini)
+                const currentPickupTasks = await this.orderModel.count({
+                    where: {
+                        assign_driver: driverId,
+                        status_pickup: { [Op.in]: ['Assigned', 'Picked Up'] }
+                    }
+                });
+
+                // Untuk delivery tasks, gunakan tabel order_pickup_drivers jika ada
+                let currentDeliveryTasks = 0;
+                if (this.orderModel.sequelize?.models.OrderPickupDriver) {
+                    const OrderPickupDriver = this.orderModel.sequelize.models.OrderPickupDriver;
+                    currentDeliveryTasks = await OrderPickupDriver.count({
+                        where: {
+                            driver_id: driverId,
+                            status: { [Op.in]: [1, 2] } // 1: in progress, 2: completed
+                        }
+                    });
+                }
+
+                const totalCurrentTasks = currentPickupTasks + currentDeliveryTasks;
+
+                // Kurir dianggap tersedia jika tugas < 3
+                if (totalCurrentTasks < 3) {
+                    // Parse lokasi kurir
+                    let driverLocation: DriverLocationDto = { lat: 0, lng: 0 };
+                    const driverLatlng = driver.getDataValue('latlng');
+                    if (driverLatlng) {
+                        try {
+                            // Handle format string langsung "lat,lng"
+                            if (typeof driverLatlng === 'string' && driverLatlng.includes(',')) {
+                                const [lat, lng] = driverLatlng.split(',').map(coord => parseFloat(coord.trim()));
+                                if (!isNaN(lat) && !isNaN(lng)) {
+                                    driverLocation = { lat, lng };
+                                }
+                            } else {
+                                // Handle format JSON
+                                const latlngData = JSON.parse(driverLatlng);
+
+                                // Handle format array of objects dengan field latlng
+                                if (Array.isArray(latlngData) && latlngData.length > 0) {
+                                    // Ambil koordinat terakhir (lokasi saat ini)
+                                    const lastLocation = latlngData[latlngData.length - 1];
+                                    if (lastLocation.latlng) {
+                                        const [lat, lng] = lastLocation.latlng.split(',').map(coord => parseFloat(coord.trim()));
+                                        if (!isNaN(lat) && !isNaN(lng)) {
+                                            driverLocation = { lat, lng };
+                                        }
+                                    }
+                                } else if (latlngData.lat && latlngData.lng) {
+                                    // Handle format object langsung {lat: x, lng: y}
+                                    driverLocation = { lat: latlngData.lat, lng: latlngData.lng };
+                                }
+                            }
+                        } catch (error) {
+                            this.logger.warn(`Invalid latlng format for driver ${driverId}: ${driverLatlng}`);
+                        }
+                    }
+
+                    // Hitung jarak dari order (simplified calculation)
+                    let distance = 0;
+                    if (orderLocation.lat && orderLocation.lng && driverLocation.lat && driverLocation.lng) {
+                        distance = this.calculateDistance(
+                            orderLocation.lat, orderLocation.lng,
+                            driverLocation.lat, driverLocation.lng
+                        );
+                    }
+
+                    availableDrivers.push({
+                        id: driverId,
+                        name: driver.getDataValue('name'),
+                        phone: driver.getDataValue('phone'),
+                        current_location: driverLocation,
+                        service_center_id: driver.getDataValue('service_center_id'),
+                        hub_id: driver.getDataValue('hub_id'),
+                        current_tasks: totalCurrentTasks,
+                        distance_from_order: distance,
+                        is_available: true
+                    });
+                }
+            }
+
+            // 5. Sort berdasarkan jarak terdekat dan beban kerja
+            availableDrivers.sort((a, b) => {
+                if (a.current_tasks !== b.current_tasks) {
+                    return a.current_tasks - b.current_tasks; // Prioritas beban kerja rendah
+                }
+                return a.distance_from_order - b.distance_from_order; // Kemudian jarak terdekat
+            });
+
+            return {
+                message: `Ditemukan ${availableDrivers.length} kurir yang tersedia`,
+                success: true,
+                data: {
+                    order_id: query.order_id,
+                    order_location: orderLocation,
+                    available_drivers: availableDrivers,
+                    total_available: availableDrivers.length
+                }
+            };
+
+        } catch (error) {
+            this.logger.error(`Error in getAvailableDriversForPickup: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    /**
+     * Menugaskan kurir untuk pickup order
+     */
+    async assignDriverToOrder(
+        assignDriverDto: AssignDriverDto
+    ): Promise<AssignDriverResponseDto> {
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+        const transaction = await this.orderModel.sequelize.transaction();
+
+        try {
+            // 1. Validasi order
+            const order = await this.orderModel.findByPk(assignDriverDto.order_id, {
+                transaction
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            const statusPickup = order.getDataValue('status_pickup');
+            const isGagalPickup = order.getDataValue('is_gagal_pickup');
+
+            if ((statusPickup && statusPickup !== 'siap pickup') || isGagalPickup === 1) {
+                throw new BadRequestException('Order tidak dalam status yang dapat ditugaskan untuk pickup');
+            }
+
+            // 2. Validasi driver
+            const driver = await this.userModel.findByPk(assignDriverDto.driver_id, {
+                transaction
+            });
+
+            if (!driver) {
+                throw new NotFoundException('Driver tidak ditemukan');
+            }
+
+            const driverLevel = driver.getDataValue('level');
+            if (driverLevel !== 8) {
+                throw new BadRequestException('User yang dipilih bukan driver/kurir');
+            }
+
+            // 3. Validasi user yang melakukan penugasan
+            const assignedByUser = await this.userModel.findByPk(assignDriverDto.assigned_by_user_id, {
+                transaction
+            });
+
+            if (!assignedByUser) {
+                throw new NotFoundException('User yang melakukan penugasan tidak ditemukan');
+            }
+
+            // 4. Update order
+            await this.orderModel.update(
+                {
+                    assign_driver: assignDriverDto.driver_id,
+                    pickup_by: driver.getDataValue('name'),
+                    status_pickup: 'Assigned',
+                    updatedAt: new Date()
+                },
+                {
+                    where: { id: assignDriverDto.order_id },
+                    transaction
+                }
+            );
+
+            // 5. Buat record di order_pickup_drivers
+            const OrderPickupDriver = this.orderModel.sequelize?.models.OrderPickupDriver;
+            if (OrderPickupDriver) {
+                await OrderPickupDriver.create({
+                    order_id: assignDriverDto.order_id,
+                    driver_id: assignDriverDto.driver_id,
+                    assign_date: new Date(),
+                    name: driver.getDataValue('name'),
+                    status: 0, // pending
+                    created_by: assignDriverDto.assigned_by_user_id,
+                    photo: '', // default empty string untuk field wajib
+                    notes: '', // default empty string untuk field wajib
+                    signature: '' // default empty string untuk field wajib
+                }, { transaction });
+            }
+
+            // 6. Catat di order histories
+            await this.orderHistoryModel.create({
+                order_id: assignDriverDto.order_id,
+                status: 'Driver Assigned for Pickup',
+                remark: `Order ditugaskan kepada ${driver.getDataValue('name')}`,
+                created_by: assignDriverDto.assigned_by_user_id,
+                created_at: new Date(),
+                provinsi: '', // default empty string untuk field wajib
+                kota: ''     // default empty string untuk field wajib
+            }, { transaction });
+
+            // 7. Commit transaction
+            await transaction.commit();
+
+            return {
+                message: 'Kurir berhasil ditugaskan',
+                success: true,
+                data: {
+                    order_id: assignDriverDto.order_id,
+                    driver_id: assignDriverDto.driver_id,
+                    driver_name: driver.getDataValue('name'),
+                    assigned_at: new Date().toISOString(),
+                    assigned_by: assignedByUser.getDataValue('name')
+                }
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error in assignDriverToOrder: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    /**
+     * Helper function untuk menghitung jarak antara 2 koordinat (Haversine formula)
+     */
+    private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        const R = 6371; // Radius bumi dalam km
+        const dLat = this.deg2rad(lat2 - lat1);
+        const dLon = this.deg2rad(lon2 - lon1);
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c; // Jarak dalam km
+        return Math.round(distance * 100) / 100; // Round to 2 decimal places
+    }
+
+    /**
+     * Helper function untuk convert degree ke radian
+     */
+    private deg2rad(deg: number): number {
+        return deg * (Math.PI / 180);
+    }
+
+    /**
+     * Submit reweight final untuk order
+     */
+    async submitReweight(
+        orderId: number,
+        submitReweightDto: SubmitReweightDto
+    ): Promise<SubmitReweightResponseDto> {
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+        const transaction = await this.orderModel.sequelize.transaction();
+
+        try {
+            // 1. Validasi order
+            const order = await this.orderModel.findByPk(orderId, {
+                transaction
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            const reweightStatus = order.getDataValue('reweight_status');
+            if (reweightStatus !== 0) {
+                throw new BadRequestException('Order tidak dalam status reweight yang dapat di-submit');
+            }
+
+            // 2. Validasi semua pieces sudah di-reweight
+            const orderPieces = await this.orderPieceModel.findAll({
+                where: { order_id: orderId },
+                transaction
+            });
+
+            if (orderPieces.length === 0) {
+                throw new BadRequestException('Order tidak memiliki pieces');
+            }
+
+            const unreweightedPieces = orderPieces.filter(piece =>
+                piece.getDataValue('reweight_status') !== 1
+            );
+
+            if (unreweightedPieces.length > 0) {
+                throw new BadRequestException(`Masih ada ${unreweightedPieces.length} pieces yang belum di-reweight`);
+            }
+
+            // 3. Hitung total berat dan volume dari pieces yang sudah di-reweight
+            let totalBerat = 0;
+            let totalVolume = 0;
+            let totalBeratVolume = 0;
+
+            orderPieces.forEach((piece) => {
+                const berat = Number(piece.getDataValue('berat')) || 0;
+                const panjang = Number(piece.getDataValue('panjang')) || 0;
+                const lebar = Number(piece.getDataValue('lebar')) || 0;
+                const tinggi = Number(piece.getDataValue('tinggi')) || 0;
+
+                totalBerat += berat;
+
+                if (panjang && lebar && tinggi) {
+                    const volume = this.calculateVolume(panjang, lebar, tinggi);
+                    totalVolume += volume;
+                    totalBeratVolume += this.calculateBeratVolume(panjang, lebar, tinggi);
+                }
+            });
+
+            const chargeableWeight = Math.max(totalBerat, totalBeratVolume);
+
+            // 4. Update order dengan data reweight final
+            await this.orderModel.update(
+                {
+                    reweight_status: 1, // Completed/Final
+                    total_berat: chargeableWeight,
+                    status: 'OUT_FOR_DELIVERY',
+                    invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH,
+                    updatedAt: new Date()
+                },
+                {
+                    where: { id: orderId },
+                    transaction
+                }
+            );
+
+            // 5. Update order shipments dengan data terbaru
+            await this.updateOrderShipmentsFromPieces(orderId, transaction);
+
+            // 6. Auto-create invoice
+            let invoiceData: { invoice_no: string; invoice_id: number; total_amount: number; } | null = null;
+            try {
+                invoiceData = await this.autoCreateInvoice(orderId, transaction);
+            } catch (error) {
+                this.logger.error(`Gagal auto-create invoice untuk order ${orderId}: ${error.message}`);
+                // Invoice gagal dibuat, tapi reweight tetap berhasil
+            }
+
+            // 7. Validasi user yang melakukan submit
+            const submittedByUser = await this.userModel.findByPk(submitReweightDto.submitted_by_user_id, {
+                transaction
+            });
+
+            if (!submittedByUser) {
+                throw new NotFoundException('User yang melakukan submit tidak ditemukan');
+            }
+
+            // 8. Catat di order histories
+            const remark = submitReweightDto.remark ||
+                `Reweight finalized. Total berat: ${chargeableWeight.toFixed(2)} kg, Total volume: ${totalVolume.toFixed(2)} m³`;
+
+            await this.orderHistoryModel.create({
+                order_id: orderId,
+                status: 'Reweight Finalized',
+                remark: remark,
+                created_by: submitReweightDto.submitted_by_user_id,
+                created_at: new Date(),
+                provinsi: '', // default empty string untuk field wajib
+                kota: ''     // default empty string untuk field wajib
+            }, { transaction });
+
+            // 9. Commit transaction
+            await transaction.commit();
+
+            return {
+                message: 'Reweight berhasil di-submit dan order siap untuk delivery',
+                success: true,
+                data: {
+                    order_id: orderId,
+                    reweight_status: 1,
+                    total_berat: chargeableWeight,
+                    total_volume: totalVolume,
+                    invoice_created: !!invoiceData,
+                    invoice_data: invoiceData || undefined,
+                    submitted_at: new Date().toISOString(),
+                    submitted_by: submittedByUser.getDataValue('name')
+                }
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error in submitReweight: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    /**
+     * Mengajukan permintaan koreksi untuk reweight yang sudah final
+     */
+    async editReweightRequest(
+        orderId: number,
+        editReweightRequestDto: EditReweightRequestDto,
+        userId: number
+    ): Promise<EditReweightRequestResponseDto> {
+        try {
+            // 1. Validasi order
+            const order = await this.orderModel.findByPk(orderId);
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            const reweightStatus = order.getDataValue('reweight_status');
+            if (reweightStatus !== 1) {
+                throw new BadRequestException('Order tidak dalam status reweight final. Hanya order dengan reweight final yang dapat dikoreksi');
+            }
+
+            // 2. Validasi semua piece dalam request ada di order dan sudah di-reweight final
+            const piecesInOrder: Record<number, any> = {};
+            const allPieces = await this.orderPieceModel.findAll({ where: { order_id: orderId } });
+            for (const p of allPieces) {
+                piecesInOrder[p.getDataValue('id')] = p;
+            }
+
+            if (!editReweightRequestDto.pieces || editReweightRequestDto.pieces.length === 0) {
+                throw new BadRequestException('Minimal satu piece harus diajukan');
+            }
+
+            for (const item of editReweightRequestDto.pieces) {
+                const targetPiece = piecesInOrder[item.piece_id];
+                if (!targetPiece) {
+                    throw new NotFoundException(`Piece ${item.piece_id} tidak ditemukan di order ini`);
+                }
+                if (targetPiece.getDataValue('reweight_status') !== 1) {
+                    throw new BadRequestException(`Piece ${item.piece_id} belum di-reweight final`);
+                }
+            }
+
+            // 3. Validasi user yang mengajukan permintaan
+            const requestingUser = await this.userModel.findByPk(userId);
+            if (!requestingUser) {
+                throw new NotFoundException('User yang mengajukan permintaan tidak ditemukan');
+            }
+
+            // 4. Validasi hak akses (admin hub atau staf ops)
+            const userLevel = requestingUser.getDataValue('level');
+            const userHubId = requestingUser.getDataValue('hub_id');
+            const userServiceCenterId = requestingUser.getDataValue('service_center_id');
+
+            if (![1, 2, 3, 4, 5, 6, 7, 8].includes(userLevel)) { // Level admin, supervisor, ops, driver
+                throw new BadRequestException('User tidak memiliki hak akses untuk mengajukan koreksi reweight');
+            }
+
+            // 5. Validasi data baru tidak sama dengan data lama (untuk setiap item)
+            for (const item of editReweightRequestDto.pieces) {
+                const curr = piecesInOrder[item.piece_id];
+                const currentBerat = curr.getDataValue('berat');
+                const currentPanjang = curr.getDataValue('panjang');
+                const currentLebar = curr.getDataValue('lebar');
+                const currentTinggi = curr.getDataValue('tinggi');
+
+                if (
+                    currentBerat === item.berat &&
+                    currentPanjang === item.panjang &&
+                    currentLebar === item.lebar &&
+                    currentTinggi === item.tinggi
+                ) {
+                    throw new BadRequestException(`Data baru sama dengan data lama untuk piece ${item.piece_id}`);
+                }
+            }
+
+            // 6. Buat record di reweight_correction_requests untuk setiap item koreksi
+            const requests: Array<{ request_id: number; piece_id: number; current_data: any; new_data: any; }> = [];
+
+            for (const item of editReweightRequestDto.pieces) {
+                const curr = piecesInOrder[item.piece_id];
+                const current_data = {
+                    berat: curr.getDataValue('berat'),
+                    panjang: curr.getDataValue('panjang'),
+                    lebar: curr.getDataValue('lebar'),
+                    tinggi: curr.getDataValue('tinggi'),
+                };
+                const new_data = {
+                    berat: item.berat,
+                    panjang: item.panjang,
+                    lebar: item.lebar,
+                    tinggi: item.tinggi,
+                };
+
+                // Buat record di tabel reweight_correction_requests
+                const correctionRequest = await this.reweightCorrectionRequestModel.create({
+                    order_id: orderId,
+                    piece_id: item.piece_id,
+                    current_berat: current_data.berat,
+                    current_panjang: current_data.panjang,
+                    current_lebar: current_data.lebar,
+                    current_tinggi: current_data.tinggi,
+                    new_berat: new_data.berat,
+                    new_panjang: new_data.panjang,
+                    new_lebar: new_data.lebar,
+                    new_tinggi: new_data.tinggi,
+                    note: editReweightRequestDto.note,
+                    alasan_koreksi: editReweightRequestDto.alasan_koreksi || '',
+                    status: 0, // Pending
+                    requested_by: userId
+                } as any);
+
+                requests.push({
+                    request_id: correctionRequest.getDataValue('id'),
+                    piece_id: item.piece_id,
+                    current_data,
+                    new_data,
+                });
+            }
+
+            // 7. Catat di order histories
+            const pieceIds = editReweightRequestDto.pieces.map(p => p.piece_id).join(', ');
+            const historyRemark = `Koreksi reweight diajukan untuk pieces [${pieceIds}]. Note: ${editReweightRequestDto.note}`;
+
+            await this.orderHistoryModel.create({
+                order_id: orderId,
+                status: 'Reweight Correction Requested',
+                remark: historyRemark,
+                created_by: userId,
+                created_at: new Date(),
+                provinsi: '', // default empty string untuk field wajib
+                kota: ''     // default empty string untuk field wajib
+            });
+
+            // 8. Hitung estimasi waktu approval (24-48 jam)
+            const estimatedApprovalTime = new Date();
+            estimatedApprovalTime.setHours(estimatedApprovalTime.getHours() + 36); // 36 jam dari sekarang
+
+            return {
+                message: 'Permintaan koreksi reweight berhasil diajukan dan sedang menunggu persetujuan admin IT',
+                success: true,
+                data: {
+                    order_id: orderId,
+                    requested_by: requestingUser.getDataValue('name'),
+                    requested_at: new Date().toISOString(),
+                    note: editReweightRequestDto.note,
+                    status: 'Pending Approval',
+                    estimated_approval_time: estimatedApprovalTime.toISOString(),
+                    requests,
+                }
+            };
+
+        } catch (error) {
+            this.logger.error(`Error in editReweightRequest: ${error.message}`, error.stack);
             throw error;
         }
     }

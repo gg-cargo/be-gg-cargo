@@ -27,4 +27,5 @@ export * from './order-shipment.model';
 export * from './order-piece.model';
 export * from './order.model';
 export * from './user.model';
-export * from './transaction-payment.model'; 
+export * from './transaction-payment.model';
+export * from './reweight-correction-request.model'; 
