@@ -24,6 +24,7 @@ import { EstimatePriceDto } from './dto/estimate-price.dto';
 import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
+import { OpsOrdersQueryDto, OpsOrdersResponseDto, OrderOpsDto, CustomerDto, PaginationDto } from './dto/ops-orders.dto';
 import { ORDER_STATUS, getOrderStatusFromPieces } from '../common/constants/order-status.constants';
 import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 import { Op, fn, col, literal } from 'sequelize';
@@ -2752,6 +2753,248 @@ export class OrdersService {
         } catch (error) {
             this.logger.error(`Error in deleteOrder: ${error.message}`, error.stack);
             throw new Error(`Error deleting order: ${error.message}`);
+        }
+    }
+
+    /**
+     * Mendapatkan daftar order untuk dashboard OPS berdasarkan area pengguna
+     */
+    async getOpsOrders(
+        query: OpsOrdersQueryDto,
+        userId: number
+    ): Promise<OpsOrdersResponseDto> {
+        try {
+            // 1. Ambil data user untuk mendapatkan hub_id atau service_center_id
+            const user = await this.userModel.findByPk(userId, {
+                attributes: ['id', 'hub_id', 'service_center_id', 'name']
+            });
+
+            if (!user) {
+                throw new NotFoundException('User tidak ditemukan');
+            }
+
+            const userHubId = user.getDataValue('hub_id');
+            const userServiceCenterId = user.getDataValue('service_center_id');
+
+            if (!userHubId && !userServiceCenterId) {
+                throw new BadRequestException('User tidak memiliki akses ke area operasional');
+            }
+
+            // 2. Buat base query dengan filter area
+            let areaFilter = {};
+            if (userHubId) {
+                areaFilter = {
+                    [Op.or]: [
+                        { hub_source_id: userHubId },      // Order Pickup (First Mile)
+                        { hub_dest_id: userHubId },        // Order Delivery (Last Mile)
+                        { current_hub: userHubId }          // Transit (Mid Mile)
+                    ]
+                };
+            } else if (userServiceCenterId) {
+                areaFilter = {
+                    [Op.or]: [
+                        { hub_source_id: userServiceCenterId },
+                        { hub_dest_id: userServiceCenterId },
+                        { current_hub: userServiceCenterId }
+                    ]
+                };
+            }
+
+            // 3. Buat filter berdasarkan status OPS
+            let statusFilter = {};
+            if (query.status) {
+                switch (query.status) {
+                    case 'order jemput':
+                        statusFilter = {
+                            [Op.and]: [
+                                { [Op.or]: [{ status_pickup: null }, { status_pickup: 'siap pickup' }] },
+                                { is_gagal_pickup: 0 }
+                            ]
+                        };
+                        break;
+                    case 'reweight':
+                        statusFilter = {
+                            [Op.and]: [
+                                { reweight_status: 0 },
+                                { status_pickup: 'Picked Up' }
+                            ]
+                        };
+                        break;
+                    case 'menunggu pengiriman':
+                        statusFilter = {
+                            [Op.and]: [
+                                { reweight_status: 1 },
+                                { [Op.not]: [{ status: 'In Transit' }, { status: 'Delivered' }] }
+                            ]
+                        };
+                        break;
+                    case 'dalam pengiriman':
+                        statusFilter = {
+                            [Op.and]: [
+                                { status: 'In Transit' }
+                            ]
+                        };
+                        break;
+                    case 'order kirim':
+                        statusFilter = {
+                            [Op.and]: [
+                                { status: 'Out for Delivery' }
+                            ]
+                        };
+                        break;
+                    case 'completed':
+                        statusFilter = {
+                            status: 'Delivered'
+                        };
+                        break;
+                }
+            }
+
+            // 4. Buat search filter
+            let searchFilter = {};
+            if (query.search) {
+                searchFilter = {
+                    [Op.or]: [
+                        { no_tracking: { [Op.like]: `%${query.search}%` } },
+                        { nama_pengirim: { [Op.like]: `%${query.search}%` } },
+                        { no_telepon_pengirim: { [Op.like]: `%${query.search}%` } }
+                    ]
+                };
+            }
+
+            // 5. Gabungkan semua filter
+            const whereClause = {
+                [Op.and]: [
+                    areaFilter,
+                    statusFilter,
+                    searchFilter
+                ]
+            };
+
+            // 6. Hitung total items untuk pagination
+            const totalItems = await this.orderModel.count({
+                where: whereClause
+            });
+
+            const limit = query.limit || 20;
+            const page = query.page || 1;
+            const totalPages = Math.ceil(totalItems / limit);
+            const offset = (page - 1) * limit;
+
+            // 7. Ambil data orders dengan pagination
+            const orders = await this.orderModel.findAll({
+                where: whereClause,
+                attributes: [
+                    'id',
+                    'no_tracking',
+                    'nama_pengirim',
+                    'no_telepon_pengirim',
+                    'alamat_pengirim',
+                    'pickup_time',
+                    'layanan',
+                    'created_at',
+                    'status',
+                    'status_pickup',
+                    'reweight_status',
+                    'is_gagal_pickup'
+                ],
+                include: [
+                    {
+                        model: this.orderPieceModel,
+                        as: 'pieces',
+                        attributes: ['berat', 'panjang', 'lebar', 'tinggi'],
+                        required: false
+                    }
+                ],
+                order: [['created_at', 'DESC']],
+                limit: limit,
+                offset: offset
+            });
+
+            // 8. Transform data ke format response yang diinginkan
+            const transformedOrders: OrderOpsDto[] = await Promise.all(
+                orders.map(async (order, index) => {
+                    // Hitung berat dan koli dari order pieces
+                    const orderPieces = order.getDataValue('pieces') || [];
+                    const totalBerat = orderPieces.reduce((sum, piece) => {
+                        return sum + (Number(piece.getDataValue('berat')) || 0);
+                    }, 0);
+                    const totalKoli = orderPieces.length;
+
+                    // Format pickup time
+                    const pickupTime = order.getDataValue('pickup_time');
+                    let tanggalPickup = '';
+                    let jam = '';
+
+                    if (pickupTime) {
+                        const pickupDate = new Date(pickupTime);
+                        tanggalPickup = pickupDate.toLocaleDateString('id-ID', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric'
+                        });
+                        jam = pickupDate.toLocaleTimeString('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                    }
+
+                    // Tentukan status OPS
+                    let statusOps = 'unknown';
+                    const statusPickup = order.getDataValue('status_pickup');
+                    const reweightStatus = order.getDataValue('reweight_status');
+                    const status = order.getDataValue('status');
+                    const isGagalPickup = order.getDataValue('is_gagal_pickup');
+
+                    if ((!statusPickup || statusPickup === 'siap pickup') && isGagalPickup === 0) {
+                        statusOps = 'order jemput';
+                    } else if (reweightStatus === 0 && statusPickup === 'Picked Up') {
+                        statusOps = 'reweight';
+                    } else if (reweightStatus === 1 && status !== 'In Transit' && status !== 'Delivered') {
+                        statusOps = 'menunggu pengiriman';
+                    } else if (status === 'In Transit') {
+                        statusOps = 'dalam pengiriman';
+                    } else if (status === 'Out for Delivery') {
+                        statusOps = 'order kirim';
+                    } else if (status === 'Delivered') {
+                        statusOps = 'completed';
+                    }
+
+                    return {
+                        no: offset + index + 1,
+                        no_resi: order.getDataValue('no_tracking'),
+                        customer: {
+                            nama: order.getDataValue('nama_pengirim'),
+                            telepon: order.getDataValue('no_telepon_pengirim')
+                        },
+                        alamat_pickup: order.getDataValue('alamat_pengirim'),
+                        berat: `${totalBerat.toFixed(1)} kg`,
+                        koli: totalKoli,
+                        tanggal_pickup: tanggalPickup,
+                        jam: jam,
+                        status: statusOps,
+                        layanan: order.getDataValue('layanan'),
+                        created_at: order.getDataValue('created_at')
+                    };
+                })
+            );
+
+            // 9. Buat response pagination
+            const pagination: PaginationDto = {
+                current_page: page,
+                limit: limit,
+                total_items: totalItems,
+                total_pages: totalPages
+            };
+
+            return {
+                pagination,
+                orders: transformedOrders
+            };
+
+        } catch (error) {
+            this.logger.error(`Error in getOpsOrders: ${error.message}`, error.stack);
+            throw error;
         }
     }
 } 

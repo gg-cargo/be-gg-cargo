@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Query } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -17,6 +17,7 @@ import { EstimatePriceDto } from './dto/estimate-price.dto';
 import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
+import { OpsOrdersQueryDto, OpsOrdersResponseDto } from './dto/ops-orders.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { DeleteOrderDto } from './dto/delete-order.dto';
@@ -92,6 +93,19 @@ export class OrdersController {
     @Get(':id/history')
     async getOrderHistory(@Param('id', ParseIntPipe) id: number) {
         return this.ordersService.getOrderHistoryByOrderId(id);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get('ops/orders')
+    async getOpsOrders(
+        @Query() query: OpsOrdersQueryDto,
+        @Request() req: any
+    ): Promise<OpsOrdersResponseDto> {
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new BadRequestException('User ID tidak ditemukan');
+        }
+        return this.ordersService.getOpsOrders(query, userId);
     }
 
     @Patch(':no_resi/cancel')
