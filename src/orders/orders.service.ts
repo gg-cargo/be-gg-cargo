@@ -1754,6 +1754,7 @@ export class OrdersService {
                     'harga_barang',
                     'status',
                     'bypass_reweight',
+                    'reweight_status',
                     'layanan',
                     'created_at',
                     'updated_at',
@@ -1823,6 +1824,7 @@ export class OrdersService {
                         harga_barang: parseFloat(order.getDataValue('harga_barang')) || 0,
                         status: order.getDataValue('status') || ORDER_STATUS.DRAFT,
                         bypass_reweight: order.getDataValue('bypass_reweight') || 'false',
+                        reweight_status: order.getDataValue('reweight_status') || 0,
                         layanan: order.getDataValue('layanan') || 'Regular',
                         created_at: order.getDataValue('created_at'),
                         updated_at: order.getDataValue('updated_at')
@@ -2929,8 +2931,11 @@ export class OrdersService {
             };
 
             return {
-                pagination,
-                orders: transformedOrders
+                message: 'Daftar order berhasil diambil',
+                data: {
+                    pagination,
+                    orders: transformedOrders
+                }
             };
 
         } catch (error) {
@@ -3487,7 +3492,9 @@ export class OrdersService {
                 throw new BadRequestException('User tidak memiliki hak akses untuk mengajukan koreksi reweight');
             }
 
-            // 5. Validasi data baru tidak sama dengan data lama (untuk setiap item)
+            // 5. Validasi data baru tidak sama dengan data lama (hanya untuk piece yang benar-benar berubah)
+            const piecesToUpdate: Array<{ piece_id: number; current_data: any; new_data: any; }> = [];
+
             for (const item of editReweightRequestDto.pieces) {
                 const curr = piecesInOrder[item.piece_id];
                 const currentBerat = curr.getDataValue('berat');
@@ -3495,47 +3502,65 @@ export class OrdersService {
                 const currentLebar = curr.getDataValue('lebar');
                 const currentTinggi = curr.getDataValue('tinggi');
 
+                // Hanya proses piece yang benar-benar berubah
                 if (
-                    currentBerat === item.berat &&
-                    currentPanjang === item.panjang &&
-                    currentLebar === item.lebar &&
-                    currentTinggi === item.tinggi
+                    currentBerat !== item.berat ||
+                    currentPanjang !== item.panjang ||
+                    currentLebar !== item.lebar ||
+                    currentTinggi !== item.tinggi
                 ) {
-                    throw new BadRequestException(`Data baru sama dengan data lama untuk piece ${item.piece_id}`);
+                    piecesToUpdate.push({
+                        piece_id: item.piece_id,
+                        current_data: {
+                            berat: currentBerat,
+                            panjang: currentPanjang,
+                            lebar: currentLebar,
+                            tinggi: currentTinggi,
+                        },
+                        new_data: {
+                            berat: item.berat,
+                            panjang: item.panjang,
+                            lebar: item.lebar,
+                            tinggi: item.tinggi,
+                        }
+                    });
                 }
             }
 
-            // 6. Buat record di reweight_correction_requests untuk setiap item koreksi
+            // Jika tidak ada piece yang berubah, berikan pesan info
+            if (piecesToUpdate.length === 0) {
+                return {
+                    message: 'Tidak ada perubahan data yang diajukan. Semua piece memiliki data yang sama.',
+                    success: true,
+                    data: {
+                        order_id: orderId,
+                        requested_by: requestingUser.getDataValue('name'),
+                        requested_at: new Date().toISOString(),
+                        note: editReweightRequestDto.note || '',
+                        status: 'No Changes Required',
+                        estimated_approval_time: null,
+                        requests: [],
+                    }
+                };
+            }
+
+            // 6. Buat record di reweight_correction_requests untuk setiap item koreksi yang berubah
             const requests: Array<{ request_id: number; piece_id: number; current_data: any; new_data: any; }> = [];
 
-            for (const item of editReweightRequestDto.pieces) {
-                const curr = piecesInOrder[item.piece_id];
-                const current_data = {
-                    berat: curr.getDataValue('berat'),
-                    panjang: curr.getDataValue('panjang'),
-                    lebar: curr.getDataValue('lebar'),
-                    tinggi: curr.getDataValue('tinggi'),
-                };
-                const new_data = {
-                    berat: item.berat,
-                    panjang: item.panjang,
-                    lebar: item.lebar,
-                    tinggi: item.tinggi,
-                };
-
+            for (const item of piecesToUpdate) {
                 // Buat record di tabel reweight_correction_requests
                 const correctionRequest = await this.reweightCorrectionRequestModel.create({
                     order_id: orderId,
                     piece_id: item.piece_id,
-                    current_berat: current_data.berat,
-                    current_panjang: current_data.panjang,
-                    current_lebar: current_data.lebar,
-                    current_tinggi: current_data.tinggi,
-                    new_berat: new_data.berat,
-                    new_panjang: new_data.panjang,
-                    new_lebar: new_data.lebar,
-                    new_tinggi: new_data.tinggi,
-                    note: editReweightRequestDto.note,
+                    current_berat: item.current_data.berat,
+                    current_panjang: item.current_data.panjang,
+                    current_lebar: item.current_data.lebar,
+                    current_tinggi: item.current_data.tinggi,
+                    new_berat: item.new_data.berat,
+                    new_panjang: item.new_data.panjang,
+                    new_lebar: item.new_data.lebar,
+                    new_tinggi: item.new_data.tinggi,
+                    note: editReweightRequestDto.note || '',
                     alasan_koreksi: editReweightRequestDto.alasan_koreksi || '',
                     status: 0, // Pending
                     requested_by: userId
@@ -3544,14 +3569,14 @@ export class OrdersService {
                 requests.push({
                     request_id: correctionRequest.getDataValue('id'),
                     piece_id: item.piece_id,
-                    current_data,
-                    new_data,
+                    current_data: item.current_data,
+                    new_data: item.new_data,
                 });
             }
 
             // 7. Catat di order histories
             const pieceIds = editReweightRequestDto.pieces.map(p => p.piece_id).join(', ');
-            const historyRemark = `Koreksi reweight diajukan untuk pieces [${pieceIds}]. Note: ${editReweightRequestDto.note}`;
+            const historyRemark = `Koreksi reweight diajukan untuk pieces [${pieceIds}]. Note: ${editReweightRequestDto.note || ''}`;
 
             await this.orderHistoryModel.create({
                 order_id: orderId,
@@ -3574,7 +3599,7 @@ export class OrdersService {
                     order_id: orderId,
                     requested_by: requestingUser.getDataValue('name'),
                     requested_at: new Date().toISOString(),
-                    note: editReweightRequestDto.note,
+                    note: editReweightRequestDto.note || '',
                     status: 'Pending Approval',
                     estimated_approval_time: estimatedApprovalTime.toISOString(),
                     requests,

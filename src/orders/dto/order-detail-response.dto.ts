@@ -8,6 +8,7 @@ export class OrderDetailResponseDto {
             harga_barang: number;
             status: string;
             bypass_reweight: string;
+            reweight_status: number;
             layanan: string;
             created_at: Date;
             updated_at: Date;
@@ -40,6 +41,7 @@ export class OrderDetailResponseDto {
             total_harga: number;
         };
         pieces_detail: Array<{
+            id: number;
             piece_id: number;
             qty: number;
             berat: number;

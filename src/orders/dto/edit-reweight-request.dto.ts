@@ -29,10 +29,10 @@ export class EditReweightRequestDto {
     @Type(() => EditReweightPieceItemDto)
     pieces: EditReweightPieceItemDto[];
 
-    @IsNotEmpty({ message: 'Note tidak boleh kosong' })
+    @IsOptional()
     @IsString({ message: 'Note harus berupa string' })
     @MaxLength(35, { message: 'Note maksimal 35 karakter' })
-    note: string;
+    note?: string;
 
     @IsOptional()
     @IsString({ message: 'Alasan koreksi harus berupa string' })
@@ -48,7 +48,7 @@ export class EditReweightRequestResponseDto {
         requested_at: string;
         note: string;
         status: string;
-        estimated_approval_time: string;
+        estimated_approval_time: string | null;
         requests: Array<{
             request_id: number;
             piece_id: number;

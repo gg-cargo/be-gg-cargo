@@ -51,6 +51,9 @@ export class PaginationDto {
 }
 
 export class OpsOrdersResponseDto {
-    pagination: PaginationDto;
-    orders: OrderOpsDto[];
+    message: string;
+    data: {
+        pagination: PaginationDto;
+        orders: OrderOpsDto[];
+    };
 }
