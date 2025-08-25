@@ -2,7 +2,11 @@ export class ReweightBulkResponseDto {
     message: string;
     success: boolean;
     data: {
-        pieces_updated: number;
+        actions_summary: {
+            pieces_updated: number;
+            pieces_deleted: number;
+            pieces_added: number;
+        };
         order_id: number;
         order_reweight_completed: boolean;
         images_uploaded?: {
@@ -15,12 +19,23 @@ export class ReweightBulkResponseDto {
             invoice_id: number;
             total_amount: number;
         } | null;
-        pieces_details: {
+        actions_details: {
+            action: 'update' | 'delete' | 'add';
             piece_id: number;
-            berat_lama: number;
-            berat_baru: number;
-            dimensi_lama: string;
-            dimensi_baru: string;
+            status: 'success' | 'failed';
+            message: string;
+            old_data?: {
+                berat?: number;
+                panjang?: number;
+                lebar?: number;
+                tinggi?: number;
+            };
+            new_data?: {
+                berat?: number;
+                panjang?: number;
+                lebar?: number;
+                tinggi?: number;
+            };
         }[];
     };
 }

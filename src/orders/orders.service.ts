@@ -85,7 +85,7 @@ export class OrdersService {
         proofImage: File,
         orderId: number,
         userId: number,
-        transaction: Transaction,
+        transaction?: Transaction,
         usedFor: string = 'bypass_reweight_proof'
     ): Promise<FileLog> {
         try {
@@ -1467,54 +1467,138 @@ export class OrdersService {
      * Bulk reweight untuk multiple pieces dengan auto-create invoice
      */
     async reweightBulk(reweightBulkDto: ReweightBulkDto): Promise<ReweightBulkResponseDto> {
-        const { pieces, reweight_by_user_id, images } = reweightBulkDto;
+        const { actions, reweight_by_user_id, images } = reweightBulkDto;
 
         // Validasi jumlah images (max 5)
         if (images && images.length > 5) {
             throw new BadRequestException('Maksimal 5 gambar yang bisa diupload');
         }
 
-        // Validasi pieces tidak kosong
-        if (!pieces || pieces.length === 0) {
-            throw new BadRequestException('Pieces tidak boleh kosong');
+        // Validasi actions tidak kosong
+        if (!actions || actions.length === 0) {
+            throw new BadRequestException('Actions tidak boleh kosong');
         }
 
-        // Validasi semua pieces ada
-        const pieceIds = pieces.map(p => p.piece_id);
-        const existingPieces = await this.orderPieceModel.findAll({
-            where: { id: pieceIds },
-            include: [
-                {
-                    model: this.orderModel,
-                    as: 'order',
-                    attributes: ['id', 'no_tracking', 'provinsi_pengirim', 'kota_pengirim'],
-                },
-            ],
-        });
+        // Validasi action types
+        const validActions = ['update', 'delete', 'add'];
+        for (const action of actions) {
+            if (!validActions.includes(action.action)) {
+                throw new BadRequestException(`Action tidak valid: ${action.action}`);
+            }
 
-        if (existingPieces.length !== pieces.length) {
-            throw new BadRequestException('Beberapa pieces tidak ditemukan');
+            // Validasi data untuk action update dan add
+            if (action.action === 'update' || action.action === 'add') {
+                if (!action.berat || !action.panjang || !action.lebar || !action.tinggi) {
+                    throw new BadRequestException(`Data dimensi wajib untuk action ${action.action}`);
+                }
+            }
+
+            // Validasi piece_id untuk update dan delete
+            if (action.action === 'update' || action.action === 'delete') {
+                if (!action.piece_id) {
+                    throw new BadRequestException(`Piece ID wajib untuk action ${action.action}`);
+                }
+            }
         }
 
-        // Validasi semua pieces dari order yang sama
-        const orderIds = [...new Set(existingPieces.map(p => p.getDataValue('order_id')))];
-        if (orderIds.length > 1) {
-            throw new BadRequestException('Semua pieces harus dari order yang sama');
+        // Ambil order ID dari actions
+        let orderId: number;
+
+        // Cek apakah ada action yang memerlukan order_id
+        const actionsNeedingOrderId = actions.filter(a => a.action === 'add' || a.action === 'update' || a.action === 'delete');
+
+        if (actionsNeedingOrderId.length === 0) {
+            throw new BadRequestException('Tidak ada action yang valid');
         }
 
-        const orderId = orderIds[0];
+        // Untuk action 'add', order_id wajib diisi
+        const addActions = actions.filter(a => a.action === 'add');
+        for (const addAction of addActions) {
+            if (!addAction.order_id) {
+                throw new BadRequestException(`Order ID wajib untuk action 'add'`);
+            }
+        }
 
-        // Mulai transaction
-        const transaction = await this.orderModel.sequelize!.transaction();
+        // Untuk action 'update' dan 'delete', order_id bisa dari piece yang ada
+        const updateAndDeleteActions = actions.filter(a => a.action === 'update' || a.action === 'delete');
+        let orderIdFromExistingPieces: number | null = null;
 
+        if (updateAndDeleteActions.length > 0) {
+            const updateAndDeletePieceIds = updateAndDeleteActions
+                .map(a => a.piece_id!)
+                .filter(id => id !== undefined);
+
+            if (updateAndDeletePieceIds.length > 0) {
+                const existingPieces = await this.orderPieceModel.findAll({
+                    where: { id: updateAndDeletePieceIds },
+                    include: [
+                        {
+                            model: this.orderModel,
+                            as: 'order',
+                            attributes: ['id', 'no_tracking', 'provinsi_pengirim', 'kota_pengirim'],
+                        },
+                    ],
+                });
+
+                if (existingPieces.length !== updateAndDeletePieceIds.length) {
+                    throw new BadRequestException('Beberapa pieces tidak ditemukan');
+                }
+
+                // Validasi semua pieces dari order yang sama
+                const orderIds = [...new Set(existingPieces.map(p => p.getDataValue('order_id')))];
+                if (orderIds.length > 1) {
+                    throw new BadRequestException('Semua pieces harus dari order yang sama');
+                }
+                orderIdFromExistingPieces = orderIds[0];
+            }
+        }
+
+        // Tentukan orderId berdasarkan prioritas
+        if (addActions.length > 0) {
+            // Jika ada add action, gunakan order_id dari add action
+            const orderIdsFromAdd = [...new Set(addActions.map(a => a.order_id!))];
+            if (orderIdsFromAdd.length > 1) {
+                throw new BadRequestException('Semua add actions harus dari order yang sama');
+            }
+            orderId = orderIdsFromAdd[0];
+
+            // Validasi dengan order_id dari existing pieces jika ada
+            if (orderIdFromExistingPieces && orderId !== orderIdFromExistingPieces) {
+                throw new BadRequestException('Order ID dari add action harus sama dengan order ID dari existing pieces');
+            }
+        } else {
+            // Jika tidak ada add action, gunakan order_id dari existing pieces
+            if (!orderIdFromExistingPieces) {
+                throw new BadRequestException('Tidak dapat menentukan Order ID');
+            }
+            orderId = orderIdFromExistingPieces;
+        }
+
+        // Pastikan orderId sudah di-assign
+        if (!orderId) {
+            throw new BadRequestException('Tidak dapat menentukan Order ID');
+        }
+
+        // Tanpa transaction untuk menghindari lock timeout
         try {
             const now = new Date();
-            const piecesDetails: {
+            const actionsDetails: {
+                action: 'update' | 'delete' | 'add';
                 piece_id: number;
-                berat_lama: number;
-                berat_baru: number;
-                dimensi_lama: string;
-                dimensi_baru: string;
+                status: 'success' | 'failed';
+                message: string;
+                old_data?: {
+                    berat?: number;
+                    panjang?: number;
+                    lebar?: number;
+                    tinggi?: number;
+                };
+                new_data?: {
+                    berat?: number;
+                    panjang?: number;
+                    lebar?: number;
+                    tinggi?: number;
+                };
             }[] = [];
             let imagesUploaded: {
                 file_name: string;
@@ -1526,7 +1610,7 @@ export class OrdersService {
             if (images && images.length > 0) {
                 for (const image of images) {
                     try {
-                        const fileLog = await this.saveProofImage(image, orderId, reweight_by_user_id, transaction, `bulk_reweight_proof_order_id_${orderId}`);
+                        const fileLog = await this.saveProofImage(image, orderId, reweight_by_user_id, undefined, `bulk_reweight_proof_order_id_${orderId}`);
                         imagesUploaded.push({
                             file_name: fileLog.file_name,
                             file_path: fileLog.file_path,
@@ -1539,62 +1623,205 @@ export class OrdersService {
                 }
             }
 
-            // 2. Update semua pieces
-            for (const pieceData of pieces) {
-                const existingPiece = existingPieces.find(p => p.id === pieceData.piece_id);
-                if (!existingPiece) continue;
+            // 2. Proses semua actions tanpa transaction
+            let piecesUpdated = 0;
+            let piecesDeleted = 0;
+            let piecesAdded = 0;
 
-                // Simpan data lama untuk history
-                const oldBerat = existingPiece.getDataValue('berat');
-                const oldPanjang = existingPiece.getDataValue('panjang');
-                const oldLebar = existingPiece.getDataValue('lebar');
-                const oldTinggi = existingPiece.getDataValue('tinggi');
+            for (const actionData of actions) {
+                try {
+                    if (actionData.action === 'update') {
+                        // Update existing piece
+                        const existingPiece = await this.orderPieceModel.findByPk(actionData.piece_id!);
+                        if (!existingPiece) {
+                            actionsDetails.push({
+                                action: 'update',
+                                piece_id: actionData.piece_id!,
+                                status: 'failed',
+                                message: 'Piece tidak ditemukan',
+                                old_data: undefined,
+                                new_data: undefined
+                            });
+                            continue;
+                        }
 
-                // Update piece
-                await this.orderPieceModel.update(
-                    {
-                        berat: pieceData.berat,
-                        panjang: pieceData.panjang,
-                        lebar: pieceData.lebar,
-                        tinggi: pieceData.tinggi,
-                        reweight_status: 1,
-                        reweight_by: reweight_by_user_id,
-                        updatedAt: now,
-                    },
-                    {
-                        where: { id: pieceData.piece_id },
-                        transaction,
+                        // Simpan data lama untuk history
+                        const oldData = {
+                            berat: existingPiece.getDataValue('berat'),
+                            panjang: existingPiece.getDataValue('panjang'),
+                            lebar: existingPiece.getDataValue('lebar'),
+                            tinggi: existingPiece.getDataValue('tinggi'),
+                        };
+
+                        // Check apakah dimensi berubah
+                        const oldBerat = existingPiece.getDataValue('berat');
+                        const oldPanjang = existingPiece.getDataValue('panjang');
+                        const oldLebar = existingPiece.getDataValue('lebar');
+                        const oldTinggi = existingPiece.getDataValue('tinggi');
+                        const newBerat = actionData.berat!;
+                        const newPanjang = actionData.panjang!;
+                        const newLebar = actionData.lebar!;
+                        const newTinggi = actionData.tinggi!;
+
+                        const dimensiChanged = (oldBerat !== newBerat || oldPanjang !== newPanjang ||
+                            oldLebar !== newLebar || oldTinggi !== newTinggi);
+
+                        if (dimensiChanged) {
+                            // 1. Cari shipment yang cocok dengan dimensi baru atau buat baru TERLEBIH DAHULU
+                            const newShipmentId = await this.findOrCreateShipmentForDimensions(orderId, newBerat, newPanjang, newLebar, newTinggi);
+
+                            // 2. Update shipment_id di orderPiece SEBELUM hapus shipment lama
+                            await this.orderPieceModel.update(
+                                { order_shipment_id: newShipmentId },
+                                { where: { id: actionData.piece_id! } }
+                            );
+
+                            // 3. Baru kurangi qty dari shipment lama (setelah piece sudah pindah)
+                            await this.reduceShipmentQty(orderId, actionData.piece_id!);
+                        }
+
+                        // Update piece dengan data baru
+                        await this.orderPieceModel.update(
+                            {
+                                berat: newBerat,
+                                panjang: newPanjang,
+                                lebar: newLebar,
+                                tinggi: newTinggi,
+                                reweight_status: 1,
+                                reweight_by: reweight_by_user_id,
+                                updatedAt: now,
+                            },
+                            {
+                                where: { id: actionData.piece_id! },
+                            }
+                        );
+
+                        actionsDetails.push({
+                            action: 'update',
+                            piece_id: actionData.piece_id!,
+                            status: 'success',
+                            message: 'Piece berhasil diupdate',
+                            old_data: oldData,
+                            new_data: {
+                                berat: actionData.berat!,
+                                panjang: actionData.panjang!,
+                                lebar: actionData.lebar!,
+                                tinggi: actionData.tinggi!,
+                            }
+                        });
+                        piecesUpdated++;
+
+                    } else if (actionData.action === 'delete') {
+                        // Delete existing piece
+                        const existingPiece = await this.orderPieceModel.findByPk(actionData.piece_id!);
+                        if (!existingPiece) {
+                            actionsDetails.push({
+                                action: 'delete',
+                                piece_id: actionData.piece_id!,
+                                status: 'failed',
+                                message: 'Piece tidak ditemukan',
+                                old_data: undefined,
+                                new_data: undefined
+                            });
+                            continue;
+                        }
+
+                        // Simpan data lama untuk history
+                        const oldData = {
+                            berat: existingPiece.getDataValue('berat'),
+                            panjang: existingPiece.getDataValue('panjang'),
+                            lebar: existingPiece.getDataValue('lebar'),
+                            tinggi: existingPiece.getDataValue('tinggi'),
+                        };
+
+                        // Kurangi qty di shipment sebelum hapus piece
+                        await this.reduceShipmentQty(orderId, actionData.piece_id!);
+
+                        // Delete piece
+                        await this.orderPieceModel.destroy({
+                            where: { id: actionData.piece_id! },
+                        });
+
+                        actionsDetails.push({
+                            action: 'delete',
+                            piece_id: actionData.piece_id!,
+                            status: 'success',
+                            message: 'Piece berhasil dihapus',
+                            old_data: oldData,
+                            new_data: undefined
+                        });
+                        piecesDeleted++;
+
+                    } else if (actionData.action === 'add') {
+                        // Add new piece dengan auto-generate piece_id
+
+                        // 1. Generate piece_id dengan format P{order_id}-{counter}
+                        const pieceCounter = await this.getNextPieceCounter(orderId);
+                        const generatedPieceId = `P${orderId}-${pieceCounter}`;
+
+                        // 2. Cari atau buat shipment yang cocok
+                        // Cari shipment yang cocok dengan dimensi (dual search)
+                        const shipmentId = await this.findOrCreateShipmentForDimensions(orderId, actionData.berat!, actionData.panjang!, actionData.lebar!, actionData.tinggi!);
+
+                        // 3. Create piece dengan semua field yang diperlukan
+                        const newPiece = await this.orderPieceModel.create({
+                            order_id: orderId,
+                            order_shipment_id: shipmentId,
+                            piece_id: generatedPieceId,
+                            berat: actionData.berat!,
+                            panjang: actionData.panjang!,
+                            lebar: actionData.lebar!,
+                            tinggi: actionData.tinggi!,
+                            reweight_status: 1,
+                            reweight_by: reweight_by_user_id,
+                            createdAt: now,
+                            updatedAt: now,
+                        } as any);
+
+                        actionsDetails.push({
+                            action: 'add',
+                            piece_id: newPiece.id,
+                            status: 'success',
+                            message: `Piece berhasil ditambahkan dengan piece_id: ${generatedPieceId}`,
+                            old_data: undefined,
+                            new_data: {
+                                berat: actionData.berat!,
+                                panjang: actionData.panjang!,
+                                lebar: actionData.lebar!,
+                                tinggi: actionData.tinggi!,
+                            }
+                        });
+                        piecesAdded++;
                     }
-                );
-
-                piecesDetails.push({
-                    piece_id: pieceData.piece_id,
-                    berat_lama: oldBerat,
-                    berat_baru: pieceData.berat,
-                    dimensi_lama: `${oldPanjang}x${oldLebar}x${oldTinggi}`,
-                    dimensi_baru: `${pieceData.panjang}x${pieceData.lebar}x${pieceData.tinggi}`,
-                });
+                } catch (error) {
+                    actionsDetails.push({
+                        action: actionData.action,
+                        piece_id: actionData.piece_id || 0,
+                        status: 'failed',
+                        message: `Error: ${error.message}`,
+                        old_data: undefined,
+                        new_data: undefined
+                    });
+                }
             }
 
-            // 3. Update order_shipments dengan data terbaru dari pieces
-            await this.updateOrderShipmentsFromPieces(orderId, transaction);
-
-            await transaction.commit();
-
             return {
-                message: `Bulk reweight berhasil untuk ${pieces.length} pieces`,
+                message: `Bulk reweight berhasil diproses`,
                 success: true,
                 data: {
-                    pieces_updated: pieces.length,
+                    actions_summary: {
+                        pieces_updated: piecesUpdated,
+                        pieces_deleted: piecesDeleted,
+                        pieces_added: piecesAdded,
+                    },
                     order_id: orderId,
                     order_reweight_completed: true,
                     images_uploaded: imagesUploaded.length > 0 ? imagesUploaded : undefined,
-                    pieces_details: piecesDetails,
+                    actions_details: actionsDetails,
                 },
             };
 
         } catch (error) {
-            await transaction.rollback();
             throw new InternalServerErrorException(error.message);
         }
     }
@@ -2526,6 +2753,236 @@ export class OrdersService {
         } catch (error) {
             console.error('Error updating order shipments from pieces:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Helper: Generate next piece counter untuk order tertentu
+     */
+    private async getNextPieceCounter(orderId: number): Promise<number> {
+        try {
+            const result = await this.orderPieceModel.findOne({
+                attributes: [
+                    [fn('MAX', col('piece_id')), 'maxPieceId']
+                ],
+                where: {
+                    order_id: orderId,
+                    piece_id: {
+                        [Op.like]: `P${orderId}-%`
+                    }
+                },
+                raw: true
+            }) as any;
+
+            if (result && result.maxPieceId) {
+                const lastCounter = parseInt(result.maxPieceId.split('-')[1]) || 0;
+                return lastCounter + 1;
+            } else {
+                return 1;
+            }
+        } catch (error) {
+            console.error('Error getting next piece counter:', error);
+            return 1;
+        }
+    }
+
+    /**
+     * Helper: Kurangi qty dari shipment, jika qty jadi 0 hapus shipment
+     */
+    private async reduceShipmentQty(orderId: number, pieceId: number): Promise<void> {
+        // Ambil piece untuk cek reweight_status dan dimensi
+        const piece = await this.orderPieceModel.findByPk(pieceId);
+        if (!piece) return;
+
+        const reweightStatus = piece.getDataValue('reweight_status');
+        const berat = piece.getDataValue('berat');
+        const panjang = piece.getDataValue('panjang');
+        const lebar = piece.getDataValue('lebar');
+        const tinggi = piece.getDataValue('tinggi');
+
+        // Tentukan field yang digunakan berdasarkan reweight_status
+        const whereClause: any = { order_id: orderId };
+
+        // 1. Cari shipment berdasarkan field reweight terlebih dahulu
+        let shipment = await this.orderShipmentModel.findOne({
+            where: {
+                order_id: orderId,
+                berat_reweight: berat,
+                panjang_reweight: panjang,
+                lebar_reweight: lebar,
+                tinggi_reweight: tinggi,
+            }
+        });
+
+        // 2. Jika tidak ketemu, cari berdasarkan field dimensi biasa
+        if (!shipment) {
+            shipment = await this.orderShipmentModel.findOne({
+                where: {
+                    order_id: orderId,
+                    berat: berat,
+                    panjang: panjang,
+                    lebar: lebar,
+                    tinggi: tinggi,
+                }
+            });
+        }
+
+        if (shipment) {
+            const shipmentId = shipment.getDataValue('id');
+            const currentQty = shipment.getDataValue('qty') || 0;
+
+            // 🔍 CALCULATE REAL-TIME: Hitung qty_reweight dari orderPiece yang sebenarnya
+            const realQtyReweight = await this.orderPieceModel.count({
+                where: {
+                    order_shipment_id: shipmentId,
+                    reweight_status: 1
+                }
+            });
+
+            // 🛡️ DEFENSIVE: Cek data inkonsisten
+            if (realQtyReweight > currentQty) {
+                this.logger.warn(`Data inkonsisten ditemukan pada shipment ${shipmentId}: qty=${currentQty}, real_qty_reweight=${realQtyReweight}. Memperbaiki data...`);
+
+                // Perbaiki data dengan set qty_reweight = qty (maksimal yang mungkin)
+                await this.orderShipmentModel.update(
+                    { qty_reweight: currentQty },
+                    { where: { id: shipmentId } }
+                );
+
+                // Update variable untuk logika selanjutnya
+                const correctedQtyReweight = currentQty;
+
+                if (currentQty <= 1) {
+                    // Hapus shipment
+                    await this.orderShipmentModel.destroy({
+                        where: { id: shipmentId }
+                    });
+                } else {
+                    // Update dengan data yang sudah diperbaiki
+                    const newQty = currentQty - 1;
+                    let newQtyReweight = correctedQtyReweight;
+                    if (correctedQtyReweight > 0) {
+                        newQtyReweight = correctedQtyReweight - 1;
+                    }
+
+                    await this.orderShipmentModel.update(
+                        {
+                            qty_reweight: newQtyReweight,
+                            qty: newQtyReweight
+                        },
+                        { where: { id: shipmentId } }
+                    );
+                }
+            } else {
+                // Data normal, lanjutkan logika biasa
+                if (currentQty <= 1) {
+                    // Jika qty asli tinggal 1 atau kurang, hapus shipment
+                    await this.orderShipmentModel.destroy({
+                        where: { id: shipmentId }
+                    });
+                } else {
+                    // Kurangi qty asli
+                    const newQty = currentQty - 1;
+
+                    // 🔍 CALCULATE REAL-TIME: Hitung qty_reweight baru setelah delete
+                    const newRealQtyReweight = Math.max(0, realQtyReweight - 1);
+
+                    await this.orderShipmentModel.update(
+                        {
+                            qty_reweight: newRealQtyReweight,
+                            qty: newRealQtyReweight
+                        },
+                        { where: { id: shipmentId } }
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Helper: Cari shipment yang cocok dengan dimensi atau buat baru
+     */
+    private async findOrCreateShipmentForDimensions(orderId: number, berat: number, panjang: number, lebar: number, tinggi: number, useReweightFields: boolean = true): Promise<number> {
+        // 1. Cari shipment berdasarkan field reweight terlebih dahulu
+        let existingShipment = await this.orderShipmentModel.findOne({
+            where: {
+                order_id: orderId,
+                berat_reweight: berat,
+                panjang_reweight: panjang,
+                lebar_reweight: lebar,
+                tinggi_reweight: tinggi,
+            }
+        });
+
+        // 2. Jika tidak ketemu, cari berdasarkan field dimensi biasa
+        if (!existingShipment) {
+            existingShipment = await this.orderShipmentModel.findOne({
+                where: {
+                    order_id: orderId,
+                    berat: berat,
+                    panjang: panjang,
+                    lebar: lebar,
+                    tinggi: tinggi,
+                }
+            });
+        }
+
+        if (existingShipment) {
+            const shipmentId = existingShipment.getDataValue('id');
+
+            // 3. Cek apakah field reweight kosong, jika ya update
+            const beratReweight = existingShipment.getDataValue('berat_reweight');
+            const panjangReweight = existingShipment.getDataValue('panjang_reweight');
+            const lebarReweight = existingShipment.getDataValue('lebar_reweight');
+            const tinggiReweight = existingShipment.getDataValue('tinggi_reweight');
+
+            // Jika ada field reweight yang kosong atau null, update dengan dimensi baru
+            if (!beratReweight || !panjangReweight || !lebarReweight || !tinggiReweight) {
+                await this.orderShipmentModel.update(
+                    {
+                        berat_reweight: berat,
+                        panjang_reweight: panjang,
+                        lebar_reweight: lebar,
+                        tinggi_reweight: tinggi,
+                    },
+                    { where: { id: shipmentId } }
+                );
+            }
+
+            // 4. 🔍 CALCULATE REAL-TIME: Hitung qty_reweight dari orderPiece yang sebenarnya
+            const realQtyReweight = await this.orderPieceModel.count({
+                where: {
+                    order_shipment_id: shipmentId,
+                    reweight_status: 1
+                }
+            });
+
+            await this.orderShipmentModel.update(
+                {
+                    qty_reweight: realQtyReweight + 1,  // Real-time calculation + 1 untuk piece baru
+                    qty: realQtyReweight + 1
+                },
+                { where: { id: shipmentId } }
+            );
+
+            return shipmentId;
+        } else {
+            // 5. Buat shipment baru dengan semua field terisi
+            const newShipment = await this.orderShipmentModel.create({
+                order_id: orderId,
+                qty: 1,
+                berat: berat,
+                panjang: panjang,
+                lebar: lebar,
+                tinggi: tinggi,
+                berat_reweight: berat,
+                panjang_reweight: panjang,
+                lebar_reweight: lebar,
+                tinggi_reweight: tinggi,
+                qty_reweight: 1,
+            } as any);
+
+            return newShipment.id;
         }
     }
 

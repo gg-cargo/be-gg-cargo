@@ -195,12 +195,12 @@ export class OrdersController {
         @Body() body: any,
         @UploadedFiles() images: File[],
     ): Promise<ReweightBulkResponseDto> {
-        // Parse pieces dari JSON string
-        let pieces;
+        // Parse actions dari JSON string
+        let actions;
         try {
-            pieces = typeof body.pieces === 'string' ? JSON.parse(body.pieces) : body.pieces;
+            actions = typeof body.actions === 'string' ? JSON.parse(body.actions) : body.actions;
         } catch (error) {
-            throw new BadRequestException('Invalid JSON format for pieces');
+            throw new BadRequestException('Invalid JSON format for actions');
         }
 
         // Parse user ID
@@ -210,8 +210,8 @@ export class OrdersController {
         }
 
         // Validasi basic
-        if (!pieces || !Array.isArray(pieces) || pieces.length === 0) {
-            throw new BadRequestException('Pieces harus berupa array dan tidak boleh kosong');
+        if (!actions || !Array.isArray(actions) || actions.length === 0) {
+            throw new BadRequestException('Actions harus berupa array dan tidak boleh kosong');
         }
 
         // Validasi images
@@ -221,7 +221,7 @@ export class OrdersController {
 
         // Buat DTO object
         const reweightBulkDto: ReweightBulkDto = {
-            pieces,
+            actions,
             reweight_by_user_id,
             images: images || []
         };
