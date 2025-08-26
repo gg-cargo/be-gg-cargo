@@ -39,6 +39,7 @@ export class OrderOpsDto {
     customer: CustomerDto;
     alamat_pickup: string;
     alamat_pengirim: string;
+    alamat_penerima: string;
     berat: string;
     koli: number;
     tanggal_pickup: string;
