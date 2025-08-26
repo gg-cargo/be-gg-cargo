@@ -21,6 +21,10 @@ export class OpsOrdersQueryDto {
         message: 'Status tidak valid'
     })
     status?: string;
+
+    @IsOptional()
+    @IsString({ message: 'Layanan harus berupa string' })
+    layanan?: string;
 }
 
 export class CustomerDto {
@@ -34,6 +38,7 @@ export class OrderOpsDto {
     no_resi: string;
     customer: CustomerDto;
     alamat_pickup: string;
+    alamat_pengirim: string;
     berat: string;
     koli: number;
     tanggal_pickup: string;
@@ -50,9 +55,22 @@ export class PaginationDto {
     total_pages: number;
 }
 
+export class SummaryStatisticsDto {
+    total_pengiriman: number;
+    nota_kirim: number;
+    pengiriman_berhasil: number;
+    pengiriman_gagal: number;
+    order_masuk: number;
+    reweight: number;
+    menunggu_driver: number;
+    proses_penjemputan: number;
+    proses_pengiriman: number;
+}
+
 export class OpsOrdersResponseDto {
     message: string;
     data: {
+        summary: SummaryStatisticsDto;
         pagination: PaginationDto;
         orders: OrderOpsDto[];
     };

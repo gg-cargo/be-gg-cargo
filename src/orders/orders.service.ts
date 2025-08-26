@@ -24,7 +24,7 @@ import { EstimatePriceDto } from './dto/estimate-price.dto';
 import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
-import { OpsOrdersQueryDto, OpsOrdersResponseDto, OrderOpsDto, CustomerDto, PaginationDto } from './dto/ops-orders.dto';
+import { OpsOrdersQueryDto, OpsOrdersResponseDto, OrderOpsDto, CustomerDto, PaginationDto, SummaryStatisticsDto } from './dto/ops-orders.dto';
 import { AvailableDriversQueryDto, AvailableDriversResponseDto, AvailableDriverDto, DriverLocationDto } from './dto/available-drivers.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { SubmitReweightDto, SubmitReweightResponseDto } from './dto/submit-reweight.dto';
@@ -40,7 +40,9 @@ import { Bank } from '../models/bank.model';
 import { Level } from '../models/level.model';
 import { FileLog } from '../models/file-log.model';
 import { ReweightCorrectionRequest } from '../models/reweight-correction-request.model';
+import { OrderDeliveryNote } from '../models/order-delivery-note.model';
 import { FileService } from '../file/file.service';
+import { DriversService } from '../drivers/drivers.service';
 
 @Injectable()
 export class OrdersService {
@@ -75,7 +77,10 @@ export class OrdersService {
         private readonly fileLogModel: typeof FileLog,
         @InjectModel(ReweightCorrectionRequest)
         private readonly reweightCorrectionRequestModel: typeof ReweightCorrectionRequest,
+        @InjectModel(OrderDeliveryNote)
+        private readonly orderDeliveryNoteModel: typeof OrderDeliveryNote,
         private readonly fileService: FileService,
+        private readonly driversService: DriversService,
     ) { }
 
     /**
@@ -3223,7 +3228,7 @@ export class OrdersService {
                         statusFilter = {
                             [Op.and]: [
                                 { reweight_status: 1 },
-                                { [Op.not]: [{ status: 'In Transit' }, { status: 'Delivered' }] }
+                                { status: { [Op.notIn]: ['In Transit', 'Delivered'] } }
                             ]
                         };
                         break;
@@ -3256,21 +3261,34 @@ export class OrdersService {
                     [Op.or]: [
                         { no_tracking: { [Op.like]: `%${query.search}%` } },
                         { nama_pengirim: { [Op.like]: `%${query.search}%` } },
-                        { no_telepon_pengirim: { [Op.like]: `%${query.search}%` } }
+                        { no_telepon_pengirim: { [Op.like]: `%${query.search}%` } },
+                        { alamat_pengirim: { [Op.like]: `%${query.search}%` } }
                     ]
                 };
             }
 
-            // 5. Gabungkan semua filter
+            // 5. Buat filter layanan
+            let layananFilter = {};
+            if (query.layanan) {
+                layananFilter = {
+                    layanan: { [Op.like]: `%${query.layanan}%` }
+                };
+            }
+
+            // 6. Gabungkan semua filter
             const whereClause = {
                 [Op.and]: [
                     areaFilter,
                     statusFilter,
-                    searchFilter
+                    searchFilter,
+                    layananFilter
                 ]
             };
 
-            // 6. Hitung total items untuk pagination
+            // 6.1. Hitung summary statistics
+            const summary = await this.calculateSummaryStatistics(areaFilter);
+
+            // 7. Hitung total items untuk pagination
             const totalItems = await this.orderModel.count({
                 where: whereClause
             });
@@ -3280,7 +3298,7 @@ export class OrdersService {
             const totalPages = Math.ceil(totalItems / limit);
             const offset = (page - 1) * limit;
 
-            // 7. Ambil data orders dengan pagination
+            // 8. Ambil data orders dengan pagination
             const orders = await this.orderModel.findAll({
                 where: whereClause,
                 attributes: [
@@ -3307,10 +3325,10 @@ export class OrdersService {
                 ],
                 order: [['created_at', 'DESC']],
                 limit: limit,
-                offset: offset
+                offset: offset,
             });
 
-            // 8. Transform data ke format response yang diinginkan
+            // 9. Transform data ke format response yang diinginkan
             const transformedOrders: OrderOpsDto[] = await Promise.all(
                 orders.map(async (order, index) => {
                     // Hitung berat dan koli dari order pieces
@@ -3368,6 +3386,7 @@ export class OrdersService {
                             telepon: order.getDataValue('no_telepon_pengirim')
                         },
                         alamat_pickup: order.getDataValue('alamat_pengirim'),
+                        alamat_pengirim: order.getDataValue('alamat_pengirim'),
                         berat: `${totalBerat.toFixed(1)} kg`,
                         koli: totalKoli,
                         tanggal_pickup: tanggalPickup,
@@ -3379,7 +3398,7 @@ export class OrdersService {
                 })
             );
 
-            // 9. Buat response pagination
+            // 10. Buat response pagination
             const pagination: PaginationDto = {
                 current_page: page,
                 limit: limit,
@@ -3390,6 +3409,7 @@ export class OrdersService {
             return {
                 message: 'Daftar order berhasil diambil',
                 data: {
+                    summary,
                     pagination,
                     orders: transformedOrders
                 }
@@ -4114,4 +4134,157 @@ export class OrdersService {
             throw error;
         }
     }
+
+    /**
+     * Menghitung summary statistics untuk dashboard OPS
+     */
+    private async calculateSummaryStatistics(areaFilter: any): Promise<SummaryStatisticsDto> {
+        try {
+            // 1. Total pengiriman (semua order dalam area)
+            const totalPengiriman = await this.orderModel.count({
+                where: areaFilter
+            });
+
+            // 2. Nota kirim (dari delivery notes)
+            // Buat filter area khusus untuk delivery notes (hanya menggunakan hub_id)
+            let deliveryNoteAreaFilter = {};
+            if (areaFilter[Op.or]) {
+                // Ambil hub_id dari areaFilter dan buat filter untuk delivery notes
+                const hubIds: number[] = [];
+                for (const condition of areaFilter[Op.or] as any[]) {
+                    if (condition.hub_source_id) hubIds.push(condition.hub_source_id);
+                    if (condition.hub_dest_id) hubIds.push(condition.hub_dest_id);
+                    if (condition.current_hub) hubIds.push(condition.current_hub);
+                }
+                if (hubIds.length > 0) {
+                    deliveryNoteAreaFilter = {
+                        hub_id: { [Op.in]: hubIds }
+                    };
+                }
+            }
+
+            const notaKirim = await this.orderDeliveryNoteModel.count({
+                where: deliveryNoteAreaFilter
+            });
+
+            // 3. Pengiriman berhasil (status Delivered)
+            const pengirimanBerhasil = await this.orderModel.count({
+                where: {
+                    [Op.and]: [
+                        areaFilter,
+                        { status: 'Delivered' }
+                    ]
+                }
+            });
+
+            // 4. Pengiriman gagal (is_gagal_pickup = 1 atau status tertentu yang gagal)
+            const pengirimanGagal = await this.orderModel.count({
+                where: {
+                    [Op.and]: [
+                        areaFilter,
+                        {
+                            [Op.or]: [
+                                { is_gagal_pickup: 1 },
+                                { status: 'Failed' },
+                                { status: 'Cancelled' }
+                            ]
+                        }
+                    ]
+                }
+            });
+
+            // 5. Order masuk (status baru atau pending)
+            const orderMasuk = await this.orderModel.count({
+                where: {
+                    [Op.and]: [
+                        areaFilter,
+                        {
+                            [Op.or]: [
+                                { status: 'Draft' },
+                            ]
+                        }
+                    ]
+                }
+            });
+
+            // 6. Reweight (reweight_status = 0)
+            const reweight = await this.orderModel.count({
+                where: {
+                    [Op.and]: [
+                        areaFilter,
+                        { reweight_status: 0 }
+                    ]
+                }
+            });
+
+            // 7. Menunggu driver (status_pickup = 'siap pickup' atau null)
+            const menungguDriver = await this.orderModel.count({
+                where: {
+                    [Op.and]: [
+                        areaFilter,
+                        {
+                            [Op.or]: [
+                                { status_pickup: null },
+                                { status_pickup: 'siap pickup' }
+                            ]
+                        },
+                        { is_gagal_pickup: 0 }
+                    ]
+                }
+            });
+
+            // 8. Proses penjemputan (status_pickup = 'Assigned' atau 'Picked Up')
+            const prosesPenjemputan = await this.orderModel.count({
+                where: {
+                    [Op.and]: [
+                        areaFilter,
+                        {
+                            status_pickup: { [Op.in]: ['Assigned', 'Picked Up'] }
+                        }
+                    ]
+                }
+            });
+
+            // 9. Proses pengiriman (status 'In Transit' atau 'Out for Delivery')
+            const prosesPengiriman = await this.orderModel.count({
+                where: {
+                    [Op.and]: [
+                        areaFilter,
+                        {
+                            status: { [Op.in]: ['In Transit', 'Out for Delivery'] }
+                        }
+                    ]
+                }
+            });
+
+            return {
+                total_pengiriman: totalPengiriman,
+                nota_kirim: notaKirim,
+                pengiriman_berhasil: pengirimanBerhasil,
+                pengiriman_gagal: pengirimanGagal,
+                order_masuk: orderMasuk,
+                reweight: reweight,
+                menunggu_driver: menungguDriver,
+                proses_penjemputan: prosesPenjemputan,
+                proses_pengiriman: prosesPengiriman
+            };
+
+        } catch (error) {
+            this.logger.error(`Error calculating summary statistics: ${error.message}`, error.stack);
+            // Return default values jika ada error
+            return {
+                total_pengiriman: 0,
+                nota_kirim: 0,
+                pengiriman_berhasil: 0,
+                pengiriman_gagal: 0,
+                order_masuk: 0,
+                reweight: 0,
+                menunggu_driver: 0,
+                proses_penjemputan: 0,
+                proses_pengiriman: 0
+            };
+        }
+    }
+
+
 } 

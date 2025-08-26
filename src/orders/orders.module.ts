@@ -17,10 +17,18 @@ import { Bank } from '../models/bank.model';
 import { Level } from '../models/level.model';
 import { FileLog } from '../models/file-log.model';
 import { ReweightCorrectionRequest } from '../models/reweight-correction-request.model';
+import { OrderDeliveryNote } from '../models/order-delivery-note.model';
+import { OrderPickupDriver } from '../models/order-pickup-driver.model';
+import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
+import { LogGps } from '../models/log-gps.model';
+import { Hub } from '../models/hub.model';
 import { FileService } from '../file/file.service';
+import { DriversService } from '../drivers/drivers.service';
+import { DriversModule } from '../drivers/drivers.module';
 
 @Module({
     imports: [
+        DriversModule,
         SequelizeModule.forFeature([
             Order,
             OrderShipment,
@@ -36,11 +44,16 @@ import { FileService } from '../file/file.service';
             Bank,
             Level,
             FileLog,
-            ReweightCorrectionRequest
+            ReweightCorrectionRequest,
+            OrderDeliveryNote,
+            OrderPickupDriver,
+            OrderDeliverDriver,
+            LogGps,
+            Hub
         ])
     ],
     controllers: [OrdersController],
-    providers: [OrdersService, FileService],
+    providers: [OrdersService, FileService, DriversService],
     exports: [OrdersService]
 })
 export class OrdersModule { } 
