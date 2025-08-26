@@ -3634,13 +3634,6 @@ export class OrdersService {
                 throw new NotFoundException('Order tidak ditemukan');
             }
 
-            const statusPickup = order.getDataValue('status_pickup');
-            const isGagalPickup = order.getDataValue('is_gagal_pickup');
-
-            if ((statusPickup && statusPickup !== 'siap pickup') || isGagalPickup === 1) {
-                throw new BadRequestException('Order tidak dalam status yang dapat ditugaskan untuk pickup');
-            }
-
             // 2. Validasi driver
             const driver = await this.userModel.findByPk(assignDriverDto.driver_id, {
                 transaction
@@ -3664,57 +3657,114 @@ export class OrdersService {
                 throw new NotFoundException('User yang melakukan penugasan tidak ditemukan');
             }
 
-            // 4. Update order
-            await this.orderModel.update(
-                {
-                    assign_driver: assignDriverDto.driver_id,
-                    pickup_by: driver.getDataValue('name'),
-                    status_pickup: 'Assigned',
-                    updatedAt: new Date()
-                },
-                {
-                    where: { id: assignDriverDto.order_id },
-                    transaction
-                }
-            );
+            // 4. Validasi status order berdasarkan task_type
+            if (assignDriverDto.task_type === 'pickup') {
+                const statusPickup = order.getDataValue('status_pickup');
+                const isGagalPickup = order.getDataValue('is_gagal_pickup');
 
-            // 5. Buat record di order_pickup_drivers
-            const OrderPickupDriver = this.orderModel.sequelize?.models.OrderPickupDriver;
-            if (OrderPickupDriver) {
-                await OrderPickupDriver.create({
-                    order_id: assignDriverDto.order_id,
-                    driver_id: assignDriverDto.driver_id,
-                    assign_date: new Date(),
-                    name: driver.getDataValue('name'),
-                    status: 0, // pending
-                    created_by: assignDriverDto.assigned_by_user_id,
-                    photo: '', // default empty string untuk field wajib
-                    notes: '', // default empty string untuk field wajib
-                    signature: '' // default empty string untuk field wajib
-                }, { transaction });
+                if ((statusPickup && statusPickup !== 'siap pickup') || isGagalPickup === 1) {
+                    throw new BadRequestException('Order tidak dalam status yang dapat ditugaskan untuk pickup');
+                }
+            } else if (assignDriverDto.task_type === 'delivery') {
+                const orderStatus = order.getDataValue('status');
+                const hubDestId = order.getDataValue('hub_dest_id');
+
+                // Validasi order sudah sampai di hub tujuan dan siap untuk delivery
+                if (orderStatus !== ORDER_STATUS.IN_TRANSIT && orderStatus !== ORDER_STATUS.OUT_FOR_DELIVERY) {
+                    throw new BadRequestException('Order belum siap untuk delivery. Status saat ini: ' + orderStatus);
+                }
             }
 
-            // 6. Catat di order histories
+            // 5. Update order berdasarkan task_type
+            if (assignDriverDto.task_type === 'pickup') {
+                await this.orderModel.update(
+                    {
+                        assign_driver: assignDriverDto.driver_id,
+                        pickup_by: driver.getDataValue('name'),
+                        status_pickup: 'Assigned',
+                        updatedAt: new Date()
+                    },
+                    {
+                        where: { id: assignDriverDto.order_id },
+                        transaction
+                    }
+                );
+            } else if (assignDriverDto.task_type === 'delivery') {
+                await this.orderModel.update(
+                    {
+                        deliver_by: assignDriverDto.driver_id,
+                        status: ORDER_STATUS.OUT_FOR_DELIVERY,
+                        updatedAt: new Date()
+                    },
+                    {
+                        where: { id: assignDriverDto.order_id },
+                        transaction
+                    }
+                );
+            }
+
+            // 6. Buat record di tabel yang sesuai berdasarkan task_type
+            if (assignDriverDto.task_type === 'pickup') {
+                // Buat record di order_pickup_drivers
+                const OrderPickupDriver = this.orderModel.sequelize?.models.OrderPickupDriver;
+                if (OrderPickupDriver) {
+                    await OrderPickupDriver.create({
+                        order_id: assignDriverDto.order_id,
+                        driver_id: assignDriverDto.driver_id,
+                        assign_date: new Date(),
+                        name: driver.getDataValue('name'),
+                        status: 0, // pending
+                        created_by: assignDriverDto.assigned_by_user_id,
+                        photo: '', // default empty string untuk field wajib
+                        notes: '', // default empty string untuk field wajib
+                        signature: '' // default empty string untuk field wajib
+                    }, { transaction });
+                }
+            } else if (assignDriverDto.task_type === 'delivery') {
+                // Buat record di order_deliver_drivers
+                const OrderDeliverDriver = this.orderModel.sequelize?.models.OrderDeliverDriver;
+                if (OrderDeliverDriver) {
+                    await OrderDeliverDriver.create({
+                        order_id: assignDriverDto.order_id,
+                        driver_id: assignDriverDto.driver_id,
+                        assign_date: new Date(),
+                        name: driver.getDataValue('name'),
+                        status: 0, // pending
+                        photo: '', // default empty string untuk field wajib
+                        notes: '', // default empty string untuk field wajib
+                        signature: '' // default empty string untuk field wajib
+                    }, { transaction });
+                }
+            }
+
+            // 7. Catat di order histories
+            const historyStatus = assignDriverDto.task_type === 'pickup'
+                ? 'Driver Assigned for Pickup'
+                : 'Driver Assigned for Delivery';
+
+            const historyRemark = `Order ditugaskan kepada ${driver.getDataValue('name')} untuk tugas ${assignDriverDto.task_type}`;
+
             await this.orderHistoryModel.create({
                 order_id: assignDriverDto.order_id,
-                status: 'Driver Assigned for Pickup',
-                remark: `Order ditugaskan kepada ${driver.getDataValue('name')}`,
+                status: historyStatus,
+                remark: historyRemark,
                 created_by: assignDriverDto.assigned_by_user_id,
                 created_at: new Date(),
                 provinsi: '', // default empty string untuk field wajib
                 kota: ''     // default empty string untuk field wajib
             }, { transaction });
 
-            // 7. Commit transaction
+            // 8. Commit transaction
             await transaction.commit();
 
             return {
-                message: 'Kurir berhasil ditugaskan',
+                message: `Kurir berhasil ditugaskan untuk ${assignDriverDto.task_type}`,
                 success: true,
                 data: {
                     order_id: assignDriverDto.order_id,
                     driver_id: assignDriverDto.driver_id,
                     driver_name: driver.getDataValue('name'),
+                    task_type: assignDriverDto.task_type,
                     assigned_at: new Date().toISOString(),
                     assigned_by: assignedByUser.getDataValue('name')
                 }
@@ -3763,7 +3813,17 @@ export class OrdersService {
         const transaction = await this.orderModel.sequelize.transaction();
 
         try {
-            // 1. Validasi order
+
+            // 1. Validasi user yang melakukan submit
+            const submittedByUser = await this.userModel.findByPk(submitReweightDto.submitted_by_user_id, {
+                transaction
+            });
+
+            if (!submittedByUser) {
+                throw new NotFoundException('User yang melakukan submit tidak ditemukan');
+            }
+
+            // 2. Validasi order
             const order = await this.orderModel.findByPk(orderId, {
                 transaction
             });
@@ -3772,12 +3832,7 @@ export class OrdersService {
                 throw new NotFoundException('Order tidak ditemukan');
             }
 
-            const reweightStatus = order.getDataValue('reweight_status');
-            if (reweightStatus !== 0) {
-                throw new BadRequestException('Order tidak dalam status reweight yang dapat di-submit');
-            }
-
-            // 2. Validasi semua pieces sudah di-reweight
+            // 3. Validasi semua pieces sudah di-reweight
             const orderPieces = await this.orderPieceModel.findAll({
                 where: { order_id: orderId },
                 transaction
@@ -3795,7 +3850,7 @@ export class OrdersService {
                 throw new BadRequestException(`Masih ada ${unreweightedPieces.length} pieces yang belum di-reweight`);
             }
 
-            // 3. Hitung total berat dan volume dari pieces yang sudah di-reweight
+            // 4. Hitung total berat dan volume dari pieces yang sudah di-reweight
             let totalBerat = 0;
             let totalVolume = 0;
             let totalBeratVolume = 0;
@@ -3817,7 +3872,7 @@ export class OrdersService {
 
             const chargeableWeight = Math.max(totalBerat, totalBeratVolume);
 
-            // 4. Update order dengan data reweight final
+            // 5. Update order dengan data reweight final
             await this.orderModel.update(
                 {
                     reweight_status: 1, // Completed/Final
@@ -3832,10 +3887,10 @@ export class OrdersService {
                 }
             );
 
-            // 5. Update order shipments dengan data terbaru
+            // 6. Update order shipments dengan data terbaru
             await this.updateOrderShipmentsFromPieces(orderId, transaction);
 
-            // 6. Auto-create invoice
+            // 7. Auto-create invoice
             let invoiceData: { invoice_no: string; invoice_id: number; total_amount: number; } | null = null;
             try {
                 invoiceData = await this.autoCreateInvoice(orderId, transaction);
@@ -3844,16 +3899,7 @@ export class OrdersService {
                 // Invoice gagal dibuat, tapi reweight tetap berhasil
             }
 
-            // 7. Validasi user yang melakukan submit
-            const submittedByUser = await this.userModel.findByPk(submitReweightDto.submitted_by_user_id, {
-                transaction
-            });
-
-            if (!submittedByUser) {
-                throw new NotFoundException('User yang melakukan submit tidak ditemukan');
-            }
-
-            // 8. Catat di order histories
+            // 9. Catat di order histories
             const remark = submitReweightDto.remark ||
                 `Reweight finalized. Total berat: ${chargeableWeight.toFixed(2)} kg, Total volume: ${totalVolume.toFixed(2)} m³`;
 
@@ -3867,7 +3913,7 @@ export class OrdersService {
                 kota: ''     // default empty string untuk field wajib
             }, { transaction });
 
-            // 9. Commit transaction
+            // 10. Commit transaction
             await transaction.commit();
 
             return {

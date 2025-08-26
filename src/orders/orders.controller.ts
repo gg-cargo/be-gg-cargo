@@ -112,13 +112,7 @@ export class OrdersController {
         return this.ordersService.getOpsOrders(query, userId);
     }
 
-    @UseGuards(JwtAuthGuard)
-    @Get('ops/drivers/available-for-pickup')
-    async getAvailableDriversForPickup(
-        @Query() query: AvailableDriversQueryDto
-    ): Promise<AvailableDriversResponseDto> {
-        return this.ordersService.getAvailableDriversForPickup(query);
-    }
+
 
     @Patch(':no_resi/cancel')
     @UseGuards(JwtAuthGuard)
@@ -135,16 +129,7 @@ export class OrdersController {
         return this.ordersService.reweightPiece(pieceId, reweightDto);
     }
 
-    @UseGuards(JwtAuthGuard)
-    @Post('ops/orders/assign-driver')
-    async assignDriverToOrder(
-        @Body() assignDriverDto: AssignDriverDto,
-        @Request() req: any
-    ): Promise<AssignDriverResponseDto> {
-        // Override assigned_by_user_id dengan user yang sedang login
-        assignDriverDto.assigned_by_user_id = req.user?.id;
-        return this.ordersService.assignDriverToOrder(assignDriverDto);
-    }
+
 
     @UseGuards(JwtAuthGuard)
     @Patch(':order_id/reweight/submit')
