@@ -7,7 +7,7 @@ import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
 import { LogGps } from '../models/log-gps.model';
 import { Order } from '../models/order.model';
 import { Hub } from '../models/hub.model';
-import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversResponseDto, AvailableDriverDto, DriverLocationDto } from './dto/available-drivers.dto';
+import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto, AvailableDriversResponseDto, AvailableDriverDto, DriverLocationDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto, DriverStatusSummaryResponseDto, DriverStatusSummaryDto, DriverWorkloadDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 
@@ -176,6 +176,20 @@ export class DriversService {
         const hubSourceId = order.getDataValue('hub_source_id');
         const hubDestId = order.getDataValue('hub_dest_id');
         return hubSourceId ?? hubDestId ?? undefined;
+    }
+
+    /**
+     * Ambil hub destination fallback dari order: prioritas hub_dest_id, lalu hub_source_id.
+     */
+    async getOrderHubDestFallback(orderId: number): Promise<number | undefined> {
+        if (!orderId) return undefined;
+        const order = await this.orderModel.findByPk(orderId, {
+            attributes: ['hub_source_id', 'hub_dest_id'],
+        });
+        if (!order) return undefined;
+        const hubSourceId = order.getDataValue('hub_source_id');
+        const hubDestId = order.getDataValue('hub_dest_id');
+        return hubDestId ?? hubSourceId ?? undefined;
     }
 
     async getDriverStatusSummary(params: DriverStatusSummaryQueryDto): Promise<DriverStatusSummaryResponseDto> {
@@ -518,6 +532,214 @@ export class DriversService {
 
         } catch (error) {
             this.logger.error(`Error in getAvailableDriversForPickup: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    /**
+     * Mendapatkan daftar kurir yang tersedia untuk delivery berdasarkan order
+     */
+    async getAvailableDriversForDeliver(
+        query: AvailableDriversForDeliverDto
+    ): Promise<AvailableDriversResponseDto> {
+        try {
+            // 1. Ambil data order untuk mendapatkan lokasi tujuan dan service center
+            const order = await this.orderModel.findByPk(query.order_id, {
+                attributes: [
+                    'id',
+                    'latlngTujuan',
+                    'svc_dest_id',
+                    'hub_dest_id',
+                    'status',
+                    'status_pickup'
+                ]
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            // Validasi status order - harus dalam status siap diantar
+            const status = order.getDataValue('status');
+            const statusPickup = order.getDataValue('status_pickup');
+
+            if (status !== 'Out for Delivery' && status !== 'In Transit') {
+                throw new BadRequestException('Order tidak dalam status yang dapat ditugaskan untuk delivery');
+            }
+
+            // 2. Parse lokasi tujuan order
+            let orderLocation: DriverLocationDto = { lat: 0, lng: 0 };
+            const latlngTujuan = order.getDataValue('latlngTujuan');
+            if (latlngTujuan) {
+                try {
+                    // Handle format string langsung "lat,lng"
+                    if (typeof latlngTujuan === 'string' && latlngTujuan.includes(',')) {
+                        const [lat, lng] = latlngTujuan.split(',').map(coord => parseFloat(coord.trim()));
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            orderLocation = { lat, lng };
+                        }
+                    } else {
+                        // Handle format JSON
+                        const latlngData = JSON.parse(latlngTujuan);
+
+                        // Handle format array of objects dengan field latlng
+                        if (Array.isArray(latlngData) && latlngData.length > 0) {
+                            // Ambil koordinat terakhir (lokasi tujuan)
+                            const lastLocation = latlngData[latlngData.length - 1];
+                            if (lastLocation.latlng) {
+                                const [lat, lng] = lastLocation.latlng.split(',').map(coord => parseFloat(coord.trim()));
+                                if (!isNaN(lat) && !isNaN(lng)) {
+                                    orderLocation = { lat, lng };
+                                }
+                            }
+                        } else if (latlngData.lat && latlngData.lng) {
+                            // Handle format object langsung {lat: x, lng: y}
+                            orderLocation = { lat: latlngData.lat, lng: latlngData.lng };
+                        }
+                    }
+                } catch (error) {
+                    this.logger.warn(`Invalid latlng format for order ${query.order_id}: ${latlngTujuan}`);
+                }
+            }
+
+            const svcDestId = order.getDataValue('svc_dest_id');
+            const hubDestId = order.getDataValue('hub_dest_id');
+
+            // 3. Cari kurir yang memenuhi kriteria (level 4 = transporter)
+            const driverWhereClause: any = {
+                level: { [Op.eq]: 4 }, // Transporter level
+                aktif: 1,
+                status_app: 1,
+                freeze_saldo: 0,
+                freeze_gps: 0
+            };
+
+            // Filter berdasarkan service center atau hub tujuan
+            if (query.hub_id) {
+                driverWhereClause.hub_id = query.hub_id;
+            } else if (svcDestId) {
+                driverWhereClause.service_center_id = svcDestId;
+            } else if (hubDestId) {
+                driverWhereClause.hub_id = hubDestId;
+            }
+
+            const drivers = await this.userModel.findAll({
+                where: driverWhereClause,
+                attributes: [
+                    'id',
+                    'name',
+                    'phone',
+                    'latlng',
+                    'service_center_id',
+                    'hub_id'
+                ]
+            });
+
+            // 4. Filter dan hitung beban kerja kurir
+            const availableDrivers: AvailableDriverDto[] = [];
+
+            for (const driver of drivers) {
+                const driverId = driver.getDataValue('id');
+
+                // Hitung tugas delivery yang sedang berjalan (status pending = 0)
+                const currentDeliveryTasks = await this.orderDeliverDriverModel.count({
+                    where: {
+                        driver_id: driverId,
+                        status: 0 // Status pending
+                    }
+                });
+
+                // Hitung tugas pickup yang masih berjalan
+                const currentPickupTasks = await this.orderPickupDriverModel.count({
+                    where: {
+                        driver_id: driverId,
+                        status: 0 // Status pending
+                    }
+                });
+
+                const totalCurrentTasks = currentPickupTasks + currentDeliveryTasks;
+
+                // Kurir dianggap tersedia jika tugas < 3
+                if (totalCurrentTasks < 3) {
+                    // Parse lokasi kurir
+                    let driverLocation: DriverLocationDto = { lat: 0, lng: 0 };
+                    const driverLatlng = driver.getDataValue('latlng');
+                    if (driverLatlng) {
+                        try {
+                            // Handle format string langsung "lat,lng"
+                            if (typeof driverLatlng === 'string' && driverLatlng.includes(',')) {
+                                const [lat, lng] = driverLatlng.split(',').map(coord => parseFloat(coord.trim()));
+                                if (!isNaN(lat) && !isNaN(lng)) {
+                                    driverLocation = { lat, lng };
+                                }
+                            } else {
+                                // Handle format JSON
+                                const latlngData = JSON.parse(driverLatlng);
+
+                                // Handle format array of objects dengan field latlng
+                                if (Array.isArray(latlngData) && latlngData.length > 0) {
+                                    // Ambil koordinat terakhir (lokasi saat ini)
+                                    const lastLocation = latlngData[latlngData.length - 1];
+                                    if (lastLocation.latlng) {
+                                        const [lat, lng] = lastLocation.latlng.split(',').map(coord => parseFloat(coord.trim()));
+                                        if (!isNaN(lat) && !isNaN(lng)) {
+                                            driverLocation = { lat, lng };
+                                        }
+                                    }
+                                } else if (latlngData.lat && latlngData.lng) {
+                                    // Handle format object langsung {lat: x, lng: y}
+                                    driverLocation = { lat: latlngData.lat, lng: latlngData.lng };
+                                }
+                            }
+                        } catch (error) {
+                            this.logger.warn(`Invalid latlng format for driver ${driverId}: ${driverLatlng}`);
+                        }
+                    }
+
+                    // Hitung jarak dari order (simplified calculation)
+                    let distance = 0;
+                    if (orderLocation.lat && orderLocation.lng && driverLocation.lat && driverLocation.lng) {
+                        distance = this.calculateDistance(
+                            orderLocation.lat, orderLocation.lng,
+                            driverLocation.lat, driverLocation.lng
+                        );
+                    }
+
+                    availableDrivers.push({
+                        id: driverId,
+                        name: driver.getDataValue('name'),
+                        phone: driver.getDataValue('phone'),
+                        current_location: driverLocation,
+                        service_center_id: driver.getDataValue('service_center_id'),
+                        hub_id: driver.getDataValue('hub_id'),
+                        current_tasks: totalCurrentTasks,
+                        distance_from_order: distance,
+                        is_available: true
+                    });
+                }
+            }
+
+            // 5. Sort berdasarkan jarak terdekat dan beban kerja
+            availableDrivers.sort((a, b) => {
+                if (a.current_tasks !== b.current_tasks) {
+                    return a.current_tasks - b.current_tasks; // Prioritas beban kerja rendah
+                }
+                return a.distance_from_order - b.distance_from_order; // Kemudian jarak terdekat
+            });
+
+            return {
+                message: `Ditemukan ${availableDrivers.length} kurir transporter yang tersedia untuk delivery`,
+                success: true,
+                data: {
+                    order_id: query.order_id,
+                    order_location: orderLocation,
+                    available_drivers: availableDrivers,
+                    total_available: availableDrivers.length
+                }
+            };
+
+        } catch (error) {
+            this.logger.error(`Error in getAvailableDriversForDeliver: ${error.message}`, error.stack);
             throw error;
         }
     }

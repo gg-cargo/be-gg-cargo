@@ -48,6 +48,17 @@ export class AvailableDriversForPickupDto {
     hub_id?: number;
 }
 
+export class AvailableDriversForDeliverDto {
+    @Transform(({ value }) => (value !== undefined ? parseInt(value) : value))
+    @IsNumber({}, { message: 'Order ID tidak boleh kosong' })
+    order_id: number;
+
+    @IsOptional()
+    @Transform(({ value }) => (value !== undefined ? parseInt(value) : value))
+    @IsNumber({}, { message: 'Hub ID harus berupa angka' })
+    hub_id?: number;
+}
+
 export class DriverLocationDto {
     lat: number;
     lng: number;
