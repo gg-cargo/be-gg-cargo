@@ -9,10 +9,12 @@ import { User } from '../models/user.model';
 import { DumpOtp } from '../models/dump-otp.model';
 import { PasswordReset } from '../models/password-reset.model';
 import { Level } from '../models/level.model';
+import { Hub } from '../models/hub.model';
+import { ServiceCenter } from '../models/service-center.model';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([User, DumpOtp, PasswordReset, Level]),
+    SequelizeModule.forFeature([User, DumpOtp, PasswordReset, Level, Hub, ServiceCenter]),
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'your-secret-key',
@@ -23,4 +25,4 @@ import { Level } from '../models/level.model';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })
-export class AuthModule {} 
+export class AuthModule { } 

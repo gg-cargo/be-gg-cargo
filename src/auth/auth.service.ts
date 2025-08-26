@@ -6,6 +6,8 @@ import { User } from '../models/user.model';
 import { DumpOtp } from '../models/dump-otp.model';
 import { PasswordReset } from '../models/password-reset.model';
 import { Level } from '../models/level.model';
+import { Hub } from '../models/hub.model';
+import { ServiceCenter } from '../models/service-center.model';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -37,6 +39,10 @@ export class AuthService {
     private passwordResetModel: typeof PasswordReset,
     @InjectModel(Level)
     private levelModel: typeof Level,
+    @InjectModel(Hub)
+    private hubModel: typeof Hub,
+    @InjectModel(ServiceCenter)
+    private serviceCenterModel: typeof ServiceCenter,
     private jwtService: JwtService,
   ) { }
 
@@ -136,7 +142,12 @@ export class AuthService {
             { phone: email_or_phone },
           ],
         },
-        include: [{ model: Level, as: 'levelData' }],
+        include: [
+          { model: Level, as: 'levelData' },
+          { model: Hub, as: 'hub' },
+          { model: ServiceCenter, as: 'serviceCenter' },
+        ],
+        raw: true,
       });
 
       if (!user) {
@@ -144,32 +155,32 @@ export class AuthService {
       }
 
       // Validate password input
-      if (!password || !user.getDataValue('password')) {
+      if (!password || !user.password) {
         throw new InvalidCredentialsException();
       }
 
       // Check password
-      const isPasswordValid = await bcrypt.compare(password, user.getDataValue('password'));
+      const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) {
         throw new InvalidCredentialsException();
       }
 
       // Check if user is active
-      if (user.getDataValue('aktif') !== 1) {
+      if (user.aktif !== 1) {
         throw new AccountInactiveException();
       }
 
       // Check if user is verified
-      if (!user.getDataValue('phone_verify_at')) {
+      if (!user.phone_verify_at) {
         throw new UnverifiedAccountException();
       }
 
       // Generate tokens
       const payload = {
-        sub: user.getDataValue('id'),
-        email: user.getDataValue('email'),
-        phone: user.getDataValue('phone'),
-        level: user.getDataValue('level'),
+        sub: user.id,
+        email: user.email,
+        phone: user.phone,
+        level: user.level,
       };
 
       const accessToken = this.generateToken(payload);
@@ -179,24 +190,43 @@ export class AuthService {
         rememberToken = this.generateRememberToken();
         await this.userModel.update(
           { remember_token: rememberToken },
-          { where: { id: user.getDataValue('id') } }
+          { where: { id: user.id } }
         );
       }
 
-      this.logger.log(`User logged in successfully: ${user.getDataValue('id')}`);
+      this.logger.log(`User logged in successfully: ${user.id}`);
+
+      // Ambil informasi area (hub atau service center)
+      let area: any = null;
+      if (user.hub_id && user.hub_id !== 0) {
+        area = {
+          type: 'hub',
+          id: user['hub.id'],
+          nama: user['hub.nama'],
+          kode: user['hub.kode'],
+        };
+      } else if (user.service_center_id && user.service_center_id !== 0) {
+        area = {
+          type: 'service_center',
+          id: user['serviceCenter.id'],
+          nama: user['serviceCenter.nama'],
+          kode: user['serviceCenter.kode'],
+        };
+      }
 
       return {
         success: true,
         message: 'Login berhasil',
         user: {
-          id: user.getDataValue('id'),
-          name: user.getDataValue('name'),
-          email: user.getDataValue('email'),
-          phone: user.getDataValue('phone'),
-          level: user.getDataValue('level'),
-          level_name: user.levelData?.getDataValue('nama'),
-          email_verified_at: user.getDataValue('email_verified_at'),
-          phone_verify_at: user.getDataValue('phone_verify_at'),
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          level: user.level,
+          level_name: user.levelData?.nama,
+          email_verified_at: user.email_verified_at,
+          phone_verify_at: user.phone_verify_at,
+          area,
         },
         access_token: accessToken,
         remember_token: rememberToken,
