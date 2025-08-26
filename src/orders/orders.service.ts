@@ -137,36 +137,28 @@ export class OrdersService {
             const normalizedProvince = (provinsi || '').toLowerCase();
             const normalizedAddress = (alamat || '').toLowerCase();
 
-            // Cari berdasarkan field alamat yang mengandung kota terlebih dahulu
-            const byCity = normalizedCity
-                ? await this.hubModel.findOne({
-                    where: {
-                        alamat: { [Op.like]: `%${normalizedCity}%` },
-                    },
-                    attributes: ['id'],
-                })
-                : null;
-            if (byCity) return byCity.id;
+            // Pecah kota menjadi token kata: contoh "jakarta selatan" => ["jakarta", "selatan"]
+            const cityTokens = normalizedCity
+                .split(/[^a-z0-9]+/g)
+                .map(t => t.trim())
+                .filter(t => t.length > 0);
 
-            // Jika tidak ada, coba berdasarkan provinsi
-            const byProvince = normalizedProvince
-                ? await this.hubModel.findOne({
-                    where: {
-                        alamat: { [Op.like]: `%${normalizedProvince}%` },
-                    },
-                    attributes: ['id'],
-                })
-                : null;
-            if (byProvince) return byProvince.id;
+            // 1) Cari berdasarkan kota (utuh atau token) di kolom alamat atau lokasi
+            if (normalizedCity) {
+                const cityWhereOr: any[] = [
+                    { alamat: { [Op.like]: `%${normalizedCity}%` } },
+                    { lokasi: { [Op.like]: `%${normalizedCity}%` } },
+                ];
+                for (const token of cityTokens) {
+                    cityWhereOr.push({ alamat: { [Op.like]: `%${token}%` } });
+                    cityWhereOr.push({ lokasi: { [Op.like]: `%${token}%` } });
+                }
 
-            // Coba cocokkan potongan alamat umum
-            const addressToken = normalizedAddress.split(',')[0]?.trim();
-            if (addressToken && addressToken.length >= 3) {
-                const byAddress = await this.hubModel.findOne({
-                    where: { alamat: { [Op.like]: `%${addressToken}%` } },
+                const byCity = await this.hubModel.findOne({
+                    where: { [Op.or]: cityWhereOr },
                     attributes: ['id'],
                 });
-                if (byAddress) return byAddress.id;
+                if (byCity) return byCity.id;
             }
 
             // Default hub id 1 jika tidak ditemukan
