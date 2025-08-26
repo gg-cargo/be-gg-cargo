@@ -284,10 +284,14 @@ export class DriversService {
             driversWithSummary.push(driverSummary);
         }
 
+        // Hitung driver statistics
+        const driverStatistics = await this.calculateDriverStatisticsForHub(hub_id);
+
         return {
             status: 'success',
             date: date,
             hub_id: hub_id,
+            driver_statistics: driverStatistics,
             drivers: driversWithSummary
         };
     }
@@ -671,6 +675,224 @@ export class DriversService {
             await transaction.rollback();
             this.logger.error(`Error in assignDriverToOrder: ${error.message}`, error.stack);
             throw error;
+        }
+    }
+
+    /**
+     * Menghitung driver statistics untuk hub tertentu
+     */
+    async calculateDriverStatisticsForHub(hub_id?: number): Promise<{
+        kurir_available: number;
+        total_kurir: number;
+        dalam_pengiriman: number;
+        dalam_penjemputan: number;
+    }> {
+        try {
+            // Buat filter area untuk driver berdasarkan hub_id
+            let driverAreaFilter = {};
+            if (hub_id) {
+                driverAreaFilter = {
+                    hub_id: hub_id
+                };
+            }
+
+            // 1. Total kurir (driver aktif dalam area)
+            const totalKurir = await this.userModel.count({
+                where: {
+                    [Op.and]: [
+                        driverAreaFilter,
+                        { level: 8 }, // Level driver/kurir
+                        { aktif: 1 }  // Driver aktif
+                    ]
+                }
+            });
+
+            // 2. Kurir available (driver online dalam 30 menit terakhir)
+            const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+            const kurirAvailable = await this.userModel.count({
+                where: {
+                    [Op.and]: [
+                        driverAreaFilter,
+                        { level: 8 },
+                        { aktif: 1 },
+                        { last_update_gps: { [Op.gte]: thirtyMinutesAgo } }
+                    ]
+                }
+            });
+
+            // 3. Driver dalam penjemputan (mempunyai tugas pickup aktif)
+            // Ambil semua driver dalam area, lalu hitung yang mempunyai tugas pickup aktif
+            const driversInArea = await this.userModel.findAll({
+                where: {
+                    [Op.and]: [
+                        driverAreaFilter,
+                        { level: 8 },
+                        { aktif: 1 }
+                    ]
+                },
+                attributes: ['id']
+            });
+
+            let dalamPenjemputan = 0;
+            let dalamPengiriman = 0;
+
+            for (const driver of driversInArea) {
+                const driverId = driver.getDataValue('id');
+
+                // Cek apakah driver mempunyai tugas pickup aktif
+                const pickupTasks = await this.orderModel.count({
+                    where: {
+                        assign_driver: driverId,
+                        status_pickup: { [Op.in]: ['Assigned', 'Picked Up'] }
+                    }
+                });
+
+                if (pickupTasks > 0) {
+                    dalamPenjemputan++;
+                }
+
+                // Cek apakah driver mempunyai tugas delivery aktif
+                const deliveryTasks = await this.orderModel.count({
+                    where: {
+                        deliver_by: driverId.toString(),
+                        status: { [Op.in]: ['In Transit', 'Out for Delivery'] }
+                    }
+                });
+
+                if (deliveryTasks > 0) {
+                    dalamPengiriman++;
+                }
+            }
+
+            return {
+                kurir_available: kurirAvailable,
+                total_kurir: totalKurir,
+                dalam_pengiriman: dalamPengiriman,
+                dalam_penjemputan: dalamPenjemputan
+            };
+
+        } catch (error) {
+            this.logger.error(`Error calculating driver statistics for hub: ${error.message}`, error.stack);
+            // Return default values jika ada error
+            return {
+                kurir_available: 0,
+                total_kurir: 0,
+                dalam_pengiriman: 0,
+                dalam_penjemputan: 0
+            };
+        }
+    }
+
+    /**
+     * Menghitung driver statistics untuk dashboard OPS (untuk orders service)
+     */
+    async calculateDriverStatistics(areaFilter: any): Promise<{
+        kurir_available: number;
+        total_kurir: number;
+        dalam_pengiriman: number;
+        dalam_penjemputan: number;
+    }> {
+        try {
+            // Buat filter area untuk driver berdasarkan hub_id
+            let driverAreaFilter = {};
+            if (areaFilter[Op.or]) {
+                const hubIds: number[] = [];
+                for (const condition of areaFilter[Op.or] as any[]) {
+                    if (condition.hub_source_id) hubIds.push(condition.hub_source_id);
+                    if (condition.hub_dest_id) hubIds.push(condition.hub_dest_id);
+                    if (condition.current_hub) hubIds.push(condition.current_hub);
+                }
+                if (hubIds.length > 0) {
+                    driverAreaFilter = {
+                        hub_id: { [Op.in]: hubIds }
+                    };
+                }
+            }
+
+            // 1. Total kurir (driver aktif dalam area)
+            const totalKurir = await this.userModel.count({
+                where: {
+                    [Op.and]: [
+                        driverAreaFilter,
+                        { level: 8 }, // Level driver/kurir
+                        { aktif: 1 }  // Driver aktif
+                    ]
+                }
+            });
+
+            // 2. Kurir available (driver online dalam 30 menit terakhir)
+            const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+            const kurirAvailable = await this.userModel.count({
+                where: {
+                    [Op.and]: [
+                        driverAreaFilter,
+                        { level: 8 },
+                        { aktif: 1 },
+                        { last_update_gps: { [Op.gte]: thirtyMinutesAgo } }
+                    ]
+                }
+            });
+
+            // 3. Driver dalam penjemputan (mempunyai tugas pickup aktif)
+            // Ambil semua driver dalam area, lalu hitung yang mempunyai tugas pickup aktif
+            const driversInArea = await this.userModel.findAll({
+                where: {
+                    [Op.and]: [
+                        driverAreaFilter,
+                        { level: 8 },
+                        { aktif: 1 }
+                    ]
+                },
+                attributes: ['id']
+            });
+
+            let dalamPenjemputan = 0;
+            let dalamPengiriman = 0;
+
+            for (const driver of driversInArea) {
+                const driverId = driver.getDataValue('id');
+
+                // Cek apakah driver mempunyai tugas pickup aktif
+                const pickupTasks = await this.orderModel.count({
+                    where: {
+                        assign_driver: driverId,
+                        status_pickup: { [Op.in]: ['Assigned', 'Picked Up'] }
+                    }
+                });
+
+                if (pickupTasks > 0) {
+                    dalamPenjemputan++;
+                }
+
+                // Cek apakah driver mempunyai tugas delivery aktif
+                const deliveryTasks = await this.orderModel.count({
+                    where: {
+                        deliver_by: driverId.toString(),
+                        status: { [Op.in]: ['In Transit', 'Out for Delivery'] }
+                    }
+                });
+
+                if (deliveryTasks > 0) {
+                    dalamPengiriman++;
+                }
+            }
+
+            return {
+                kurir_available: kurirAvailable,
+                total_kurir: totalKurir,
+                dalam_pengiriman: dalamPengiriman,
+                dalam_penjemputan: dalamPenjemputan
+            };
+
+        } catch (error) {
+            this.logger.error(`Error calculating driver statistics: ${error.message}`, error.stack);
+            // Return default values jika ada error
+            return {
+                kurir_available: 0,
+                total_kurir: 0,
+                dalam_pengiriman: 0,
+                dalam_penjemputan: 0
+            };
         }
     }
 } 

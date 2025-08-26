@@ -33,9 +33,17 @@ export class DriverStatusSummaryDto {
     area_kerja: string;
 }
 
+export class DriverStatisticsDto {
+    kurir_available: number;
+    total_kurir: number;
+    dalam_pengiriman: number;
+    dalam_penjemputan: number;
+}
+
 export class DriverStatusSummaryResponseDto {
     status: string;
     date: string;
     hub_id?: number;
+    driver_statistics: DriverStatisticsDto;
     drivers: DriverStatusSummaryDto[];
 }
