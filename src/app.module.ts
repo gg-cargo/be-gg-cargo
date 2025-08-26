@@ -14,11 +14,15 @@ import { BanksModule } from './banks/banks.module';
 import { DriversModule } from './drivers/drivers.module';
 import { FileModule } from './file/file.module';
 import { HealthModule } from './health/health.module';
+import { HubsModule } from './hubs/hubs.module';
 import { UsersAddressModule } from './users-address/users-address.module';
 import { PaymentsModule } from './payments/payments.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { databaseConfig } from './config/database';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { VehiclesModule } from './vehicles/vehicles.module';
+import { DeliveryNotesModule } from './delivery-notes/delivery-notes.module';
+import { TransportersModule } from './transporters/transporters.module';
 
 @Module({
   imports: [
@@ -37,10 +41,14 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     DriversModule,
     FileModule,
     HealthModule,
+    HubsModule,
     UsersAddressModule,
     PaymentsModule,
     InvoicesModule,
     WhatsappModule,
+    VehiclesModule,
+    DeliveryNotesModule,
+    TransportersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
