@@ -4,6 +4,9 @@ import { DriversController } from './drivers.controller';
 import { DriversService } from './drivers.service';
 import { User } from '../models/user.model';
 import { OrderPickupDriver } from '../models/order-pickup-driver.model';
+import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
+import { Order } from '../models/order.model';
+import { Hub } from '../models/hub.model';
 import { LogGps } from '../models/log-gps.model';
 
 @Module({
@@ -11,7 +14,10 @@ import { LogGps } from '../models/log-gps.model';
         SequelizeModule.forFeature([
             User,
             OrderPickupDriver,
+            OrderDeliverDriver,
+            Order,
             LogGps,
+            Hub,
         ]),
     ],
     controllers: [DriversController],
