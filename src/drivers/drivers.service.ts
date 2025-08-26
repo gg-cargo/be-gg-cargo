@@ -164,6 +164,20 @@ export class DriversService {
         };
     }
 
+    /**
+     * Ambil hub fallback dari order: prioritas hub_source_id, lalu hub_dest_id.
+     */
+    async getOrderHubFallback(orderId: number): Promise<number | undefined> {
+        if (!orderId) return undefined;
+        const order = await this.orderModel.findByPk(orderId, {
+            attributes: ['hub_source_id', 'hub_dest_id'],
+        });
+        if (!order) return undefined;
+        const hubSourceId = order.getDataValue('hub_source_id');
+        const hubDestId = order.getDataValue('hub_dest_id');
+        return hubSourceId ?? hubDestId ?? undefined;
+    }
+
     async getDriverStatusSummary(params: DriverStatusSummaryQueryDto): Promise<DriverStatusSummaryResponseDto> {
         const { hub_id, date = new Date().toISOString().split('T')[0], status } = params;
 

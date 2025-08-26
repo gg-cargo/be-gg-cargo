@@ -24,6 +24,15 @@ export class DriversController {
     @UseGuards(JwtAuthGuard)
     @Get('available-for-pickup')
     async getAvailableDriversForPickup(@Query() query: AvailableDriversForPickupDto) {
+        // Fallback hub_id jika tidak dikirim: ambil dari order.hub_source_id atau 1
+        if (!query.hub_id) {
+            try {
+                const fallbackHubId = await this.driversService.getOrderHubFallback(query.order_id);
+                query.hub_id = fallbackHubId ?? 1;
+            } catch (_) {
+                query.hub_id = 1;
+            }
+        }
         return this.driversService.getAvailableDriversForPickup(query);
     }
 
