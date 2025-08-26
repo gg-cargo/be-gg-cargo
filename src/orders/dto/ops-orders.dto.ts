@@ -46,6 +46,7 @@ export class OrderOpsDto {
     status: string;
     layanan: string;
     created_at: string;
+    no_delivery_note?: string;
 }
 
 export class PaginationDto {

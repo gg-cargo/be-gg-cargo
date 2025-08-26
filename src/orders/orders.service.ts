@@ -3292,7 +3292,7 @@ export class OrdersService {
                         statusFilter = {
                             [Op.and]: [
                                 { reweight_status: 1 },
-                                { status: { [Op.notIn]: ['In Transit', 'Delivered'] } }
+                                { status: { [Op.notIn]: ['In Transit', 'Delivered', 'Out for Delivery'] } }
                             ]
                         };
                         break;
@@ -3431,7 +3431,7 @@ export class OrdersService {
                         statusOps = 'order jemput';
                     } else if (reweightStatus === 0 && statusPickup === 'Assigned') {
                         statusOps = 'reweight';
-                    } else if (reweightStatus === 1 && status !== 'In Transit' && status !== 'Delivered') {
+                    } else if (reweightStatus === 1 && status !== 'In Transit' && status !== 'Delivered' && status !== 'Out for Delivery') {
                         statusOps = 'menunggu pengiriman';
                     } else if (status === 'In Transit') {
                         statusOps = 'dalam pengiriman';
@@ -3441,9 +3441,19 @@ export class OrdersService {
                         statusOps = 'completed';
                     }
 
+                    // Cari delivery note untuk order ini
+                    const orderId = order.getDataValue('id');
+                    const deliveryNote = await this.orderDeliveryNoteModel.findOne({
+                        where: {
+                            no_tracking: order.getDataValue('no_tracking')
+                        },
+                        attributes: ['no_delivery_note'],
+                        raw: true
+                    });
+
                     return {
                         no: offset + index + 1,
-                        order_id: order.getDataValue('id'),
+                        order_id: orderId,
                         no_resi: order.getDataValue('no_tracking'),
                         customer: {
                             nama: order.getDataValue('nama_pengirim'),
@@ -3457,7 +3467,8 @@ export class OrdersService {
                         jam: jam,
                         status: statusOps,
                         layanan: order.getDataValue('layanan'),
-                        created_at: order.getDataValue('created_at')
+                        created_at: order.getDataValue('created_at'),
+                        no_delivery_note: deliveryNote?.no_delivery_note || undefined
                     };
                 })
             );
@@ -3961,7 +3972,7 @@ export class OrdersService {
                 {
                     reweight_status: 1, // Completed/Final
                     total_berat: chargeableWeight,
-                    status: ORDER_STATUS.OUT_FOR_DELIVERY,
+                    status: ORDER_STATUS.PICKED_UP,
                     invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH,
                     updatedAt: new Date()
                 },
