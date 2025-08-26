@@ -43,6 +43,7 @@ import { ReweightCorrectionRequest } from '../models/reweight-correction-request
 import { OrderDeliveryNote } from '../models/order-delivery-note.model';
 import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
+import { Hub } from '../models/hub.model';
 
 @Injectable()
 export class OrdersService {
@@ -79,6 +80,8 @@ export class OrdersService {
         private readonly reweightCorrectionRequestModel: typeof ReweightCorrectionRequest,
         @InjectModel(OrderDeliveryNote)
         private readonly orderDeliveryNoteModel: typeof OrderDeliveryNote,
+        @InjectModel(Hub)
+        private readonly hubModel: typeof Hub,
         private readonly fileService: FileService,
         private readonly driversService: DriversService,
     ) { }
@@ -117,6 +120,61 @@ export class OrdersService {
         }
         // Note: FileService tidak menggunakan transaction, jadi kita tidak bisa rollback file upload
         // Jika ada error setelah file upload, file akan tetap tersimpan di storage
+    }
+
+    /**
+     * Cari hub yang cocok berdasarkan provinsi/kota/alamat.
+     * Strategi sederhana: cocokan nama kota terlebih dahulu, jika tidak ketemu gunakan provinsi,
+     * jika masih tidak ketemu, fallback ke hub id 1.
+     */
+    private async findHubIdForAddress(
+        provinsi?: string,
+        kota?: string,
+        alamat?: string,
+    ): Promise<number> {
+        try {
+            const normalizedCity = (kota || '').toLowerCase();
+            const normalizedProvince = (provinsi || '').toLowerCase();
+            const normalizedAddress = (alamat || '').toLowerCase();
+
+            // Cari berdasarkan field alamat yang mengandung kota terlebih dahulu
+            const byCity = normalizedCity
+                ? await this.hubModel.findOne({
+                    where: {
+                        alamat: { [Op.like]: `%${normalizedCity}%` },
+                    },
+                    attributes: ['id'],
+                })
+                : null;
+            if (byCity) return byCity.id;
+
+            // Jika tidak ada, coba berdasarkan provinsi
+            const byProvince = normalizedProvince
+                ? await this.hubModel.findOne({
+                    where: {
+                        alamat: { [Op.like]: `%${normalizedProvince}%` },
+                    },
+                    attributes: ['id'],
+                })
+                : null;
+            if (byProvince) return byProvince.id;
+
+            // Coba cocokkan potongan alamat umum
+            const addressToken = normalizedAddress.split(',')[0]?.trim();
+            if (addressToken && addressToken.length >= 3) {
+                const byAddress = await this.hubModel.findOne({
+                    where: { alamat: { [Op.like]: `%${addressToken}%` } },
+                    attributes: ['id'],
+                });
+                if (byAddress) return byAddress.id;
+            }
+
+            // Default hub id 1 jika tidak ditemukan
+            return 1;
+        } catch (err) {
+            // Jika terjadi error, fallback default hub 1
+            return 1;
+        }
     }
 
     /**
@@ -568,6 +626,18 @@ export class OrdersService {
         // Hitung total koli, berat, volume, dan berat volume
         const shipmentData = this.calculateShipmentData(createOrderDto.pieces);
 
+        // Tentukan hub source/dest berdasarkan alamat
+        const hubSourceId = await this.findHubIdForAddress(
+            createOrderDto.provinsi_pengirim,
+            createOrderDto.kota_pengirim,
+            createOrderDto.alamat_pengirim,
+        );
+        const hubDestId = await this.findHubIdForAddress(
+            createOrderDto.provinsi_penerima,
+            createOrderDto.kota_penerima,
+            createOrderDto.alamat_penerima,
+        );
+
         // Mulai transaction
         const transaction = await this.orderModel.sequelize!.transaction();
 
@@ -626,6 +696,8 @@ export class OrdersService {
                 status: ORDER_STATUS.DRAFT,
                 created_by: userId,
                 order_by: userId,
+                hub_source_id: hubSourceId,
+                hub_dest_id: hubDestId,
             }, { transaction });
 
             // 2. Simpan ke tabel order_shipments dan order_pieces secara batch
@@ -725,9 +797,9 @@ export class OrdersService {
                 is_gagal_pickup: 0,
                 order_by: userId,
                 svc_source_id: 0,
-                hub_source_id: 0,
+                hub_source_id: hubSourceId,
                 svc_dest_id: 0,
-                hub_dest_id: 0,
+                hub_dest_id: hubDestId,
                 jumlah_koli: shipmentData.totalKoli || 0,
                 total_price: 0,
             }, { transaction });
