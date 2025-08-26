@@ -61,6 +61,62 @@ export async function generateResiPDF(data: any): Promise<string> {
         return d.toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
     };
 
+    // Helper function untuk memotong text jika terlalu panjang
+    const truncateText = (text: string, maxLength: number = 50): string => {
+        if (!text) return '-';
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + '...';
+    };
+
+    // Helper function untuk membuat text dengan wrapping yang lebih baik
+    const createWrappedText = (text: string, maxLength: number = 60): any => {
+        if (!text) return { text: '-', fontSize: 10 };
+
+        // Untuk alamat yang sangat panjang, gunakan font size lebih kecil
+        if (text.length > 100) {
+            return {
+                text: text,
+                fontSize: 9,
+                lineHeight: 1.3,
+                margin: [0, 0, 0, 2]
+            };
+        }
+
+        // Untuk text panjang lainnya
+        if (text.length > 50) {
+            return {
+                text: text,
+                fontSize: 9,
+                lineHeight: 1.2,
+                margin: [0, 0, 0, 2]
+            };
+        }
+
+        // Untuk text normal
+        return {
+            text: text,
+            fontSize: 10,
+            lineHeight: 1.2,
+            margin: [0, 0, 0, 2]
+        };
+    };
+
+    // Helper function untuk memotong text jika benar-benar terlalu panjang
+    const truncateTextForPDF = (text: string, maxLength: number = 80): string => {
+        if (!text) return '-';
+        if (text.length <= maxLength) return text;
+
+        // Cari spasi terakhir sebelum maxLength
+        const truncated = text.substring(0, maxLength);
+        const lastSpace = truncated.lastIndexOf(' ');
+
+        if (lastSpace > maxLength * 0.7) {
+            return text.substring(0, lastSpace) + '...';
+        } else {
+            return truncated + '...';
+        }
+    };
+
     // Generate barcode base64
     const barcodeBase64 = await generateBarcodeBase64(data.no_tracking || '-');
     // Get logo base64
@@ -121,19 +177,19 @@ export async function generateResiPDF(data: any): Promise<string> {
                     {
                         width: '50%',
                         stack: [
-                            { text: 'PENGIRIM', style: 'sectionTitle' },
+                            { text: 'Pengirim', style: 'sectionTitle' },
                             {
                                 table: {
-                                    widths: [90, 5, '*'],
+                                    widths: [80, 5, '*'],
                                     body: [
-                                        ['Nama', ':', data.pengirim?.nama || '-'],
-                                        ['Alamat', ':', data.pengirim?.alamat || '-'],
-                                        ['Provinsi', ':', data.pengirim?.provinsi || '-'],
-                                        ['Kota', ':', data.pengirim?.kota || '-'],
-                                        ['Kecamatan', ':', data.pengirim?.kecamatan || '-'],
-                                        ['Kelurahan', ':', data.pengirim?.kelurahan || '-'],
-                                        ['Kode Pos', ':', data.pengirim?.kodepos || '-'],
-                                        ['No. Telp', ':', data.pengirim?.telepon || '-'],
+                                        ['Nama', ':', createWrappedText(data.pengirim?.nama || '-', 40)],
+                                        ['Alamat', ':', createWrappedText(truncateTextForPDF(data.pengirim?.alamat || '-', 120), 50)],
+                                        ['Provinsi', ':', createWrappedText(data.pengirim?.provinsi || '-', 40)],
+                                        ['Kota', ':', createWrappedText(data.pengirim?.kota || '-', 40)],
+                                        ['Kecamatan', ':', createWrappedText(data.pengirim?.kecamatan || '-', 40)],
+                                        ['Kelurahan', ':', createWrappedText(data.pengirim?.kelurahan || '-', 40)],
+                                        ['Kode Pos', ':', createWrappedText(data.pengirim?.kodepos || '-', 40)],
+                                        ['No. Telp', ':', createWrappedText(data.pengirim?.telepon || '-', 40)],
                                     ]
                                 },
                                 layout: 'noBorders',
@@ -144,19 +200,19 @@ export async function generateResiPDF(data: any): Promise<string> {
                     {
                         width: '50%',
                         stack: [
-                            { text: 'PENERIMA', style: 'sectionTitle' },
+                            { text: 'Penerima', style: 'sectionTitle' },
                             {
                                 table: {
-                                    widths: [90, 5, '*'],
+                                    widths: [80, 5, '*'],
                                     body: [
-                                        ['Nama', ':', data.penerima?.nama || '-'],
-                                        ['Alamat', ':', data.penerima?.alamat || '-'],
-                                        ['Provinsi', ':', data.penerima?.provinsi || '-'],
-                                        ['Kota', ':', data.penerima?.kota || '-'],
-                                        ['Kecamatan', ':', data.penerima?.kecamatan || '-'],
-                                        ['Kelurahan', ':', data.penerima?.kelurahan || '-'],
-                                        ['Kode Pos', ':', data.penerima?.kodepos || '-'],
-                                        ['No. Telp', ':', data.penerima?.telepon || '-'],
+                                        ['Nama', ':', createWrappedText(data.penerima?.nama || '-', 40)],
+                                        ['Alamat', ':', createWrappedText(truncateTextForPDF(data.penerima?.alamat || '-', 120), 50)],
+                                        ['Provinsi', ':', createWrappedText(data.penerima?.provinsi || '-', 40)],
+                                        ['Kota', ':', createWrappedText(data.penerima?.kota || '-', 40)],
+                                        ['Kecamatan', ':', createWrappedText(data.penerima?.kecamatan || '-', 40)],
+                                        ['Kelurahan', ':', createWrappedText(data.penerima?.kelurahan || '-', 40)],
+                                        ['Kode Pos', ':', createWrappedText(data.penerima?.kodepos || '-', 40)],
+                                        ['No. Telp', ':', createWrappedText(data.penerima?.telepon || '-', 40)],
                                     ]
                                 },
                                 layout: 'noBorders',
@@ -175,34 +231,50 @@ export async function generateResiPDF(data: any): Promise<string> {
                 ],
                 margin: [0, 15, 0, 10],
             },
-            // INFORMASI BARANG (tabel tanpa border)
+            // INFORMASI BARANG (seperti pengirim/penerima)
             {
-                table: {
-                    widths: ['auto', '*', 'auto', '*'],
-                    body: [
-                        [
-                            { text: 'Nama Barang', style: 'label' }, { text: data.barang?.nama_barang || '-', style: 'label' },
-                            { text: 'Jumlah Koli', style: 'label' }, { text: data.barang?.jumlah_koli || '-', style: 'label' },
+                columns: [
+                    {
+                        width: '50%',
+                        stack: [
+                            { text: 'Informasi & Detail Barang', style: 'sectionTitle' },
+                            {
+                                table: {
+                                    widths: [80, 5, '*'],
+                                    body: [
+                                        ['Nama Barang', ':', createWrappedText(truncateTextForPDF(data.barang?.nama_barang || '-', 50), 30)],
+                                        ['Harga Barang', ':', createWrappedText(data.barang?.harga_barang || '-', 40)],
+                                        ['Asuransi', ':', createWrappedText(data.barang?.asuransi || '-', 40)],
+                                        ['Packing', ':', createWrappedText(data.barang?.packing || '-', 40)],
+                                        ['Surat Jalan Balik', ':', createWrappedText(data.barang?.surat_jalan_balik || '-', 40)],
+                                    ]
+                                },
+                                layout: 'noBorders',
+                                margin: [0, 0, 0, 2],
+                            },
                         ],
-                        [
-                            { text: 'Harga Barang', style: 'label' }, { text: data.barang?.harga_barang || '-', style: 'label' },
-                            { text: 'Berat Akt.', style: 'label' }, { text: data.barang?.berat_aktual || '-', style: 'label' },
+                    },
+                    {
+                        width: '50%',
+                        stack: [
+                            {
+                                table: {
+                                    widths: [80, 5, '*'],
+                                    body: [
+                                        ['Jumlah Koli', ':', createWrappedText(data.barang?.jumlah_koli || '-', 40)],
+                                        ['Berat Akt.', ':', createWrappedText(data.barang?.berat_aktual || '-', 40)],
+                                        ['Volume Berat', ':', createWrappedText(data.barang?.berat_volume || '-', 40)],
+                                        ['Kubikasi', ':', createWrappedText(data.barang?.kubikasi || '-', 40)],
+                                        ['Catatan', ':', createWrappedText(truncateTextForPDF(data.barang?.catatan || '-', 50), 30)],
+                                    ]
+                                },
+                                layout: 'noBorders',
+                                margin: [0, 23, 0, 7],
+                            },
                         ],
-                        [
-                            { text: 'Asuransi', style: 'label' }, { text: data.barang?.asuransi || '-', style: 'label' },
-                            { text: 'Volume Berat', style: 'label' }, { text: data.barang?.berat_volume || '-', style: 'label' },
-                        ],
-                        [
-                            { text: 'Packing', style: 'label' }, { text: data.barang?.packing || '-', style: 'label' },
-                            { text: 'Kubikasi', style: 'label' }, { text: data.barang?.kubikasi || '-', style: 'label' },
-                        ],
-                        [
-                            { text: 'Surat Jalan Balik', style: 'label' }, { text: data.barang?.surat_jalan_balik || '-', style: 'label' },
-                            { text: 'Catatan', style: 'label' }, { text: data.barang?.catatan || '-', style: 'label' },
-                        ],
-                    ],
-                },
-                layout: 'noBorders',
+                    },
+                ],
+                columnGap: 20,
                 margin: [0, 0, 0, 10],
             },
             // TABEL DIMENSI (QTY)
@@ -256,8 +328,12 @@ export async function generateResiPDF(data: any): Promise<string> {
         ],
         styles: {
             resiHeader: { fontSize: 16, bold: true, alignment: 'left', margin: [0, 0, 0, 0], color: '#1A723B' },
-            sectionTitle: { fontSize: 12, bold: true, margin: [0, 0, 0, 5] },
+            sectionTitle: { fontSize: 12, bold: true, margin: [0, 0, 0, 10] },
             label: { fontSize: 10, alignment: 'left', margin: [0, 0, 0, 1] },
+            labelRight: { fontSize: 10, alignment: 'left', margin: [30, 0, 0, 1] },
+            labelColon: { fontSize: 10, alignment: 'right', margin: [0, 0, 0, 1] },
+            labelWrapped: { fontSize: 10, alignment: 'left', margin: [0, 0, 0, 1], lineHeight: 1.2 },
+            longText: { fontSize: 9, alignment: 'left', margin: [0, 0, 0, 1], lineHeight: 1.3 },
             tableHeader: { bold: true, fontSize: 10, color: '#1A723B', alignment: 'center' },
             footerTitle: { fontSize: 9, bold: true, alignment: 'center', margin: [0, 8, 0, 0] },
             footerItalic: { fontSize: 9, italics: true, alignment: 'center', margin: [0, 0, 0, 0] },
