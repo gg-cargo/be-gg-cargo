@@ -3322,6 +3322,15 @@ export class OrdersService {
                 }
             }
 
+            // Jika status adalah 'order kirim', batasi area filter hanya pada hub_dest_id
+            if (query.status === 'order kirim') {
+                if (userHubId) {
+                    areaFilter = { hub_dest_id: userHubId };
+                } else if (userServiceCenterId) {
+                    areaFilter = { hub_dest_id: userServiceCenterId };
+                }
+            }
+
             // 4. Buat search filter
             let searchFilter = {};
             if (query.search) {
