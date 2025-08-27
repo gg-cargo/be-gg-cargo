@@ -3392,13 +3392,26 @@ export class OrdersService {
                     'status_pickup',
                     'reweight_status',
                     'is_gagal_pickup',
-                    'next_hub'
+                    'next_hub',
+                    'hub_dest_id'
                 ],
                 include: [
                     {
                         model: this.orderPieceModel,
                         as: 'pieces',
                         attributes: ['berat', 'panjang', 'lebar', 'tinggi'],
+                        required: false
+                    },
+                    {
+                        model: this.hubModel,
+                        as: 'hubDestination',
+                        attributes: ['id', 'nama'],
+                        required: false
+                    },
+                    {
+                        model: this.hubModel,
+                        as: 'hubNext',
+                        attributes: ['id', 'nama'],
                         required: false
                     }
                 ],
@@ -3469,6 +3482,14 @@ export class OrdersService {
                         raw: true
                     });
 
+                    // Ambil nama hub tujuan
+                    const hubDestination = order.getDataValue('hubDestination');
+                    const hubTujuanNama = hubDestination ? hubDestination.getDataValue('nama') : undefined;
+
+                    // Ambil nama hub selanjutnya
+                    const hubNext = order.getDataValue('hubNext');
+                    const hubSelanjutnyaNama = hubNext ? hubNext.getDataValue('nama') : undefined;
+
                     return {
                         no: offset + index + 1,
                         order_id: orderId,
@@ -3488,7 +3509,8 @@ export class OrdersService {
                         layanan: order.getDataValue('layanan'),
                         created_at: order.getDataValue('created_at'),
                         no_delivery_note: deliveryNote?.no_delivery_note || undefined,
-                        next_hub: order.getDataValue('next_hub') || undefined
+                        hub_selanjutnya: hubSelanjutnyaNama || undefined,
+                        hub_tujuan: hubTujuanNama || undefined
                     };
                 })
             );

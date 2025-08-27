@@ -4,6 +4,7 @@ import { OrderShipment } from './order-shipment.model';
 import { OrderPiece } from './order-piece.model';
 import { OrderInvoice } from './order-invoice.model';
 import { TransactionPayment } from './transaction-payment.model';
+import { Hub } from './hub.model';
 import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 
 @Table({
@@ -1069,6 +1070,12 @@ export class Order extends Model {
     // Relations
     @BelongsTo(() => User, { foreignKey: 'order_by', as: 'orderUser' })
     orderUser: User;
+
+    @BelongsTo(() => Hub, { foreignKey: 'hub_dest_id', as: 'hubDestination' })
+    hubDestination: Hub;
+
+    @BelongsTo(() => Hub, { foreignKey: 'next_hub', as: 'hubNext' })
+    hubNext: Hub;
 
     @HasMany(() => OrderShipment, { foreignKey: 'order_id', as: 'shipments' })
     shipments: OrderShipment[];

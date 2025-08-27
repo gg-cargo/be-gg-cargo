@@ -53,7 +53,8 @@ export class OrderOpsDto {
     layanan: string;
     created_at: string;
     no_delivery_note?: string;
-    next_hub?: number;
+    hub_selanjutnya?: string;
+    hub_tujuan?: string;
 }
 
 export class PaginationDto {
