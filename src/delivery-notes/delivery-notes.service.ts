@@ -67,7 +67,7 @@ export class DeliveryNotesService {
         // Ambil orders berdasarkan resi_list
         const orders = await this.orderModel.findAll({
             where: { no_tracking: { [Op.in]: dto.resi_list } },
-            attributes: ['id', 'no_tracking', 'status', 'reweight_status'],
+            attributes: ['id', 'no_tracking', 'status', 'reweight_status', 'hub_dest_id'],
             raw: true,
         });
         if (orders.length !== dto.resi_list.length) {
@@ -132,19 +132,26 @@ export class DeliveryNotesService {
             created_at: new Date(),
         });
 
-        // Update orders dan pieces
+        // Update orders dan pieces - cek status berdasarkan hub_dest_id vs next_hub
         const orderIds = orders.map((o) => o.id);
-        await this.orderModel.update(
-            {
+        const nextHubId = dto.hub_transit_id ?? dto.hub_tujuan_id;
+
+        // Update setiap order dengan status yang sesuai
+        for (const order of orders) {
+            const orderHubDestId = Number(order.hub_dest_id);
+            const isFinalDestination = orderHubDestId === nextHubId;
+
+            const updateData = {
                 assign_sj: noDeliveryNote,
                 transporter_id: String(dto.transporter_id),
                 truck_id: dto.no_polisi,
-                status: ORDER_STATUS.IN_TRANSIT,
+                status: isFinalDestination ? ORDER_STATUS.OUT_FOR_DELIVERY : ORDER_STATUS.IN_TRANSIT,
                 current_hub: String(dto.hub_asal_id),
-                next_hub: String(dto.hub_transit_id ?? dto.hub_tujuan_id),
-            },
-            { where: { id: { [Op.in]: orderIds } } }
-        );
+                next_hub: String(nextHubId),
+            };
+
+            await this.orderModel.update(updateData, { where: { id: order.id } });
+        }
 
         await this.orderPieceModel.update(
             { delivery_note_id: 1 }, // placeholder linkage if needed elsewhere
