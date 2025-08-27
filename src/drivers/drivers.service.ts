@@ -607,7 +607,7 @@ export class DriversService {
 
             // 3. Cari kurir yang memenuhi kriteria (level 4 = transporter)
             const driverWhereClause: any = {
-                level: { [Op.eq]: 4 }, // Transporter level
+                level: { [Op.eq]: 8 }, // Transporter level
                 aktif: 1,
                 status_app: 1,
                 freeze_saldo: 0,
