@@ -3179,7 +3179,11 @@ export class OrdersService {
             // 6.5. Hapus order_delivery_notes
             if (this.orderModel.sequelize?.models.OrderDeliveryNote) {
                 const deletedDeliveryNotes = await this.orderModel.sequelize.models.OrderDeliveryNote.destroy({
-                    where: { no_tracking: noResi }
+                    where: {
+                        no_tracking: {
+                            [Op.like]: `%${noResi}%`
+                        }
+                    }
                 });
                 deletedRecordsCount.order_delivery_notes = deletedDeliveryNotes || 0;
                 if (deletedDeliveryNotes && deletedDeliveryNotes > 0) {
@@ -3444,9 +3448,12 @@ export class OrdersService {
 
                     // Cari delivery note untuk order ini
                     const orderId = order.getDataValue('id');
+                    const orderNoTracking = order.getDataValue('no_tracking');
                     const deliveryNote = await this.orderDeliveryNoteModel.findOne({
                         where: {
-                            no_tracking: order.getDataValue('no_tracking')
+                            no_tracking: {
+                                [Op.like]: `%${orderNoTracking}%`
+                            }
                         },
                         attributes: ['no_delivery_note'],
                         raw: true
