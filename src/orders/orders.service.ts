@@ -3343,20 +3343,29 @@ export class OrdersService {
                 };
             }
 
-            // 6. Gabungkan semua filter
+            // 6. Buat filter next_hub
+            let nextHubFilter = {};
+            if (query.next_hub) {
+                nextHubFilter = {
+                    next_hub: query.next_hub
+                };
+            }
+
+            // 7. Gabungkan semua filter
             const whereClause = {
                 [Op.and]: [
                     areaFilter,
                     statusFilter,
                     searchFilter,
-                    layananFilter
+                    layananFilter,
+                    nextHubFilter
                 ]
             };
 
-            // 6.1. Hitung summary statistics
+            // 7.1. Hitung summary statistics
             const summary = await this.calculateSummaryStatistics(areaFilter);
 
-            // 7. Hitung total items untuk pagination
+            // 8. Hitung total items untuk pagination
             const totalItems = await this.orderModel.count({
                 where: whereClause
             });
@@ -3366,7 +3375,7 @@ export class OrdersService {
             const totalPages = Math.ceil(totalItems / limit);
             const offset = (page - 1) * limit;
 
-            // 8. Ambil data orders dengan pagination
+            // 9. Ambil data orders dengan pagination
             const orders = await this.orderModel.findAll({
                 where: whereClause,
                 attributes: [
@@ -3382,7 +3391,8 @@ export class OrdersService {
                     'status',
                     'status_pickup',
                     'reweight_status',
-                    'is_gagal_pickup'
+                    'is_gagal_pickup',
+                    'next_hub'
                 ],
                 include: [
                     {
@@ -3397,7 +3407,7 @@ export class OrdersService {
                 offset: offset,
             });
 
-            // 9. Transform data ke format response yang diinginkan
+            // 10. Transform data ke format response yang diinginkan
             const transformedOrders: OrderOpsDto[] = await Promise.all(
                 orders.map(async (order, index) => {
                     // Hitung berat dan koli dari order pieces
@@ -3477,12 +3487,13 @@ export class OrdersService {
                         status: statusOps,
                         layanan: order.getDataValue('layanan'),
                         created_at: order.getDataValue('created_at'),
-                        no_delivery_note: deliveryNote?.no_delivery_note || undefined
+                        no_delivery_note: deliveryNote?.no_delivery_note || undefined,
+                        next_hub: order.getDataValue('next_hub') || undefined
                     };
                 })
             );
 
-            // 10. Buat response pagination
+            // 11. Buat response pagination
             const pagination: PaginationDto = {
                 current_page: page,
                 limit: limit,

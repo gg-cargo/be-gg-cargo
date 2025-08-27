@@ -25,6 +25,11 @@ export class OpsOrdersQueryDto {
     @IsOptional()
     @IsString({ message: 'Layanan harus berupa string' })
     layanan?: string;
+
+    @IsOptional()
+    @Transform(({ value }) => parseInt(value, 10))
+    @IsNumber({}, { message: 'Next Hub harus berupa angka' })
+    next_hub?: number;
 }
 
 export class CustomerDto {
@@ -48,6 +53,7 @@ export class OrderOpsDto {
     layanan: string;
     created_at: string;
     no_delivery_note?: string;
+    next_hub?: number;
 }
 
 export class PaginationDto {
