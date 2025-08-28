@@ -612,6 +612,9 @@ export class OrdersService {
         // Validasi tambahan
         this.validateOrderData(createOrderDto);
 
+        // Validasi qty maksimal per piece dan total
+        this.validateQtyLimits(createOrderDto.pieces);
+
         // Generate no_tracking
         const noTracking = TrackingHelper.generateNoTracking();
 
@@ -1495,6 +1498,66 @@ export class OrdersService {
         });
     }
 
+    /**
+     * Validasi qty maksimal per piece dan total
+     */
+    private validateQtyLimits(pieces: CreateOrderPieceDto[]): void {
+        const maxQtyPerPiece = 999;
+        const maxTotalQty = 9999; // Total qty dari semua pieces
+
+        let totalQty = 0;
+
+        for (const piece of pieces) {
+            // Validasi qty per piece
+            if (piece.qty > maxQtyPerPiece) {
+                throw new BadRequestException(`Qty per piece maksimal ${maxQtyPerPiece}. Piece dengan berat ${piece.berat}kg memiliki qty ${piece.qty}`);
+            }
+
+            // Hitung total qty
+            totalQty += piece.qty;
+
+            // Validasi total qty
+            if (totalQty > maxTotalQty) {
+                throw new BadRequestException(`Total qty dari semua pieces maksimal ${maxTotalQty}. Saat ini total: ${totalQty}`);
+            }
+        }
+
+        // Validasi total qty minimal
+        if (totalQty === 0) {
+            throw new BadRequestException('Total qty harus lebih dari 0');
+        }
+    }
+
+    /**
+     * Validasi qty maksimal per piece dan total untuk estimate price
+     */
+    private validateQtyLimitsForEstimate(items: any[]): void {
+        const maxQtyPerPiece = 999;
+        const maxTotalQty = 9999; // Total qty dari semua items
+
+        let totalQty = 0;
+
+        for (const item of items) {
+            // Validasi qty per piece
+            if (item.qty > maxQtyPerPiece) {
+                throw new BadRequestException(`Qty per piece maksimal ${maxQtyPerPiece}. Item dengan berat ${item.berat}kg memiliki qty ${item.qty}`);
+            }
+
+            // Hitung total qty
+            totalQty += item.qty;
+
+            // Validasi total qty
+            if (totalQty > maxTotalQty) {
+                throw new BadRequestException(`Total qty dari semua items maksimal ${maxTotalQty}. Saat ini total: ${totalQty}`);
+            }
+        }
+
+        // Validasi total qty minimal
+        if (totalQty === 0) {
+            throw new BadRequestException('Total qty harus lebih dari 0');
+        }
+    }
+
     private calculateShipmentData(pieces: CreateOrderPieceDto[]) {
         let totalWeight = 0;
         let totalQty = 0;
@@ -2178,6 +2241,9 @@ export class OrdersService {
 
     async estimatePrice(estimateDto: EstimatePriceDto) {
         const { origin, destination, item_details, service_options } = estimateDto;
+
+        // Validasi qty maksimal per piece dan total
+        this.validateQtyLimitsForEstimate(item_details.items);
 
         // Validasi layanan jika diisi
         const validServices = ['Ekonomi', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk'];

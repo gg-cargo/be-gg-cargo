@@ -27,7 +27,7 @@ export class ItemDetailDto {
     @IsNotEmpty()
     @IsNumber()
     @Min(1)
-    @Max(100)
+    @Max(999)
     qty: number;
 
     @IsNotEmpty()

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsEnum, IsBoolean, IsNumber, IsOptional, IsArray, ValidateNested, IsPositive, IsDate, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsBoolean, IsNumber, IsOptional, IsArray, ValidateNested, IsPositive, IsDate, IsDateString, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
 // Ekonomi', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk
@@ -15,6 +15,7 @@ export class CreateOrderPieceDto {
 
     @IsNumber()
     @IsPositive()
+    @Max(999, { message: 'Qty maksimal 999' })
     qty: number;
 
     @IsNumber()
