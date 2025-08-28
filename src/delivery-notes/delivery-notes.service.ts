@@ -203,7 +203,7 @@ export class DeliveryNotesService {
         // Summary: qty & total berat
         const orders = await this.orderModel.findAll({
             where: { no_tracking: { [Op.in]: resiList } },
-            attributes: ['id', 'no_tracking', 'nama_pengirim', 'nama_penerima', 'total_berat'],
+            attributes: ['id', 'no_tracking', 'nama_pengirim', 'nama_penerima', 'total_berat', 'hub_source_id', 'hub_dest_id'],
             raw: true,
         });
 
@@ -237,12 +237,26 @@ export class DeliveryNotesService {
             });
         }
 
-        const ordersPayload = orders.map((o) => ({
+        // Ambil nama hub asal/tujuan per order
+        const hubIdSet = new Set<number>();
+        orders.forEach((o: any) => {
+            if (o.hub_source_id) hubIdSet.add(Number(o.hub_source_id));
+            if (o.hub_dest_id) hubIdSet.add(Number(o.hub_dest_id));
+        });
+        const hubList = hubIdSet.size > 0
+            ? await this.hubModel.findAll({ where: { id: { [Op.in]: Array.from(hubIdSet) } }, attributes: ['id', 'nama'], raw: true })
+            : [];
+        const hubNameMap = new Map<number, string>();
+        (hubList as any[]).forEach(h => hubNameMap.set(Number(h.id), h.nama));
+
+        const ordersPayload = orders.map((o: any) => ({
             no_tracking: o.no_tracking,
             nama_pengirim: o.nama_pengirim,
             nama_penerima: o.nama_penerima,
             jumlah_koli: aggMap.get(o.id)?.jumlah_koli ?? 0,
             berat_barang: aggMap.get(o.id)?.berat_barang ?? 0,
+            asal: hubNameMap.get(Number(o.hub_source_id)) || null,
+            tujuan: hubNameMap.get(Number(o.hub_dest_id)) || null,
         }));
 
         const link = await generateDeliveryNotePDF({

@@ -136,34 +136,61 @@ export async function generateDeliveryNotePDF(payload: {
                 ],
             ]
         },
-        layout: 'lightHorizontalLines',
+        layout: {
+            hLineWidth: () => 0.5,
+            vLineWidth: () => 0.5,
+            hLineColor: () => '#CCCCCC',
+            vLineColor: () => '#CCCCCC',
+            paddingLeft: () => 4,
+            paddingRight: () => 4,
+            paddingTop: () => 3,
+            paddingBottom: () => 3,
+        },
         margin: [0, 6, 0, 10]
     } as any;
 
     const ordersHeader = [
-        { text: 'No Tracking', style: 'th', fillColor: '#C6EAD6' },
-        { text: 'Pengirim', style: 'th', fillColor: '#C6EAD6' },
-        { text: 'Penerima', style: 'th', fillColor: '#C6EAD6' },
-        { text: 'Jumlah Koli', style: 'th', alignment: 'right', fillColor: '#C6EAD6' },
-        { text: 'Berat Barang', style: 'th', alignment: 'right', fillColor: '#C6EAD6' },
+        { text: 'No Tracking', style: 'th', fillColor: '#C6EAD6', noWrap: false },
+        { text: 'Pengirim', style: 'th', fillColor: '#C6EAD6', noWrap: false },
+        { text: 'Penerima', style: 'th', fillColor: '#C6EAD6', noWrap: false },
+        { text: 'Asal', style: 'th', fillColor: '#C6EAD6', noWrap: false },
+        { text: 'Tujuan', style: 'th', fillColor: '#C6EAD6', noWrap: false },
+        { text: 'Jumlah Koli', style: 'th', alignment: 'right', fillColor: '#C6EAD6', noWrap: false },
+        { text: 'Berat Barang', style: 'th', alignment: 'right', fillColor: '#C6EAD6', noWrap: false },
     ];
 
-    const ordersRows = payload.orders.map((o) => [
-        { text: o.no_tracking },
-        { text: o.nama_pengirim || '-' },
-        { text: o.nama_penerima || '-' },
-        { text: String(o.jumlah_koli), alignment: 'right' },
-        { text: String(o.berat_barang), alignment: 'right' },
+    const ordersRows = payload.orders.map((o: any) => [
+        { text: o.no_tracking, noWrap: false, style: 'cellWrap' },
+        { text: o.nama_pengirim || '-', noWrap: false, style: 'cellWrap' },
+        { text: o.nama_penerima || '-', noWrap: false, style: 'cellWrap' },
+        { text: o.asal || '-', noWrap: false, style: 'cellWrap' },
+        { text: o.tujuan || '-', noWrap: false, style: 'cellWrap' },
+        { text: String(o.jumlah_koli), alignment: 'right', noWrap: false, style: 'cellWrap' },
+        { text: String(o.berat_barang), alignment: 'right', noWrap: false, style: 'cellWrap' },
     ]);
 
     const ordersTable = {
         style: 'tableBase',
         headerRows: 1,
         table: {
-            widths: ['*', '*', '*', 80, 80],
+            // Lebar ditata agar tidak overflow halaman A4 (dengan margin)
+            widths: [75, 90, 90, 75, 75, 50, 50],
             body: [ordersHeader, ...ordersRows]
         },
-        layout: 'lightHorizontalLines'
+        layout: {
+            fillColor: (rowIndex: number) => (rowIndex === 0 ? '#FFFFFF' : (rowIndex % 2 === 0 ? '#F8F8F8' : null)),
+            hLineWidth: () => 0.5,
+            vLineWidth: () => 0.5,
+            hLineColor: () => '#CCCCCC',
+            vLineColor: () => '#CCCCCC',
+            paddingLeft: () => 3,
+            paddingRight: () => 3,
+            paddingTop: () => 2,
+            paddingBottom: () => 2,
+        }
+        ,
+        // Geser sedikit ke kiri agar visualnya lebih centering terhadap halaman
+        margin: [-15, 0, 0, 0]
     };
 
     const docDefinition = {
@@ -218,6 +245,7 @@ export async function generateDeliveryNotePDF(payload: {
             subTitle: { fontSize: 10 },
             th: { bold: true, fontSize: 10 },
             tableBase: { fontSize: 10 },
+            cellWrap: { fontSize: 9, lineHeight: 1.15 },
             kvLabel: { bold: true, fontSize: 10 },
             kvValue: { fontSize: 10 },
             kvColon: { fontSize: 10 },
