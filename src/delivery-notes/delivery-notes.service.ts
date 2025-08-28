@@ -255,12 +255,36 @@ export class DeliveryNotesService {
         return { status: 'success', link };
     }
 
-    async listDeliveryNotes(query: ListDeliveryNotesQueryDto): Promise<ListDeliveryNotesResponseDto> {
+    async listDeliveryNotes(query: ListDeliveryNotesQueryDto, userId: number): Promise<ListDeliveryNotesResponseDto> {
         const page = Math.max(1, Number(query.page || 1));
         const limit = Math.max(1, Math.min(200, Number(query.limit || 20)));
         const offset = (page - 1) * limit;
 
+        // Ambil hub_id dari user yang sedang login
+        const user = await this.userModel.findByPk(userId, {
+            attributes: ['hub_id', 'service_center_id']
+        });
+
+        if (!user) {
+            throw new NotFoundException('User tidak ditemukan');
+        }
+
+        const userHubId = user.getDataValue('hub_id');
+        const userServiceCenterId = user.getDataValue('service_center_id');
+
+        if (!userHubId && !userServiceCenterId) {
+            throw new BadRequestException('User tidak memiliki akses ke area operasional');
+        }
+
         const where: any = {};
+
+        // Filter berdasarkan hub asal user yang sedang login
+        if (userHubId) {
+            where.agent_id = userHubId;
+        } else if (userServiceCenterId) {
+            where.agent_id = userServiceCenterId;
+        }
+
         if (query.search) {
             where[Op.or] = [
                 { no_delivery_note: { [Op.like]: `%${query.search}%` } },

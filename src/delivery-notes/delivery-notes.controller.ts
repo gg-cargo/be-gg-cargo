@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards, UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DeliveryNotesService } from './delivery-notes.service';
 import { CreateDeliveryNoteDto, CreateDeliveryNoteResponseDto } from './dto/create-delivery-note.dto';
@@ -37,8 +37,15 @@ export class DeliveryNotesController {
     @Get()
     async listDeliveryNotes(
         @Query() query: ListDeliveryNotesQueryDto,
+        @Request() req: any,
     ): Promise<{ message: string; data: ListDeliveryNotesResponseDto }> {
-        const result = await this.deliveryNotesService.listDeliveryNotes(query);
+        // Ambil user ID dari request
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new UnauthorizedException('User tidak terautentikasi');
+        }
+
+        const result = await this.deliveryNotesService.listDeliveryNotes(query, userId);
         return {
             message: 'Berhasil mengambil daftar delivery note',
             data: result,
