@@ -222,6 +222,13 @@ export class DeliveryNotesService {
             group: ['order_id'],
             raw: true,
         });
+        // Kumpulkan semua piece_id untuk barcode/QR
+        const allPieces = await this.orderPieceModel.findAll({
+            where: { order_id: { [Op.in]: orderIds } },
+            attributes: ['piece_id'],
+            raw: true,
+        });
+        const pieceIds: string[] = (allPieces as any[]).map(p => String(p.piece_id)).filter(Boolean);
         const aggMap = new Map<number, { jumlah_koli: number; berat_barang: number }>();
         for (const row of pieceAgg as any[]) {
             aggMap.set(Number(row.order_id), {
@@ -250,6 +257,7 @@ export class DeliveryNotesService {
             summary: { qty, berat_total },
             orders: ordersPayload,
             nama_transporter: note.nama_transporter,
+            piece_ids: pieceIds,
         });
 
         return { status: 'success', link };

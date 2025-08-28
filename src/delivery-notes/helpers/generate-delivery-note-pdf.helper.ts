@@ -19,6 +19,7 @@ export async function generateDeliveryNotePDF(payload: {
     summary: { qty: number; berat_total: number };
     orders: Array<{ no_tracking: string; nama_pengirim: string; nama_penerima: string; jumlah_koli: number; berat_barang: number; }>;
     nama_transporter?: string;
+    piece_ids?: string[];
 }): Promise<string> {
     const fonts = {
         Roboto: {
@@ -45,6 +46,11 @@ export async function generateDeliveryNotePDF(payload: {
         ? 'data:image/png;base64,' + fs.readFileSync(logoPath).toString('base64')
         : undefined;
 
+    // Siapkan konten QR dari seluruh daftar piece_id (satu QR saja)
+    const qrContent = (payload.piece_ids && payload.piece_ids.length > 0)
+        ? JSON.stringify({ type: 'piece_ids', dn: payload.no_delivery_note, ids: payload.piece_ids })
+        : undefined;
+
     const headerTop = {
         columns: [
             {
@@ -63,11 +69,11 @@ export async function generateDeliveryNotePDF(payload: {
                 width: '*',
                 alignment: 'right',
                 stack: [
-                    { text: 'DELIVERY NOTE', style: 'title', margin: [0, 30, 0, 50] },
+                    { text: 'DELIVERY NOTE', style: 'title', margin: [0, 10, 0, 20] },
                     {
                         table: {
                             widths: [120, '*'],
-                            margin: [0, 40, 0, 0],
+                            margin: [0, 8, 0, 0],
                             body: [
                                 [{ text: 'No.', style: 'kvLabel' }, { text: payload.no_delivery_note, style: 'kvValue' }],
                                 [{ text: 'Tanggal', style: 'kvLabel' }, { text: new Date().toLocaleDateString('id-ID'), style: 'kvValue' }],
@@ -84,7 +90,7 @@ export async function generateDeliveryNotePDF(payload: {
                             paddingTop: () => 2,
                             paddingBottom: () => 2,
                         }
-                    }
+                    },
                 ]
             }
         ],
@@ -204,6 +210,8 @@ export async function generateDeliveryNotePDF(payload: {
             // PAGE 2: LAMPIRAN
             { text: 'LAMPIRAN', style: 'title', alignment: 'center', margin: [0, 0, 0, 10] },
             ordersTable,
+            // QR code dipindahkan ke bawah tabel lampiran
+            qrContent ? { qr: qrContent, fit: 140, alignment: 'center', margin: [0, 50, 0, 0] } : {},
         ],
         styles: {
             title: { fontSize: 16, bold: true },
