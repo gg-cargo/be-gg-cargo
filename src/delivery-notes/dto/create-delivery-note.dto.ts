@@ -31,6 +31,11 @@ export class CreateDeliveryNoteDto {
     @IsOptional()
     @IsString({ message: 'jenis_kendaraan harus berupa string' })
     jenis_kendaraan?: string;
+
+    @IsOptional()
+    @IsArray({ message: 'no_seal harus berupa array string' })
+    @IsString({ each: true, message: 'Setiap no_seal harus berupa string' })
+    no_seal?: string[];
 }
 
 export class CreateDeliveryNoteResponseDto {

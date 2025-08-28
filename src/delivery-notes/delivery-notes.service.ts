@@ -109,6 +109,16 @@ export class DeliveryNotesService {
         const noDeliveryNote = this.generateDeliveryNoteNumber(today, hubKode, seq + 1);
 
         // Buat record delivery note
+        // Validasi dan simpan no_seal (maks 3)
+        let sealString: string | null = null;
+        if (dto.no_seal && Array.isArray(dto.no_seal)) {
+            if (dto.no_seal.length > 3) {
+                throw new BadRequestException('Maksimal 3 nomor seal');
+            }
+            const cleaned = dto.no_seal.map((s) => String(s).trim()).filter(Boolean);
+            sealString = cleaned.join(',');
+        }
+
         await this.orderDeliveryNoteModel.create({
             no_delivery_note: noDeliveryNote,
             no_tracking: dto.resi_list.join(','),
@@ -123,6 +133,7 @@ export class DeliveryNotesService {
             nama_transporter: transporter?.name || '',
             jenis_kendaraan: dto.jenis_kendaraan || vehicle.jenis_mobil || '',
             no_polisi: dto.no_polisi,
+            no_seal: sealString,
             hub_id: hubTujuan.getDataValue('id'),
             agent_id: hubAsal.getDataValue('id'),
             status: 0,
@@ -259,6 +270,9 @@ export class DeliveryNotesService {
             tujuan: hubNameMap.get(Number(o.hub_dest_id)) || null,
         }));
 
+        // Pecah no_seal untuk PDF
+        const sealArr = (note as any).no_seal ? String((note as any).no_seal).split(',').map((s: string) => s.trim()).filter(Boolean) : undefined;
+
         const link = await generateDeliveryNotePDF({
             no_delivery_note: note.no_delivery_note,
             from_hub: fromHub ? { nama: fromHub.nama, alamat: fromHub.alamat } : null,
@@ -272,6 +286,8 @@ export class DeliveryNotesService {
             orders: ordersPayload,
             nama_transporter: note.nama_transporter,
             piece_ids: pieceIds,
+            // @ts-ignore - properti opsional untuk helper
+            no_seal: sealArr,
         });
 
         return { status: 'success', link };
@@ -519,6 +535,16 @@ export class DeliveryNotesService {
         const added = newResi.filter(r => !oldSet.has(r));
         const removed = oldResi.filter(r => !newSet.has(r));
 
+        // Validasi dan proses no_seal
+        let sealString: string | null = null;
+        if (dto.no_seal && Array.isArray(dto.no_seal)) {
+            if (dto.no_seal.length > 3) {
+                throw new BadRequestException('Maksimal 3 nomor seal');
+            }
+            const cleaned = dto.no_seal.map((s) => String(s).trim()).filter(Boolean);
+            sealString = cleaned.join(',');
+        }
+
         // Update header delivery note
         await this.orderDeliveryNoteModel.update({
             no_tracking: newResi.join(','),
@@ -526,6 +552,7 @@ export class DeliveryNotesService {
             nama_transporter: (transporter as any).name || existing.nama_transporter,
             jenis_kendaraan: dto.jenis_kendaraan || vehicle.jenis_mobil || existing.jenis_kendaraan,
             no_polisi: dto.no_polisi,
+            no_seal: sealString !== null ? sealString : (existing as any).no_seal,
             hub_id: hubTujuan.getDataValue('id'),
             agent_id: hubAsal.getDataValue('id'),
             hub_bypass: hubTransit ? String(hubTransit.id) : null,

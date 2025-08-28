@@ -20,6 +20,7 @@ export async function generateDeliveryNotePDF(payload: {
     orders: Array<{ no_tracking: string; nama_pengirim: string; nama_penerima: string; jumlah_koli: number; berat_barang: number; }>;
     nama_transporter?: string;
     piece_ids?: string[];
+    no_seal?: string[] | string;
 }): Promise<string> {
     const fonts = {
         Roboto: {
@@ -80,6 +81,7 @@ export async function generateDeliveryNotePDF(payload: {
                                 [{ text: 'Transporter', style: 'kvLabel' }, { text: (payload.transporter.nama || '-'), style: 'kvValue' }],
                                 [{ text: 'Jenis Kendaraan', style: 'kvLabel' }, { text: (payload.transporter.jenis_kendaraan || '-'), style: 'kvValue' }],
                                 [{ text: 'No. Polisi', style: 'kvLabel' }, { text: (payload.transporter.no_polisi || '-'), style: 'kvValue' }],
+                                [{ text: 'No. Seal', style: 'kvLabel' }, { text: (Array.isArray((payload as any).no_seal) ? (payload as any).no_seal.join(', ') : ((payload as any).no_seal || '-')), style: 'kvValue' }],
                             ]
                         },
                         layout: {

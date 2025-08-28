@@ -85,6 +85,13 @@ export class OrderDeliveryNote extends Model {
     no_polisi: string;
 
     @Column({
+        type: DataType.STRING(150),
+        allowNull: true,
+        comment: 'Nomor seal (maks 3) dipisah koma',
+    })
+    no_seal: string;
+
+    @Column({
         type: DataType.INTEGER,
         allowNull: false,
     })
