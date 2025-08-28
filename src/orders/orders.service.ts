@@ -44,6 +44,7 @@ import { OrderDeliveryNote } from '../models/order-delivery-note.model';
 import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
 import { Hub } from '../models/hub.model';
+import { generateOrderLabelsPDF } from './helpers/generate-order-labels-pdf.helper';
 
 @Injectable()
 export class OrdersService {
@@ -814,6 +815,48 @@ export class OrdersService {
             await transaction.rollback();
             throw new BadRequestException('Gagal membuat order: ' + error.message);
         }
+    }
+
+    async generateOrderLabelsPdf(noTracking: string): Promise<string> {
+        const order: any = await this.orderModel.findOne({ where: { no_tracking: noTracking }, raw: true });
+        if (!order) {
+            throw new NotFoundException('Order tidak ditemukan');
+        }
+
+        const pieces: any[] = await this.orderPieceModel.findAll({ where: { order_id: order.id }, attributes: ['piece_id', 'berat', 'panjang', 'lebar', 'tinggi'], raw: true });
+        if (!pieces || pieces.length === 0) {
+            throw new NotFoundException('Order belum memiliki piece');
+        }
+
+        const pieceIds = pieces.map(p => String(p.piece_id));
+
+        // Hitung chargeable weight (maks dari total berat aktual vs total berat volume)
+        let totalBerat = 0;
+        let totalBeratVolume = 0;
+        for (const p of pieces) {
+            const berat = Number(p.berat) || 0;
+            const panjang = Number(p.panjang) || 0;
+            const lebar = Number(p.lebar) || 0;
+            const tinggi = Number(p.tinggi) || 0;
+            totalBerat += berat;
+            if (panjang && lebar && tinggi) {
+                totalBeratVolume += this.calculateBeratVolume(panjang, lebar, tinggi);
+            }
+        }
+        const chargeableWeight = Math.max(totalBerat, totalBeratVolume);
+
+        const orderForLabels = {
+            no_tracking: order.no_tracking,
+            created_at: order.created_at,
+            layanan: order.layanan,
+            total_berat: chargeableWeight,
+            nama_pengirim: order.nama_pengirim,
+            alamat_pengirim: order.alamat_pengirim,
+            nama_penerima: order.nama_penerima,
+            alamat_penerima: order.alamat_penerima,
+        };
+
+        return await generateOrderLabelsPDF(orderForLabels, pieceIds);
     }
 
     async createResiReferensi(orderId: number) {

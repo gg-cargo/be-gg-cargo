@@ -1,4 +1,5 @@
-import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Query } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Query, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -32,6 +33,20 @@ export class OrdersController {
     constructor(private readonly ordersService: OrdersService) { }
 
     @UseGuards(JwtAuthGuard)
+    @Get(':no_tracking/labels')
+    async getOrderLabels(
+        @Param('no_tracking') noTracking: string,
+    ): Promise<{ message: string; success: boolean; data: { pdf_url: string; no_resi: string } }> {
+        const pdfUrl = await this.ordersService.generateOrderLabelsPdf(noTracking);
+        return {
+            message: 'PDF label berhasil dibuat',
+            success: true,
+            data: {
+                pdf_url: pdfUrl,
+                no_resi: noTracking,
+            },
+        };
+    }
     @Post()
     @HttpCode(HttpStatus.CREATED)
     async createOrder(
@@ -113,6 +128,15 @@ export class OrdersController {
     }
 
 
+
+    @UseGuards(JwtAuthGuard)
+    @Get(':no_tracking/labels')
+    async getOrderLabelsLink(
+        @Param('no_tracking') noTracking: string,
+    ): Promise<{ message: string; link: string }> {
+        const link = await this.ordersService.generateOrderLabelsPdf(noTracking);
+        return { message: 'Berhasil menghasilkan tautan PDF label', link };
+    }
 
     @Patch(':no_resi/cancel')
     @UseGuards(JwtAuthGuard)
