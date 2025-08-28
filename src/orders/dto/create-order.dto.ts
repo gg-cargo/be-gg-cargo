@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsEnum, IsBoolean, IsNumber, IsOptional, IsArray, ValidateNested, IsPositive, IsDate, IsDateString, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsBoolean, IsNumber, IsOptional, IsArray, ValidateNested, IsPositive, IsDate, IsDateString, Max, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 
 // Ekonomi', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk
@@ -38,7 +38,7 @@ export class CreateOrderPieceDto {
 export class CreateOrderDto {
     // Data pengirim
     @IsString() @IsNotEmpty() nama_pengirim: string;
-    @IsString() @IsNotEmpty() alamat_pengirim: string;
+    @IsString() @IsNotEmpty() @MaxLength(35, { message: 'alamat_pengirim maksimal 35 karakter' }) alamat_pengirim: string;
     @IsString() @IsNotEmpty() provinsi_pengirim: string;
     @IsString() @IsNotEmpty() kota_pengirim: string;
     @IsString() @IsNotEmpty() kecamatan_pengirim: string;
@@ -49,7 +49,7 @@ export class CreateOrderDto {
 
     // Data penerima
     @IsString() @IsNotEmpty() nama_penerima: string;
-    @IsString() @IsNotEmpty() alamat_penerima: string;
+    @IsString() @IsNotEmpty() @MaxLength(35, { message: 'alamat_penerima maksimal 35 karakter' }) alamat_penerima: string;
     @IsString() @IsNotEmpty() provinsi_penerima: string;
     @IsString() @IsNotEmpty() kota_penerima: string;
     @IsString() @IsNotEmpty() kecamatan_penerima: string;
@@ -77,6 +77,7 @@ export class CreateOrderDto {
 
     @IsString()
     @IsOptional()
+    @MaxLength(35, { message: 'nama_barang maksimal 35 karakter' })
     nama_barang?: string;
 
     @IsString()
