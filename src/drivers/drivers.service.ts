@@ -192,8 +192,24 @@ export class DriversService {
         return hubDestId ?? hubSourceId ?? undefined;
     }
 
-    async getDriverStatusSummary(params: DriverStatusSummaryQueryDto): Promise<DriverStatusSummaryResponseDto> {
-        const { hub_id, date = new Date().toISOString().split('T')[0], status } = params;
+    async getDriverStatusSummary(params: DriverStatusSummaryQueryDto, userId: number): Promise<DriverStatusSummaryResponseDto> {
+        const { date = new Date().toISOString().split('T')[0], status } = params;
+
+        // Ambil hub_id dari user yang sedang login
+        const user = await this.userModel.findByPk(userId, {
+            attributes: ['hub_id', 'service_center_id']
+        });
+
+        if (!user) {
+            throw new NotFoundException('User tidak ditemukan');
+        }
+
+        const userHubId = user.getDataValue('hub_id');
+        const userServiceCenterId = user.getDataValue('service_center_id');
+
+        if (!userHubId && !userServiceCenterId) {
+            throw new BadRequestException('User tidak memiliki akses ke area operasional');
+        }
 
         // Build where condition untuk driver
         const whereCondition: any = {
@@ -201,9 +217,11 @@ export class DriversService {
             level: 8, // Level driver/kurir
         };
 
-        // Filter berdasarkan hub_id
-        if (hub_id) {
-            whereCondition.hub_id = hub_id;
+        // Filter berdasarkan hub_id user yang sedang login
+        if (userHubId) {
+            whereCondition.hub_id = userHubId;
+        } else if (userServiceCenterId) {
+            whereCondition.hub_id = userServiceCenterId;
         }
 
         // Filter berdasarkan status online/offline
@@ -313,12 +331,12 @@ export class DriversService {
         }
 
         // Hitung driver statistics
-        const driverStatistics = await this.calculateDriverStatisticsForHub(hub_id);
+        const driverStatistics = await this.calculateDriverStatisticsForHub(userHubId || userServiceCenterId);
 
         return {
             status: 'success',
             date: date,
-            hub_id: hub_id,
+            hub_id: userHubId || userServiceCenterId,
             driver_statistics: driverStatistics,
             drivers: driversWithSummary
         };

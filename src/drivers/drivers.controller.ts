@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Query, Post, Body, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
 import { DriversService } from './drivers.service';
 import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto } from './dto/driver-status-summary.dto';
@@ -17,8 +17,14 @@ export class DriversController {
 
     @UseGuards(JwtAuthGuard)
     @Get('status/summary')
-    async getDriverStatusSummary(@Query() query: DriverStatusSummaryQueryDto) {
-        return this.driversService.getDriverStatusSummary(query);
+    async getDriverStatusSummary(@Query() query: DriverStatusSummaryQueryDto, @Request() req: any) {
+        // Ambil hub_id dari user yang sedang login
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new UnauthorizedException('User tidak terautentikasi');
+        }
+
+        return this.driversService.getDriverStatusSummary(query, userId);
     }
 
     @UseGuards(JwtAuthGuard)
