@@ -1,6 +1,5 @@
 import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param, ParseIntPipe, Req, Get, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Query, Res } from '@nestjs/common';
-import { Response } from 'express';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import type { File } from 'multer';
@@ -10,6 +9,7 @@ import { CreateOrderResponseDto } from './dto/create-order-response.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateOrderResponseDto } from './dto/order-response.dto';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
+import { UpdatePickupNoteDto } from './dto/update-pickup-note.dto';
 import { ReweightPieceDto } from './dto/reweight-piece.dto';
 import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
 import { ReweightBulkDto } from './dto/reweight-bulk.dto';
@@ -31,6 +31,83 @@ import { DeleteOrderResponseDto } from './dto/delete-order-response.dto';
 @Controller('orders')
 export class OrdersController {
     constructor(private readonly ordersService: OrdersService) { }
+    @UseGuards(JwtAuthGuard)
+    @Get('proofs/:no_tracking/pickup-note/pdf')
+    async getPickupNotePdf(
+        @Param('no_tracking') noTracking: string,
+    ): Promise<{ message: string; data: { link: string } }> {
+        const link = await this.ordersService.generatePickupNotePdf(noTracking);
+        return { message: 'Berhasil menghasilkan PDF pickup note', data: { link } };
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @UseInterceptors(AnyFilesInterceptor())
+    @Patch('proofs/:no_tracking/pickup-note')
+    async updatePickupNote(
+        @Param('no_tracking') noTracking: string,
+        @Body() formData: any,
+        @UploadedFiles() files: Array<any>,
+        @Request() req: any,
+    ): Promise<{ message: string; data: any }> {
+        const userId = req.user?.id;
+
+        // Parse form data
+        const updateData: any = {};
+
+        // Handle text fields
+        if (formData.pickup_time) updateData.pickup_time = formData.pickup_time;
+        if (formData.pickup_notes) updateData.pickup_notes = formData.pickup_notes;
+
+        // Handle file uploads
+        if (files && files.length > 0) {
+            const proofPhotos: string[] = [];
+            let customerSignature: string | undefined;
+            let driverSignature: string | undefined;
+
+            for (const file of files) {
+                const fieldName = file.fieldname;
+
+                if (fieldName === 'proof_photos') {
+                    // Simpan file dan dapatkan path
+                    const filePath = await this.saveFile(file, 'pickup_proof');
+                    proofPhotos.push(filePath);
+                } else if (fieldName === 'customer_signature') {
+                    // Simpan customer signature
+                    const filePath = await this.saveFile(file, 'customer_signature');
+                    customerSignature = filePath;
+                } else if (fieldName === 'driver_signature') {
+                    // Simpan driver signature
+                    const filePath = await this.saveFile(file, 'driver_signature');
+                    driverSignature = filePath;
+                }
+            }
+
+            if (proofPhotos.length > 0) updateData.proof_photos = proofPhotos;
+            if (customerSignature) updateData.customer_signature = customerSignature;
+            if (driverSignature) updateData.driver_signature = driverSignature;
+        }
+
+        return this.ordersService.updatePickupNote(noTracking, updateData, userId);
+    }
+
+    private async saveFile(file: any, type: string): Promise<string> {
+        // Simpan file ke disk dan return path
+        const fileName = `${Date.now()}_${file.originalname}`;
+        const filePath = `/public/uploads/${fileName}`;
+
+        // Buat direktori jika belum ada
+        const fs = require('fs');
+        const path = require('path');
+        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        // Tulis file
+        fs.writeFileSync(path.join(uploadDir, fileName), file.buffer);
+
+        return filePath;
+    }
 
     @UseGuards(JwtAuthGuard)
     @Get(':no_tracking/labels')
