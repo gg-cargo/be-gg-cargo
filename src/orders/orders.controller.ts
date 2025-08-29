@@ -90,6 +90,61 @@ export class OrdersController {
         return this.ordersService.updatePickupNote(noTracking, updateData, userId);
     }
 
+    @Get('proofs/:no_tracking/delivery-note/pdf')
+    async generateDeliveryNotePdf(@Param('no_tracking') noTracking: string): Promise<{ message: string; data: string }> {
+        const link = await this.ordersService.generateDeliveryNotePdf(noTracking);
+        return { message: 'PDF surat jalan kirim berhasil digenerate', data: link };
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @UseInterceptors(AnyFilesInterceptor())
+    @Patch('proofs/:no_tracking/delivery-note')
+    async updateDeliveryNote(
+        @Param('no_tracking') noTracking: string,
+        @Body() formData: any,
+        @UploadedFiles() files: Array<any>,
+        @Request() req: any,
+    ): Promise<{ message: string; data: any }> {
+        const userId = req.user?.id;
+
+        // Parse form data
+        const updateData: any = {};
+
+        // Handle text fields
+        if (formData.delivery_notes) updateData.delivery_notes = formData.delivery_notes;
+
+        // Handle file uploads
+        if (files && files.length > 0) {
+            const proofPhotos: string[] = [];
+            let customerSignature: string | undefined;
+            let driverSignature: string | undefined;
+
+            for (const file of files) {
+                const fieldName = file.fieldname;
+
+                if (fieldName === 'proof_photos') {
+                    // Simpan file dan dapatkan path
+                    const filePath = await this.saveFile(file, 'delivery_proof');
+                    proofPhotos.push(filePath);
+                } else if (fieldName === 'customer_signature') {
+                    // Simpan customer signature
+                    const filePath = await this.saveFile(file, 'customer_signature');
+                    customerSignature = filePath;
+                } else if (fieldName === 'driver_signature') {
+                    // Simpan driver signature
+                    const filePath = await this.saveFile(file, 'driver_signature');
+                    driverSignature = filePath;
+                }
+            }
+
+            if (proofPhotos.length > 0) updateData.proof_photos = proofPhotos;
+            if (customerSignature) updateData.customer_signature = customerSignature;
+            if (driverSignature) updateData.driver_signature = driverSignature;
+        }
+
+        return this.ordersService.updateDeliveryNote(noTracking, updateData, userId);
+    }
+
     private async saveFile(file: any, type: string): Promise<string> {
         // Simpan file ke disk dan return path
         const fileName = `${Date.now()}_${file.originalname}`;

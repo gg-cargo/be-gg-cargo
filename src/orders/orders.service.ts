@@ -16,6 +16,7 @@ import { UpdateOrderResponseDto } from './dto/order-response.dto';
 import { TrackingHelper } from './helpers/tracking.helper';
 import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
 import { generatePickupNotePDF } from './helpers/generate-pickup-note-pdf.helper';
+import { generateDeliveryNotePDF } from './helpers/generate-delivery-note-pdf.helper';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
 import { ReweightPieceDto } from './dto/reweight-piece.dto';
 import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
@@ -1072,6 +1073,152 @@ export class OrdersService {
                 pickup_time: updatedOrder?.pickup_time,
                 customer_signature: (updatedPickupDriver as any)?.signature || null,
                 driver_signature: (updatedPickupDriver as any)?.photo || null,
+                proof_photos: updateData.proof_photos || [],
+            }
+        };
+    }
+
+    async generateDeliveryNotePdf(noTracking: string): Promise<string> {
+        // Validasi order
+        const order: any = await this.orderModel.findOne({ where: { no_tracking: noTracking }, raw: true });
+        if (!order) throw new NotFoundException('Order tidak ditemukan');
+
+        // Ringkasan koli & berat dari pieces
+        const pieceAgg = await this.orderPieceModel.findAll({
+            where: { order_id: order.id },
+            attributes: [[fn('COUNT', col('id')), 'jumlah_koli'], [fn('SUM', col('berat')), 'berat_total']],
+            raw: true,
+        });
+        const qty = Number((pieceAgg[0] as any)?.jumlah_koli || 0);
+        const berat_total = Number((pieceAgg[0] as any)?.berat_total || 0);
+
+        // Ambil tanda tangan dari file_log
+        const customerSignatureFile = await this.fileLogModel.findOne({
+            where: { used_for: `customer_signature_delivery_order_id_${order.id}`, is_assigned: 1 },
+            raw: true,
+            order: [['created_at', 'DESC']],
+        }).catch(() => null);
+
+        // Ambil foto dari file_log (maks 3) berdasarkan used_for = 'delivery_proof'
+        const fileProofs = await this.fileLogModel.findAll({
+            where: { used_for: `delivery_proof_order_id_${order.id}`, is_assigned: 1 },
+            raw: true,
+            order: [['created_at', 'DESC']],
+        }).catch(() => []);
+
+        // Ambil foto bukti (maksimal 3)
+        const photos = [] as Array<{ image: string; datetime?: string; latlng?: string }>;
+        for (const f of fileProofs.slice(0, 3)) {
+            if (f?.file_path) {
+                photos.push({
+                    image: f.file_path,
+                    datetime: f.created_at ? new Date(f.created_at).toLocaleString('id-ID') : undefined,
+                    latlng: undefined
+                });
+            }
+        }
+
+        // Siapkan payload PDF
+        const link = await generateDeliveryNotePDF({
+            no_tracking: noTracking,
+            from: {
+                nama: order.nama_pengirim || '-',
+                alamat: order.alamat_pengirim || '-',
+                phone: order.no_telepon_pengirim || '-'
+            },
+            to: {
+                nama: order.nama_penerima || '-',
+                alamat: order.alamat_penerima || '-',
+                phone: order.no_telepon_penerima || '-'
+            },
+            summary: { qty, berat_total },
+            signature_customer: customerSignatureFile?.file_path || undefined,
+            courier_name: order?.delivery_courier_name || undefined,
+            layanan: order?.layanan || 'Reguler',
+            deskripsi: order?.nama_barang || 'Paket',
+            catatan: order?.remark_sales || '',
+            packing: order?.packing ? 'Ya' : 'Tidak',
+            surat_jalan_balik: order?.surat_jalan_balik || 'Tidak',
+            photos,
+        });
+        return link;
+    }
+
+    async updateDeliveryNote(noTracking: string, updateData: any, userId: number): Promise<{ message: string; data: any }> {
+        // Validasi order
+        const order: any = await this.orderModel.findOne({ where: { no_tracking: noTracking }, raw: true });
+        if (!order) throw new NotFoundException('Order tidak ditemukan');
+
+        // Validasi status delivery - hanya bisa diupdate jika belum di-deliver
+        if (order.status_delivery && order.status_delivery !== 'Assigned') {
+            throw new BadRequestException(`Order tidak dapat diupdate karena sudah dalam status: ${order.status_delivery}`);
+        }
+
+        const updateFields: any = {};
+
+        // Update field yang ada di tabel orders (jika ada field lain yang perlu diupdate)
+        // Update order jika ada field yang berubah
+        if (Object.keys(updateFields).length > 0) {
+            await this.orderModel.update(updateFields, { where: { no_tracking: noTracking } });
+        }
+
+        // Update tanda tangan - simpan sebagai file di file_log
+        if (updateData.customer_signature || updateData.driver_signature) {
+            // Simpan customer signature sebagai file
+            if (updateData.customer_signature) {
+                await this.fileLogModel.create({
+                    file_name: updateData.customer_signature.split('/').pop() || 'customer_signature.png',
+                    file_path: updateData.customer_signature,
+                    used_for: `customer_signature_delivery_order_id_${order.id}`,
+                    is_assigned: 1,
+                    user_id: userId,
+                    file_type: 'image/png',
+                } as any);
+            }
+
+            // Simpan driver signature sebagai file
+            if (updateData.driver_signature) {
+                await this.fileLogModel.create({
+                    file_name: updateData.driver_signature.split('/').pop() || 'driver_signature.png',
+                    file_path: updateData.driver_signature,
+                    used_for: `driver_signature_order_id_${order.id}`,
+                    is_assigned: 1,
+                    user_id: userId,
+                    file_type: 'image/png',
+                } as any);
+            }
+        }
+
+        // Update foto bukti di file_log
+        if (updateData.proof_photos && updateData.proof_photos.length > 0) {
+            // Hapus foto lama yang terkait dengan order ini
+            await this.fileLogModel.update(
+                { is_assigned: 0 },
+                { where: { used_for: `delivery_proof_order_id_${order.id}` } }
+            );
+
+            // Tambahkan foto baru
+            for (const photoPath of updateData.proof_photos) {
+                await this.fileLogModel.create({
+                    file_name: photoPath.split('/').pop() || 'photo.jpg',
+                    file_path: photoPath,
+                    used_for: `delivery_proof_order_id_${order.id}`,
+                    is_assigned: 1,
+                    user_id: userId,
+                    file_type: 'image/jpeg',
+                } as any);
+            }
+        }
+
+        // Ambil data terbaru untuk response
+        const updatedOrder = await this.orderModel.findOne({ where: { no_tracking: noTracking }, raw: true });
+
+        return {
+            message: 'Delivery note berhasil diupdate',
+            data: {
+                no_tracking: noTracking,
+                customer_signature: updateData.customer_signature || null,
+                driver_signature: updateData.driver_signature || null,
                 proof_photos: updateData.proof_photos || [],
             }
         };
