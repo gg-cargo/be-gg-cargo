@@ -13,12 +13,10 @@ export function getFormattedDate(date: Date = new Date()): string {
  * Mendapatkan waktu dalam format HH:MM:SS (24 jam)
  */
 export function getFormattedTime(date: Date = new Date()): string {
-    return date.toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-    });
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const seconds = date.getSeconds().toString().padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
 }
 
 /**
@@ -46,12 +44,10 @@ export function getIndonesianDate(date: Date = new Date()): string {
  * Format waktu Indonesia (contoh: 14:30:25)
  */
 export function getIndonesianTime(date: Date = new Date()): string {
-    return date.toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-    });
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const seconds = date.getSeconds().toString().padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
 }
 
 /**
