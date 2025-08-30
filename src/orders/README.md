@@ -298,3 +298,96 @@ curl -X PATCH \
 - **Large Volume**: Orders with high volume where manual reweighting is impractical
 - **Trusted Customers**: Regular customers with accurate initial measurements
 - **Express Services**: Time-sensitive orders requiring fast processing 
+
+## Resolve Missing Item
+
+**Endpoint:** `PATCH /orders/:no_tracking/resolve-missing`
+
+**Description:** Menyelesaikan masalah barang hilang dengan upload foto bukti penemuan
+
+**Headers:**
+- `Authorization: Bearer <token>`
+- `Content-Type: multipart/form-data`
+
+**Parameters:**
+- `no_tracking` (path): Nomor tracking order
+
+**Body (multipart/form-data):**
+- `piece_id` (string, required): ID piece yang ditemukan
+- `found_at_hub_id` (number, required): ID hub tempat barang ditemukan
+- `notes_on_finding` (string, required): Catatan tentang penemuan barang (max 500 karakter)
+- `photo` (file, optional): Foto bukti penemuan barang
+  - Format: JPEG, PNG, GIF
+  - Ukuran maksimal: 5MB
+
+**Response:**
+```json
+{
+  "message": "Masalah barang hilang berhasil diselesaikan",
+  "data": {
+    "no_tracking": "TRK123456789",
+    "piece_id": "PIECE001",
+    "found_at_hub": "Hub Jakarta Pusat",
+    "resolved_by": "John Doe",
+    "resolved_at": "2024-01-15T10:30:00.000Z",
+    "all_pieces_found": true,
+    "order_status": "Ready for Delivery"
+  }
+}
+```
+
+**Validasi:**
+- User harus memiliki level 1, 2, atau 3 (Traffic Controller atau Admin)
+- Order harus dalam status 'Item Missing'
+- Piece ID harus valid dan dalam status 'Missing'
+- Hub ID harus valid
+- File foto harus dalam format gambar yang didukung
+- Ukuran file tidak boleh lebih dari 5MB
+
+**Catatan:**
+- Foto akan disimpan di folder `/public/uploads/` dengan nama file yang unik
+- Jika semua piece yang hilang sudah ditemukan, status order akan berubah menjadi 'Ready for Delivery'
+- Endpoint ini akan mencatat history dan update status kendala order
+
+**Contoh Penggunaan:**
+
+**cURL:**
+```bash
+curl -X PATCH \
+  "http://localhost:3000/orders/TRK123456789/resolve-missing" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "piece_id=PIECE001" \
+  -F "found_at_hub_id=1" \
+  -F "notes_on_finding=Barang ditemukan di gudang utama, kondisi baik" \
+  -F "photo=@/path/to/photo.jpg"
+```
+
+**Postman:**
+1. Set method ke `PATCH`
+2. URL: `http://localhost:3000/orders/TRK123456789/resolve-missing`
+3. Headers: `Authorization: Bearer YOUR_JWT_TOKEN`
+4. Body: `form-data`
+   - `piece_id`: `PIECE001`
+   - `found_at_hub_id`: `1`
+   - `notes_on_finding`: `Barang ditemukan di gudang utama, kondisi baik`
+   - `photo`: Select file (tipe: File)
+
+**JavaScript/Fetch:**
+```javascript
+const formData = new FormData();
+formData.append('piece_id', 'PIECE001');
+formData.append('found_at_hub_id', '1');
+formData.append('notes_on_finding', 'Barang ditemukan di gudang utama, kondisi baik');
+formData.append('photo', fileInput.files[0]);
+
+const response = await fetch('/orders/TRK123456789/resolve-missing', {
+  method: 'PATCH',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  },
+  body: formData
+});
+
+const result = await response.json();
+console.log(result);
+``` 

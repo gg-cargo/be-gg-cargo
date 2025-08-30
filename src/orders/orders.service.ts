@@ -47,6 +47,8 @@ import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
 import { Hub } from '../models/hub.model';
 import { generateOrderLabelsPDF } from './helpers/generate-order-labels-pdf.helper';
+import { ReportMissingItemDto } from './dto/report-missing-item.dto';
+import { ResolveMissingItemDto } from './dto/resolve-missing-item.dto';
 
 @Injectable()
 export class OrdersService {
@@ -1220,6 +1222,214 @@ export class OrdersService {
                 customer_signature: updateData.customer_signature || null,
                 driver_signature: updateData.driver_signature || null,
                 proof_photos: updateData.proof_photos || [],
+            }
+        };
+    }
+
+    async reportMissingItem(noTracking: string, dto: ReportMissingItemDto): Promise<{ message: string; data: any }> {
+        // Validasi order
+        const order: any = await this.orderModel.findOne({ where: { no_tracking: noTracking }, raw: true });
+        if (!order) throw new NotFoundException('Order tidak ditemukan');
+
+        // Validasi user yang melaporkan (harus level ops)
+        const reporter: any = await this.userModel.findOne({
+            where: { id: dto.reported_by_user_id },
+            include: [{ model: this.levelModel, as: 'levelData' }],
+            raw: true,
+            nest: true
+        });
+
+        if (!reporter) throw new NotFoundException('User yang melaporkan tidak ditemukan');
+
+        // Validasi level user (harus level ops - biasanya level 2 atau 3)
+        if (!reporter.levelData || (reporter.levelData.level !== 7 && reporter.levelData.level !== 3)) {
+            throw new BadRequestException('Hanya tim OPS yang dapat melaporkan barang hilang');
+        }
+
+        // Validasi piece IDs
+        const validPieces = await this.orderPieceModel.findAll({
+            where: {
+                order_id: order.id,
+                piece_id: { [Op.in]: dto.missing_piece_ids }
+            },
+            raw: true
+        });
+
+        if (validPieces.length !== dto.missing_piece_ids.length) {
+            const foundPieceIds = validPieces.map(p => p.piece_id);
+            const missingPieceIds = dto.missing_piece_ids.filter(id => !foundPieceIds.includes(id));
+            throw new BadRequestException(`Piece ID tidak valid: ${missingPieceIds.join(', ')}`);
+        }
+
+        // Update status order
+        await this.orderModel.update(
+            {
+                isProblem: 1,
+                status: 'Item Missing',
+                updatedAt: new Date()
+            },
+            { where: { no_tracking: noTracking } }
+        );
+
+        // Buat entri di order_kendala
+        const orderKendala = await this.orderModel.sequelize?.models.OrderKendala?.create({
+            order_id: order.id,
+            user_id: dto.reported_by_user_id,
+            message: dto.message,
+            status: 0, // Ongoing
+            created_at: new Date(),
+            updated_at: new Date()
+        } as any);
+
+        // Update status pieces yang hilang
+        await this.orderPieceModel.update(
+            {
+                status: 'Missing',
+                updated_at: new Date()
+            },
+            {
+                where: {
+                    order_id: order.id,
+                    piece_id: { [Op.in]: dto.missing_piece_ids }
+                }
+            }
+        );
+
+        return {
+            message: 'Laporan barang hilang berhasil disimpan',
+            data: {
+                no_tracking: noTracking,
+                missing_piece_ids: dto.missing_piece_ids,
+                reported_by: reporter.name,
+                reported_at: new Date(),
+                order_kendala_id: (orderKendala as any)?.id,
+                status: 'Item Missing'
+            }
+        };
+    }
+
+    async resolveMissingItem(noTracking: string, dto: ResolveMissingItemDto): Promise<{ message: string; data: any }> {
+        // Validasi order
+        const order: any = await this.orderModel.findOne({ where: { no_tracking: noTracking }, raw: true });
+        if (!order) throw new NotFoundException('Order tidak ditemukan');
+
+        // Validasi status order harus 'Item Missing'
+        if (order.status !== 'Item Missing') {
+            throw new BadRequestException(`Order tidak dalam status 'Item Missing'. Status saat ini: ${order.status}`);
+        }
+
+        // Validasi user yang menyelesaikan (harus traffic controller atau admin)
+        const resolver: any = await this.userModel.findOne({
+            where: { id: dto.resolved_by_user_id },
+            include: [{ model: this.levelModel, as: 'levelData' }],
+            raw: true,
+            nest: true
+        });
+
+        if (!resolver) throw new NotFoundException('User yang menyelesaikan tidak ditemukan');
+
+        // Validasi level user (harus traffic controller atau admin - level 1, 2, atau 3)
+        if (!resolver.levelData || ![1, 2, 3].includes(resolver.levelData.level)) {
+            throw new BadRequestException('Hanya Traffic Controller atau Admin yang dapat menyelesaikan masalah');
+        }
+
+        // Validasi piece ID
+        const piece: any = await this.orderPieceModel.findOne({
+            where: {
+                order_id: order.id,
+                piece_id: dto.piece_id,
+                status: 'Missing'
+            },
+            raw: true
+        });
+
+        if (!piece) {
+            throw new BadRequestException(`Piece ID ${dto.piece_id} tidak ditemukan atau tidak dalam status 'Missing'`);
+        }
+
+        // Validasi hub
+        const hub: any = await this.hubModel.findByPk(dto.found_at_hub_id, { raw: true });
+        if (!hub) throw new NotFoundException('Hub tidak ditemukan');
+
+        // Update status piece menjadi 'Found'
+        await this.orderPieceModel.update(
+            {
+                status: 'Found',
+                found_at_hub_id: dto.found_at_hub_id,
+                updated_at: new Date()
+            },
+            {
+                where: {
+                    order_id: order.id,
+                    piece_id: dto.piece_id
+                }
+            }
+        );
+
+        // Cari dan update order_kendala
+        const orderKendala: any = await this.orderModel.sequelize?.models.OrderKendala?.findOne({
+            where: {
+                order_id: order.id,
+                status: 0 // Ongoing
+            },
+            order: [['created_at', 'DESC']],
+            raw: true
+        });
+
+        if (orderKendala) {
+            // Update status kendala
+            await this.orderModel.sequelize?.models.OrderKendala?.update(
+                {
+                    status: 1, // Completed
+                    message_completed: dto.notes_on_finding,
+                    url_image_1: dto.photo_file || null,
+                    updated_at: new Date()
+                },
+                { where: { id: orderKendala.id } }
+            );
+        }
+
+        // Tambahkan ke order_histories
+        await this.orderHistoryModel.create({
+            order_id: order.id,
+            status: 'Missing Item Resolved',
+            remark: `Piece ${dto.piece_id} ditemukan di ${hub.nama_hub}. ${dto.notes_on_finding}`,
+            user_id: dto.resolved_by_user_id,
+            date: new Date().toISOString().split('T')[0],
+            time: new Date().toLocaleTimeString('id-ID'),
+            created_at: new Date()
+        } as any);
+
+        // Cek apakah semua piece yang hilang sudah ditemukan
+        const totalMissingPieces = await this.orderPieceModel.count({
+            where: {
+                order_id: order.id,
+                status: 'Missing'
+            }
+        });
+
+        // Jika semua piece sudah ditemukan, update status order
+        if (totalMissingPieces === 0) {
+            await this.orderModel.update(
+                {
+                    isProblem: 0,
+                    status: 'Ready for Delivery',
+                    updatedAt: new Date()
+                },
+                { where: { no_tracking: noTracking } }
+            );
+        }
+
+        return {
+            message: 'Masalah barang hilang berhasil diselesaikan',
+            data: {
+                no_tracking: noTracking,
+                piece_id: dto.piece_id,
+                found_at_hub: hub.nama_hub,
+                resolved_by: resolver.name,
+                resolved_at: new Date(),
+                all_pieces_found: totalMissingPieces === 0,
+                order_status: totalMissingPieces === 0 ? 'Ready for Delivery' : 'Item Missing'
             }
         };
     }

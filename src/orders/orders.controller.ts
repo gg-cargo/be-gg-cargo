@@ -27,6 +27,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { DeleteOrderDto } from './dto/delete-order.dto';
 import { DeleteOrderResponseDto } from './dto/delete-order-response.dto';
+import { ReportMissingItemDto } from './dto/report-missing-item.dto';
+import { ResolveMissingItemDto, ResolveMissingItemFormDto } from './dto/resolve-missing-item.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -145,23 +147,88 @@ export class OrdersController {
         return this.ordersService.updateDeliveryNote(noTracking, updateData, userId);
     }
 
-    private async saveFile(file: any, type: string): Promise<string> {
-        // Simpan file ke disk dan return path
-        const fileName = `${Date.now()}_${file.originalname}`;
-        const filePath = `/public/uploads/${fileName}`;
+    @UseGuards(JwtAuthGuard)
+    @Post(':no_tracking/report-missing')
+    async reportMissingItem(
+        @Param('no_tracking') noTracking: string,
+        @Body() dto: ReportMissingItemDto,
+        @Request() req: any,
+    ): Promise<{ message: string; data: any }> {
+        // Override reported_by_user_id dengan user yang sedang login
+        dto.reported_by_user_id = req.user?.id;
 
-        // Buat direktori jika belum ada
-        const fs = require('fs');
-        const path = require('path');
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
+        return this.ordersService.reportMissingItem(noTracking, dto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @UseInterceptors(FileInterceptor('photo'))
+    @Patch(':no_tracking/resolve-missing')
+    async resolveMissingItem(
+        @Param('no_tracking') noTracking: string,
+        @Body() formData: ResolveMissingItemFormDto,
+        @UploadedFile() photo: any,
+        @Request() req: any,
+    ): Promise<{ message: string; data: any }> {
+        // Buat DTO untuk service
+        const dto: ResolveMissingItemDto = {
+            ...formData,
+            resolved_by_user_id: req.user?.id, // Override dengan user yang sedang login
+            photo_file: undefined
+        };
+
+        // Handle file upload jika ada
+        if (photo) {
+            const filePath = await this.saveFile(photo, 'missing_item_resolution');
+            dto.photo_file = filePath;
         }
 
-        // Tulis file
-        fs.writeFileSync(path.join(uploadDir, fileName), file.buffer);
+        return this.ordersService.resolveMissingItem(noTracking, dto);
+    }
 
-        return filePath;
+    private async saveFile(file: any, type: string): Promise<string> {
+        try {
+            // Validasi file
+            if (!file || !file.buffer) {
+                throw new BadRequestException('File tidak valid');
+            }
+
+            // Validasi tipe file (hanya gambar)
+            const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+            if (!allowedMimeTypes.includes(file.mimetype)) {
+                throw new BadRequestException('Hanya file gambar yang diperbolehkan (JPEG, PNG, GIF)');
+            }
+
+            // Validasi ukuran file (max 5MB)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                throw new BadRequestException('Ukuran file terlalu besar, maksimal 5MB');
+            }
+
+            // Generate nama file yang unik
+            const timestamp = Date.now();
+            const randomString = Math.random().toString(36).substring(2, 15);
+            const fileExtension = file.originalname.split('.').pop();
+            const fileName = `${type}_${timestamp}_${randomString}.${fileExtension}`;
+            const filePath = `/public/uploads/${fileName}`;
+
+            // Buat direktori jika belum ada
+            const fs = require('fs');
+            const path = require('path');
+            const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+
+            // Tulis file
+            const fullPath = path.join(uploadDir, fileName);
+            fs.writeFileSync(fullPath, file.buffer);
+
+            console.log(`File berhasil disimpan: ${fullPath}`);
+            return filePath;
+        } catch (error) {
+            console.error('Error saat menyimpan file:', error);
+            throw new BadRequestException(`Gagal menyimpan file: ${error.message}`);
+        }
     }
 
     @UseGuards(JwtAuthGuard)
