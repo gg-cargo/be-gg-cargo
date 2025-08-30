@@ -8,6 +8,7 @@ import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
 import { Order } from '../models/order.model';
 import { Hub } from '../models/hub.model';
 import { LogGps } from '../models/log-gps.model';
+import { OrderHistory } from '../models/order-history.model';
 
 @Module({
     imports: [
@@ -18,6 +19,7 @@ import { LogGps } from '../models/log-gps.model';
             Order,
             LogGps,
             Hub,
+            OrderHistory,
         ]),
     ],
     controllers: [DriversController],

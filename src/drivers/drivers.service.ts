@@ -7,9 +7,11 @@ import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
 import { LogGps } from '../models/log-gps.model';
 import { Order } from '../models/order.model';
 import { Hub } from '../models/hub.model';
+import { OrderHistory } from '../models/order-history.model';
 import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto, AvailableDriversResponseDto, AvailableDriverDto, DriverLocationDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto, DriverStatusSummaryResponseDto, DriverStatusSummaryDto, DriverWorkloadDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
+import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 
 @Injectable()
 export class DriversService {
@@ -28,6 +30,8 @@ export class DriversService {
         private logGpsModel: typeof LogGps,
         @InjectModel(Hub)
         private hubModel: typeof Hub,
+        @InjectModel(OrderHistory)
+        private orderHistoryModel: typeof OrderHistory,
     ) { }
 
     async getAvailableDrivers(params: AvailableDriversDto) {
@@ -904,10 +908,29 @@ export class DriversService {
                 ? 'Driver Assigned for Pickup'
                 : 'Driver Assigned for Delivery';
 
-            const historyRemark = `Order ditugaskan kepada ${driver.getDataValue('name')} untuk tugas ${assignDriverDto.task_type}`;
+            // Set remarks berdasarkan task_type
+            let historyRemark: string;
+            if (assignDriverDto.task_type === 'pickup') {
+                historyRemark = 'Kurir dalam perjalanan';
+            } else if (assignDriverDto.task_type === 'delivery') {
+                historyRemark = 'Kiriman dibawa oleh kurir';
+            } else {
+                historyRemark = `Order ditugaskan kepada ${driver.getDataValue('name')} untuk tugas ${assignDriverDto.task_type}`;
+            }
 
-            // Note: Perlu inject OrderHistory model jika diperlukan
-            // await this.orderHistoryModel.create({...}, { transaction });
+            // Buat order history dengan format tanggal dan waktu yang benar
+            const { date, time } = getOrderHistoryDateTime();
+            await this.orderHistoryModel.create({
+                order_id: assignDriverDto.order_id,
+                status: historyStatus,
+                remark: historyRemark,
+                date: date,
+                time: time,
+                created_by: assignDriverDto.assigned_by_user_id,
+                created_at: new Date(),
+                provinsi: '', // default empty string untuk field wajib
+                kota: ''     // default empty string untuk field wajib
+            }, { transaction });
 
             // 8. Commit transaction
             await transaction.commit();
