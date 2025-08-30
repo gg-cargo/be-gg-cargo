@@ -9,9 +9,10 @@ import { Hub } from '../models/hub.model';
 import { TruckList } from '../models/truck-list.model';
 import { JobAssign } from '../models/job-assign.model';
 import { User } from '../models/user.model';
+import { OrderHistory } from '../models/order-history.model';
 
 @Module({
-    imports: [SequelizeModule.forFeature([Order, OrderPiece, OrderDeliveryNote, Hub, TruckList, JobAssign, User])],
+    imports: [SequelizeModule.forFeature([Order, OrderPiece, OrderDeliveryNote, Hub, TruckList, JobAssign, User, OrderHistory])],
     controllers: [DeliveryNotesController],
     providers: [DeliveryNotesService],
     exports: [DeliveryNotesService],

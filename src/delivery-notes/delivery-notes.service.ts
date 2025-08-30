@@ -13,6 +13,8 @@ import { User } from '../models/user.model';
 import { ListDeliveryNotesQueryDto, ListDeliveryNotesResponseDto } from './dto/list-delivery-notes.dto';
 import { DeliveryNoteDetailResponseDto } from './dto/delivery-note-detail.dto';
 import { ORDER_STATUS } from 'src/common/constants/order-status.constants';
+import { OrderHistory } from '../models/order-history.model';
+import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 
 @Injectable()
 export class DeliveryNotesService {
@@ -26,6 +28,7 @@ export class DeliveryNotesService {
         @InjectModel(TruckList) private readonly truckListModel: typeof TruckList,
         @InjectModel(JobAssign) private readonly jobAssignModel: typeof JobAssign,
         @InjectModel(User) private readonly userModel: typeof User,
+        @InjectModel(OrderHistory) private readonly orderHistoryModel: typeof OrderHistory,
     ) { }
 
     private generateDeliveryNoteNumber(date: Date, hubKode: string, seq: number): string {
@@ -186,7 +189,21 @@ export class DeliveryNotesService {
         // Update status truck menjadi digunakan
         await this.truckListModel.update({ status: 1 }, { where: { id: vehicle.id } });
 
-        // TODO: Insert order_histories
+        // Insert order_histories untuk setiap order
+        const { date, time } = getOrderHistoryDateTime();
+        for (const order of orders) {
+            await this.orderHistoryModel.create({
+                order_id: order.id,
+                status: 'Delivery Note Created',
+                remark: `berangkat ke svc ${hubTujuan.getDataValue('nama')}`,
+                date: date,
+                time: time,
+                created_by: createdByUserId,
+                created_at: new Date(),
+                provinsi: '', // akan diisi dari order jika diperlukan
+                kota: ''     // akan diisi dari order jika diperlukan
+            });
+        }
 
         return {
             status: 'success',
