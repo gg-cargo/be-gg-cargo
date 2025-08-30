@@ -17,6 +17,7 @@ import { OrderHistory } from '../models/order-history.model';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { OrderManifestInbound } from '../models/order-manifest-inbound.model';
 import { InboundScanDto, InboundScanResponseDto } from './dto/inbound-scan.dto';
+import { InboundConfirmWebDto, InboundConfirmWebResponseDto } from './dto/inbound-confirm-web.dto';
 
 @Injectable()
 export class DeliveryNotesService {
@@ -780,6 +781,171 @@ export class DeliveryNotesService {
         } catch (error) {
             await transaction.rollback();
             throw new InternalServerErrorException(`Error dalam inbound scan: ${error.message}`);
+        }
+    }
+
+    async inboundConfirmWeb(noDeliveryNote: string, dto: InboundConfirmWebDto): Promise<InboundConfirmWebResponseDto> {
+        // Validasi user yang melakukan inbound confirm
+        const inboundUser = await this.userModel.findByPk(dto.inbound_by_user_id, {
+            attributes: ['id', 'name', 'level'],
+            raw: true,
+        });
+
+        if (!inboundUser) {
+            throw new NotFoundException('User yang melakukan inbound confirm tidak ditemukan');
+        }
+
+        // Validasi delivery note
+        const deliveryNote = await this.orderDeliveryNoteModel.findOne({
+            where: { no_delivery_note: noDeliveryNote },
+            raw: true,
+        });
+
+        if (!deliveryNote) {
+            throw new NotFoundException('Delivery note tidak ditemukan');
+        }
+
+        // Validasi hub tujuan
+        const destinationHub = await this.hubModel.findByPk(dto.destination_hub_id, {
+            attributes: ['id', 'nama'],
+            raw: true,
+        });
+
+        if (!destinationHub) {
+            throw new NotFoundException('Hub tujuan tidak ditemukan');
+        }
+
+        // Validasi hub tujuan sesuai dengan delivery note
+        if (Number(deliveryNote.hub_id) !== dto.destination_hub_id) {
+            throw new BadRequestException('Hub tujuan tidak sesuai dengan delivery note');
+        }
+
+        // Mengidentifikasi semua order dan piece
+        const noTrackingList = (deliveryNote.no_tracking || '').split(',').map(s => s.trim()).filter(Boolean);
+
+        if (noTrackingList.length === 0) {
+            throw new BadRequestException('Delivery note tidak memiliki resi yang valid');
+        }
+
+        // Ambil semua orders berdasarkan no_tracking
+        const orders = await this.orderModel.findAll({
+            where: { no_tracking: { [Op.in]: noTrackingList } },
+            attributes: ['id', 'no_tracking', 'status', 'current_hub'],
+            raw: true,
+        });
+
+        if (orders.length !== noTrackingList.length) {
+            const foundTrackingNumbers = orders.map(o => o.no_tracking);
+            const missingTrackingNumbers = noTrackingList.filter(tracking => !foundTrackingNumbers.includes(tracking));
+            throw new BadRequestException(`Resi tidak ditemukan: ${missingTrackingNumbers.join(', ')}`);
+        }
+
+        // Ambil semua pieces berdasarkan order_id
+        const orderIds = orders.map(o => o.id);
+        const pieces = await this.orderPieceModel.findAll({
+            where: { order_id: { [Op.in]: orderIds } },
+            attributes: ['id', 'piece_id', 'order_id', 'inbound_status'],
+            raw: true,
+        });
+
+        if (pieces.length === 0) {
+            throw new BadRequestException('Tidak ada pieces yang ditemukan untuk orders ini');
+        }
+
+        // Mulai transaction
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const now = new Date();
+            const piecesUpdated: { piece_id: string; status: 'success' | 'failed'; message: string; }[] = [];
+            const ordersUpdated: { order_id: number; no_tracking: string; status: string; current_hub: number; }[] = [];
+            let historyRecordsCreated = 0;
+
+            // Update semua pieces secara massal
+            const pieceUpdateResult = await this.orderPieceModel.update(
+                {
+                    inbound_status: 1,
+                    hub_current_id: dto.destination_hub_id,
+                    inbound_by: dto.inbound_by_user_id,
+                    updatedAt: now,
+                },
+                {
+                    where: { order_id: { [Op.in]: orderIds } },
+                    transaction,
+                }
+            );
+
+            // Update semua orders secara massal
+            const orderUpdateResult = await this.orderModel.update(
+                {
+                    current_hub: String(dto.destination_hub_id),
+                    status: 'Arrived at Destination Hub',
+                    issetManifest_inbound: 1,
+                    updatedAt: now,
+                },
+                {
+                    where: { id: { [Op.in]: orderIds } },
+                    transaction,
+                }
+            );
+
+            // Buat order history untuk setiap order
+            const { date, time } = getOrderHistoryDateTime();
+            for (const order of orders) {
+                await this.orderHistoryModel.create(
+                    {
+                        order_id: order.id,
+                        status: 'Inbound Manifest Confirmed (Manual)',
+                        remark: `pesanan tiba di svc ${destinationHub.nama}`,
+                        date: date,
+                        time: time,
+                        created_by: dto.inbound_by_user_id,
+                        created_at: now,
+                        provinsi: '',
+                        kota: '',
+                    },
+                    { transaction }
+                );
+                historyRecordsCreated++;
+            }
+
+            // Prepare response data
+            for (const piece of pieces) {
+                piecesUpdated.push({
+                    piece_id: piece.piece_id,
+                    status: 'success',
+                    message: 'Piece berhasil dikonfirmasi inbound',
+                });
+            }
+
+            for (const order of orders) {
+                ordersUpdated.push({
+                    order_id: order.id,
+                    no_tracking: order.no_tracking,
+                    status: 'Arrived at Destination Hub',
+                    current_hub: dto.destination_hub_id,
+                });
+            }
+
+            await transaction.commit();
+
+            return {
+                message: 'Inbound confirm web berhasil diproses',
+                success: true,
+                data: {
+                    no_delivery_note: noDeliveryNote,
+                    destination_hub_id: dto.destination_hub_id,
+                    total_orders_confirmed: orders.length,
+                    total_pieces_confirmed: pieces.length,
+                    orders_updated: ordersUpdated,
+                    pieces_updated: piecesUpdated,
+                    history_records_created: historyRecordsCreated,
+                },
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            throw new InternalServerErrorException(`Error dalam inbound confirm web: ${error.message}`);
         }
     }
 }

@@ -5,6 +5,7 @@ import { CreateDeliveryNoteDto, CreateDeliveryNoteResponseDto } from './dto/crea
 import { ListDeliveryNotesQueryDto, ListDeliveryNotesResponseDto } from './dto/list-delivery-notes.dto';
 import { DeliveryNoteDetailResponseDto } from './dto/delivery-note-detail.dto';
 import { InboundScanDto, InboundScanResponseDto } from './dto/inbound-scan.dto';
+import { InboundConfirmWebDto, InboundConfirmWebResponseDto } from './dto/inbound-confirm-web.dto';
 
 @Controller('delivery-notes')
 export class DeliveryNotesController {
@@ -85,6 +86,16 @@ export class DeliveryNotesController {
         @Body() body: InboundScanDto,
     ): Promise<InboundScanResponseDto> {
         const result = await this.deliveryNotesService.inboundScan(noDeliveryNote, body);
+        return result;
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_delivery_note/inbound-confirm-web')
+    async inboundConfirmWeb(
+        @Param('no_delivery_note') noDeliveryNote: string,
+        @Body() body: InboundConfirmWebDto,
+    ): Promise<InboundConfirmWebResponseDto> {
+        const result = await this.deliveryNotesService.inboundConfirmWeb(noDeliveryNote, body);
         return result;
     }
 }
