@@ -406,6 +406,12 @@ export class OrdersService {
             throw new NotFoundException('Order tidak ditemukan');
         }
 
+        // Ambil data hub asal
+        const hubAsal = await this.hubModel.findByPk(order.getDataValue('hub_source_id'), {
+            attributes: ['id', 'nama'],
+            raw: true,
+        });
+
         // Validasi user authorization (hanya Admin/Super Admin)
         // Note: Implementasi validasi level user bisa ditambahkan sesuai kebutuhan
         // const user = await this.userModel.findByPk(updated_by_user_id, {
@@ -565,18 +571,20 @@ export class OrdersService {
             }
 
             // 5. Create order_histories
+            const hubAsalName = hubAsal?.nama || 'Unknown Hub';
             const statusText = isBypassEnabled ? 'Reweight Bypass Enabled' : 'Reweight Bypass Disabled';
             const historyRemark = `${statusText} oleh User ID ${updated_by_user_id}${reason ? ` dengan alasan: ${reason}` : ''}${proofImageData ? ` - Foto bukti: ${proofImageData.file_name}` : ''}${invoiceData ? ` - Invoice otomatis dibuat: ${invoiceData.invoice_no}` : ''}`;
 
+            const { date, time } = getOrderHistoryDateTime();
             await this.orderHistoryModel.create(
                 {
                     order_id: orderId,
                     status: statusText,
-                    remark: historyRemark,
+                    remark: `proses di service center ${hubAsalName}`,
                     provinsi: order.getDataValue('provinsi_pengirim') || '',
                     kota: order.getDataValue('kota_pengirim') || '',
-                    date: now.toISOString().split('T')[0],
-                    time: now.toTimeString().split(' ')[0],
+                    date: date,
+                    time: time,
                     created_by: updated_by_user_id,
                 },
                 { transaction }
@@ -4675,6 +4683,13 @@ export class OrdersService {
                 throw new NotFoundException('Order tidak ditemukan');
             }
 
+            // Ambil data hub asal
+            const hubAsal = await this.hubModel.findByPk(order.getDataValue('hub_source_id'), {
+                attributes: ['id', 'nama'],
+                raw: true,
+                transaction
+            });
+
             // 3. Validasi semua pieces sudah di-reweight
             const orderPieces = await this.orderPieceModel.findAll({
                 where: { order_id: orderId },
@@ -4743,6 +4758,7 @@ export class OrdersService {
             }
 
             // 9. Catat di order histories
+            const hubAsalName = hubAsal?.nama || 'Unknown Hub';
             const remark = submitReweightDto.remark ||
                 `Reweight finalized. Total berat: ${chargeableWeight.toFixed(2)} kg, Total volume: ${totalVolume.toFixed(2)} m³`;
 
@@ -4750,13 +4766,13 @@ export class OrdersService {
             await this.orderHistoryModel.create({
                 order_id: orderId,
                 status: 'Reweight Finalized',
-                remark: remark,
+                remark: `proses di service center ${hubAsalName}`,
                 date: date,
                 time: time,
                 created_by: submitReweightDto.submitted_by_user_id,
                 created_at: new Date(),
-                provinsi: '', // default empty string untuk field wajib
-                kota: ''     // default empty string untuk field wajib
+                provinsi: order.getDataValue('provinsi_pengirim') || '',
+                kota: order.getDataValue('kota_pengirim') || ''
             }, { transaction });
 
             // 10. Commit transaction
