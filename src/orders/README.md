@@ -390,4 +390,86 @@ const response = await fetch('/orders/TRK123456789/resolve-missing', {
 
 const result = await response.json();
 console.log(result);
-``` 
+```
+
+## Get Reweight Proof
+
+**Endpoint:** `GET /orders/:order_id/reweight-proof`
+
+**Description:** Mendapatkan bukti foto reweight dari order ID tertentu
+
+**Headers:**
+- `Authorization: Bearer <token>`
+
+**Parameters:**
+- `order_id` (path, number): ID order
+
+**Response:**
+```json
+{
+  "message": "Bukti foto reweight berhasil diambil",
+  "success": true,
+  "data": {
+    "order_id": 123,
+    "total_files": 2,
+    "files": [
+      {
+        "id": 456,
+        "file_name": "reweight_proof_1.jpg",
+        "file_path": "https://api.99delivery.id/uploads/reweight_proof_1.jpg",
+        "file_type": "jpg",
+        "file_size": 1024000,
+        "user_id": 789,
+        "used_for": "bulk_reweight_proof_order_id_123",
+        "created_at": "2024-01-15T10:30:00.000Z"
+      },
+      {
+        "id": 457,
+        "file_name": "reweight_proof_2.jpg",
+        "file_path": "https://api.99delivery.id/uploads/reweight_proof_2.jpg",
+        "file_type": "jpg",
+        "file_size": 2048000,
+        "user_id": 789,
+        "used_for": "bulk_reweight_proof_order_id_123",
+        "created_at": "2024-01-15T10:35:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "message": "Order dengan ID 123 tidak ditemukan",
+  "statusCode": 404
+}
+```
+
+**Contoh Penggunaan:**
+
+**cURL:**
+```bash
+curl -X GET \
+  "http://localhost:3000/orders/123/reweight-proof" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**JavaScript/Fetch:**
+```javascript
+const response = await fetch('/orders/123/reweight-proof', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+const result = await response.json();
+console.log(result);
+```
+
+**Catatan:**
+- Endpoint ini mencari file log dengan `used_for = bulk_reweight_proof_order_id_${orderId}`
+- File diurutkan berdasarkan `created_at` DESC (terbaru dulu)
+- Jika order tidak ditemukan, akan mengembalikan error 404
+- Jika tidak ada file bukti, akan mengembalikan array kosong 

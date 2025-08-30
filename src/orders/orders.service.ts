@@ -5096,5 +5096,60 @@ export class OrdersService {
         }
     }
 
+    /**
+     * Mendapatkan bukti foto reweight dari order ID tertentu
+     */
+    async getReweightProof(orderId: number): Promise<{ message: string; success: boolean; data: any }> {
+        try {
+            // Validasi order exists
+            const order = await this.orderModel.findByPk(orderId);
+            if (!order) {
+                throw new NotFoundException(`Order dengan ID ${orderId} tidak ditemukan`);
+            }
+
+            // Cari file log dengan used_for = bulk_reweight_proof_order_id_${orderId}
+            const usedFor = `bulk_reweight_proof_order_id_${orderId}`;
+
+            const fileLogs = await this.fileLogModel.findAll({
+                where: {
+                    used_for: usedFor
+                },
+                order: [['created_at', 'DESC']],
+                raw: true
+            });
+
+            // Format response
+            const formattedFiles = fileLogs.map(file => ({
+                id: file.id,
+                file_name: file.file_name,
+                file_path: file.file_path,
+                file_type: file.file_type,
+                file_size: file.file_size,
+                user_id: file.user_id,
+                used_for: file.used_for,
+                created_at: file.created_at
+            }));
+
+            return {
+                message: 'Bukti foto reweight berhasil diambil',
+                success: true,
+                data: {
+                    order_id: orderId,
+                    total_files: fileLogs.length,
+                    files: formattedFiles
+                }
+            };
+
+        } catch (error) {
+            this.logger.error(`Error getting reweight proof for order ${orderId}: ${error.message}`, error.stack);
+
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Terjadi kesalahan saat mengambil bukti foto reweight');
+        }
+    }
+
 
 } 

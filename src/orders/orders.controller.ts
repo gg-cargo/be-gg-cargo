@@ -29,6 +29,7 @@ import { DeleteOrderDto } from './dto/delete-order.dto';
 import { DeleteOrderResponseDto } from './dto/delete-order-response.dto';
 import { ReportMissingItemDto } from './dto/report-missing-item.dto';
 import { ResolveMissingItemDto, ResolveMissingItemFormDto } from './dto/resolve-missing-item.dto';
+import { GetReweightProofResponseDto } from './dto/reweight-proof-response.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -507,5 +508,13 @@ export class OrdersController {
         @Body() deleteDto: DeleteOrderDto,
     ): Promise<DeleteOrderResponseDto> {
         return this.ordersService.deleteOrder(noResi, deleteDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get(':order_id/reweight-proof')
+    async getReweightProof(
+        @Param('order_id', ParseIntPipe) orderId: number,
+    ): Promise<GetReweightProofResponseDto> {
+        return this.ordersService.getReweightProof(orderId);
     }
 } 
