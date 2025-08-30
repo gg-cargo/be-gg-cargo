@@ -240,7 +240,7 @@ export async function generateDeliveryNotePDF(payload: DeliveryNotePayload): Pro
         pdfDoc.pipe(ws);
         pdfDoc.end();
         await new Promise<void>((res, rej) => { ws.on('finish', res); ws.on('error', rej); });
-        return `/public/pdf/${fileName}`;
+        return `/pdf/${fileName}`;
     } catch (error) {
         console.error('Error generating delivery note PDF:', error);
         throw new Error(`Failed to generate delivery note PDF: ${error.message}`);
