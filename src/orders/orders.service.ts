@@ -49,6 +49,7 @@ import { Hub } from '../models/hub.model';
 import { generateOrderLabelsPDF } from './helpers/generate-order-labels-pdf.helper';
 import { ReportMissingItemDto } from './dto/report-missing-item.dto';
 import { ResolveMissingItemDto } from './dto/resolve-missing-item.dto';
+import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 
 @Injectable()
 export class OrdersService {
@@ -747,13 +748,15 @@ export class OrdersService {
             await this.orderPieceModel.bulkCreate(piecesToCreate, { transaction });
 
             // 4. Simpan ke tabel order_histories
+            const { date, time } = getOrderHistoryDateTime();
             await this.orderHistoryModel.create({
                 order_id: order.id,
                 status: ORDER_STATUS.DRAFT,
-                keterangan: 'Order berhasil dibuat',
+                date: date,
+                time: time,
+                remark: 'Pesanan berhasil dibuat',
                 provinsi: createOrderDto.provinsi_pengirim,
                 kota: createOrderDto.kota_pengirim,
-                remark: 'Order berhasil dibuat',
                 created_by: userId,
             }, { transaction });
 
@@ -1390,13 +1393,14 @@ export class OrdersService {
         }
 
         // Tambahkan ke order_histories
+        const { date, time } = getOrderHistoryDateTime();
         await this.orderHistoryModel.create({
             order_id: order.id,
             status: 'Missing Item Resolved',
             remark: `Piece ${dto.piece_id} ditemukan di ${hub.nama_hub}. ${dto.notes_on_finding}`,
             user_id: dto.resolved_by_user_id,
-            date: new Date().toISOString().split('T')[0],
-            time: new Date().toLocaleTimeString('id-ID'),
+            date: date,
+            time: time,
             created_at: new Date()
         } as any);
 
@@ -1563,12 +1567,15 @@ export class OrdersService {
         if (!order) throw new NotFoundException('Order tidak ditemukan');
 
         // 2. Simpan history baru, isi field NOT NULL dari order jika tidak diisi user
+        const { date, time } = getOrderHistoryDateTime();
         const history = await this.orderHistoryModel.create({
             order_id: orderId,
             status: dto.status,
             provinsi: (dto as any).provinsi || order.provinsi_pengirim || '-',
             kota: (dto as any).kota || order.kota_pengirim || '-',
             remark: (dto as any).keterangan || '-',
+            date: date,
+            time: time,
             created_at: new Date(),
             updated_at: new Date(),
         });
@@ -3422,10 +3429,13 @@ export class OrdersService {
     private async createUpdateHistory(orderId: number, userId: number, updatedFields: string[], transaction: Transaction): Promise<void> {
         const remark = `Order details updated: ${updatedFields.join(', ')}`;
 
+        const { date, time } = getOrderHistoryDateTime();
         await this.orderHistoryModel.create({
             order_id: orderId,
             status: 'Order Details Updated',
             remark: remark,
+            date: date,
+            time: time,
             created_by: userId,
         }, { transaction });
     }
@@ -4574,10 +4584,13 @@ export class OrdersService {
 
             const historyRemark = `Order ditugaskan kepada ${driver.getDataValue('name')} untuk tugas ${assignDriverDto.task_type}`;
 
+            const { date, time } = getOrderHistoryDateTime();
             await this.orderHistoryModel.create({
                 order_id: assignDriverDto.order_id,
                 status: historyStatus,
                 remark: historyRemark,
+                date: date,
+                time: time,
                 created_by: assignDriverDto.assigned_by_user_id,
                 created_at: new Date(),
                 provinsi: '', // default empty string untuk field wajib
@@ -4733,10 +4746,13 @@ export class OrdersService {
             const remark = submitReweightDto.remark ||
                 `Reweight finalized. Total berat: ${chargeableWeight.toFixed(2)} kg, Total volume: ${totalVolume.toFixed(2)} m³`;
 
+            const { date, time } = getOrderHistoryDateTime();
             await this.orderHistoryModel.create({
                 order_id: orderId,
                 status: 'Reweight Finalized',
                 remark: remark,
+                date: date,
+                time: time,
                 created_by: submitReweightDto.submitted_by_user_id,
                 created_at: new Date(),
                 provinsi: '', // default empty string untuk field wajib
@@ -4911,10 +4927,13 @@ export class OrdersService {
             const pieceIds = editReweightRequestDto.pieces.map(p => p.piece_id).join(', ');
             const historyRemark = `Koreksi reweight diajukan untuk pieces [${pieceIds}]. Note: ${editReweightRequestDto.note || ''}`;
 
+            const { date, time } = getOrderHistoryDateTime();
             await this.orderHistoryModel.create({
                 order_id: orderId,
                 status: 'Reweight Correction Requested',
                 remark: historyRemark,
+                date: date,
+                time: time,
                 created_by: userId,
                 created_at: new Date(),
                 provinsi: '', // default empty string untuk field wajib
