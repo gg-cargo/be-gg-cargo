@@ -1272,16 +1272,6 @@ export class OrdersService {
             throw new BadRequestException(`Piece ID tidak valid: ${missingPieceIds.join(', ')}`);
         }
 
-        // Update status order
-        await this.orderModel.update(
-            {
-                isProblem: 1,
-                status: 'Item Missing',
-                updatedAt: new Date()
-            },
-            { where: { no_tracking: noTracking } }
-        );
-
         // Buat entri di order_kendala
         const orderKendala = await this.orderModel.sequelize?.models.OrderKendala?.create({
             order_id: order.id,
