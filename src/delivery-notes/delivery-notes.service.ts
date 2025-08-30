@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op, fn, col, literal } from 'sequelize';
 import { Order } from '../models/order.model';
@@ -15,6 +15,8 @@ import { DeliveryNoteDetailResponseDto } from './dto/delivery-note-detail.dto';
 import { ORDER_STATUS } from 'src/common/constants/order-status.constants';
 import { OrderHistory } from '../models/order-history.model';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
+import { OrderManifestInbound } from '../models/order-manifest-inbound.model';
+import { InboundScanDto, InboundScanResponseDto } from './dto/inbound-scan.dto';
 
 @Injectable()
 export class DeliveryNotesService {
@@ -29,6 +31,7 @@ export class DeliveryNotesService {
         @InjectModel(JobAssign) private readonly jobAssignModel: typeof JobAssign,
         @InjectModel(User) private readonly userModel: typeof User,
         @InjectModel(OrderHistory) private readonly orderHistoryModel: typeof OrderHistory,
+        @InjectModel(OrderManifestInbound) private readonly orderManifestInboundModel: typeof OrderManifestInbound,
     ) { }
 
     private generateDeliveryNoteNumber(date: Date, hubKode: string, seq: number): string {
@@ -614,5 +617,169 @@ export class DeliveryNotesService {
             added,
             removed,
         };
+    }
+
+    async inboundScan(noDeliveryNote: string, dto: InboundScanDto): Promise<InboundScanResponseDto> {
+        // Validasi user yang melakukan inbound scan
+        const inboundUser = await this.userModel.findByPk(dto.inbound_by_user_id, {
+            attributes: ['id', 'name', 'level'],
+            raw: true,
+        });
+
+        if (!inboundUser) {
+            throw new NotFoundException('User yang melakukan inbound scan tidak ditemukan');
+        }
+
+        // Validasi delivery note
+        const deliveryNote = await this.orderDeliveryNoteModel.findOne({
+            where: { no_delivery_note: noDeliveryNote },
+            raw: true,
+        });
+
+        if (!deliveryNote) {
+            throw new NotFoundException('Delivery note tidak ditemukan');
+        }
+
+        // Validasi hub tujuan
+        const destinationHub = await this.hubModel.findByPk(dto.destination_hub_id, {
+            attributes: ['id', 'nama'],
+            raw: true,
+        });
+
+        if (!destinationHub) {
+            throw new NotFoundException('Hub tujuan tidak ditemukan');
+        }
+
+        // Validasi pieces yang di-scan
+        const pieces = await this.orderPieceModel.findAll({
+            where: { piece_id: { [Op.in]: dto.scanned_piece_ids } },
+            include: [
+                {
+                    model: this.orderModel,
+                    as: 'order',
+                    attributes: ['id', 'no_tracking', 'status', 'current_hub', 'next_hub'],
+                },
+            ],
+            raw: true,
+            nest: true,
+        });
+
+        if (pieces.length !== dto.scanned_piece_ids.length) {
+            const foundPieceIds = pieces.map(p => p.piece_id);
+            const missingPieceIds = dto.scanned_piece_ids.filter(id => !foundPieceIds.includes(id));
+            throw new BadRequestException(`Pieces tidak ditemukan: ${missingPieceIds.join(', ')}`);
+        }
+
+        // Mulai transaction
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const now = new Date();
+            const piecesUpdated: { piece_id: string; status: 'success' | 'failed'; message: string; }[] = [];
+            const ordersUpdated: { order_id: number; no_tracking: string; status: string; current_hub: number; }[] = [];
+            let manifestRecordsCreated = 0;
+            let historyRecordsCreated = 0;
+
+            // Proses setiap piece yang di-scan
+            for (const piece of pieces) {
+                try {
+                    // Update piece
+                    await this.orderPieceModel.update(
+                        {
+                            inbound_status: 1,
+                            hub_current_id: dto.destination_hub_id,
+                            inbound_by: dto.inbound_by_user_id,
+                            updatedAt: now,
+                        },
+                        {
+                            where: { piece_id: piece.piece_id },
+                            transaction,
+                        }
+                    );
+
+                    // Update order
+                    const order = piece.order as any;
+                    await this.orderModel.update(
+                        {
+                            current_hub: String(dto.destination_hub_id),
+                            issetManifest_inbound: 1,
+                            updatedAt: now,
+                        },
+                        {
+                            where: { id: order.id },
+                            transaction,
+                        }
+                    );
+
+                    // Buat order history
+                    const { date, time } = getOrderHistoryDateTime();
+                    await this.orderHistoryModel.create(
+                        {
+                            order_id: order.id,
+                            status: 'Piece Inbound Scanned',
+                            remark: `pesanan tiba di svc ${destinationHub.nama}`,
+                            date: date,
+                            time: time,
+                            created_by: dto.inbound_by_user_id,
+                            created_at: now,
+                            provinsi: '',
+                            kota: '',
+                        },
+                        { transaction }
+                    );
+
+                    // Buat manifest inbound record
+                    await this.orderManifestInboundModel.create({
+                        order_id: order.no_tracking,
+                        svc_id: String(dto.destination_hub_id),
+                        user_id: String(dto.inbound_by_user_id),
+                        created_at: now,
+                    } as any, { transaction });
+
+                    piecesUpdated.push({
+                        piece_id: piece.piece_id,
+                        status: 'success',
+                        message: 'Piece berhasil di-inbound',
+                    });
+
+                    ordersUpdated.push({
+                        order_id: order.id,
+                        no_tracking: order.no_tracking,
+                        status: order.status,
+                        current_hub: dto.destination_hub_id,
+                    });
+
+                    manifestRecordsCreated++;
+                    historyRecordsCreated++;
+
+                } catch (error) {
+                    piecesUpdated.push({
+                        piece_id: piece.piece_id,
+                        status: 'failed',
+                        message: `Error: ${error.message}`,
+                    });
+                }
+            }
+
+            await transaction.commit();
+
+            return {
+                message: 'Inbound scan berhasil diproses',
+                success: true,
+                data: {
+                    no_delivery_note: noDeliveryNote,
+                    destination_hub_id: dto.destination_hub_id,
+                    total_pieces_scanned: dto.scanned_piece_ids.length,
+                    pieces_updated: piecesUpdated,
+                    orders_updated: ordersUpdated,
+                    manifest_records_created: manifestRecordsCreated,
+                    history_records_created: historyRecordsCreated,
+                },
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            throw new InternalServerErrorException(`Error dalam inbound scan: ${error.message}`);
+        }
     }
 }

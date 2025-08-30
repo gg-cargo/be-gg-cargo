@@ -4,6 +4,7 @@ import { DeliveryNotesService } from './delivery-notes.service';
 import { CreateDeliveryNoteDto, CreateDeliveryNoteResponseDto } from './dto/create-delivery-note.dto';
 import { ListDeliveryNotesQueryDto, ListDeliveryNotesResponseDto } from './dto/list-delivery-notes.dto';
 import { DeliveryNoteDetailResponseDto } from './dto/delivery-note-detail.dto';
+import { InboundScanDto, InboundScanResponseDto } from './dto/inbound-scan.dto';
 
 @Controller('delivery-notes')
 export class DeliveryNotesController {
@@ -75,5 +76,15 @@ export class DeliveryNotesController {
             message: 'Delivery note berhasil diperbarui',
             data: result,
         };
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post(':no_delivery_note/inbound-scan')
+    async inboundScan(
+        @Param('no_delivery_note') noDeliveryNote: string,
+        @Body() body: InboundScanDto,
+    ): Promise<InboundScanResponseDto> {
+        const result = await this.deliveryNotesService.inboundScan(noDeliveryNote, body);
+        return result;
     }
 }
