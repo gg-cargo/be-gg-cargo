@@ -329,17 +329,6 @@ export class PickupsService {
                         transaction
                     });
 
-                    // 7. Tambah order history
-                    await this.orderHistoryModel.create({
-                        order_id: order.id,
-                        status: 'Driver Assigned',
-                        keterangan: `Order ditugaskan ke kurir: ${driver.name}`,
-                        provinsi: order.provinsi_pengirim,
-                        kota: order.kota_pengirim,
-                        remark: `Kurir: ${driver.name}, Tanggal: ${new Date().toLocaleString('id-ID')}`,
-                        created_by: driver_id,
-                    }, { transaction });
-
                     // 8. Buat notifikasi untuk driver
                     // @ts-ignore
                     await this.orderNotifikasiModel.create({
@@ -614,21 +603,6 @@ export class PickupsService {
                 }
             );
 
-            // 4. Create order_histories
-            await this.orderHistoryModel.create(
-                {
-                    order_id,
-                    status: 'Pickup Rescheduled',
-                    remark: `Rescheduled from ${order.getDataValue('pickup_time')} to ${new_pickup_time}. Reason: ${reason_reschedule}`,
-                    provinsi: order.getDataValue('provinsi_pengirim'),
-                    kota: order.getDataValue('kota_pengirim'),
-                    date: new Date().toISOString().split('T')[0],
-                    time: new Date().toTimeString().split(' ')[0],
-                    created_by: rescheduled_by_user_id,
-                },
-                { transaction }
-            );
-
             // 5. Create order_notifikasi untuk customer
             await this.orderNotifikasiModel.create(
                 {
@@ -752,30 +726,6 @@ export class PickupsService {
                     }
                 );
             }
-
-            // 4. Create order_histories
-            const historyStatus = isSuccess ? 'Pickup Completed' : 'Pickup Failed';
-            const historyRemark = isSuccess
-                ? `Pickup berhasil. ${notes || ''}`
-                : `Pickup gagal. Alasan: ${reason}`;
-
-            await this.orderHistoryModel.create(
-                {
-                    order_id,
-                    status: historyStatus,
-                    remark: historyRemark,
-                    provinsi: order.getDataValue('provinsi_pengirim'),
-                    kota: order.getDataValue('kota_pengirim'),
-                    date: now.toISOString().split('T')[0],
-                    time: now.toTimeString().split(' ')[0],
-                    created_by: user_id,
-                    base64Foto: photo_base64 || null,
-                    base64SignDriver: signature_base64 || null,
-                    base64SignCustomer: signature_base64 || null,
-                    latlng: latlng,
-                },
-                { transaction }
-            );
 
             // 5. Create order_notifikasi
             const notificationMessage = isSuccess

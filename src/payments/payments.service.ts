@@ -179,16 +179,6 @@ export class PaymentsService {
 
                 // 12. Tulis order_histories
                 const isRegeneration = existingPayment ? true : false;
-                await this.orderHistoryModel.create({
-                    order_id: order.getDataValue('id'),
-                    status: isRegeneration ? 'VA Regenerated' : 'VA Created',
-                    provinsi: '-',
-                    kota: '-',
-                    date: new Date(),
-                    time: new Date().toTimeString().slice(0, 8),
-                    remark: `${isRegeneration ? 'VA Regenerated' : 'VA Created'}: ${vaBank?.toUpperCase()}:${vaNumber} expired at ${expireTime}`,
-                    created_at: new Date()
-                }, { transaction: t });
 
                 // 13. Return response
                 return {
@@ -261,19 +251,6 @@ export class PaymentsService {
 
                 // 5. Update payment_order
                 await this.createPaymentOrderRecord(order, notification, t);
-
-                // 6. Update order_histories
-                await this.orderHistoryModel.create({
-                    order_id: orderId,
-                    status: this.getHistoryStatus(notification.transaction_status),
-                    provinsi: '-',
-                    kota: '-',
-                    date: new Date(),
-                    time: new Date().toTimeString().slice(0, 8),
-                    remark: `Midtrans Notification: ${notification.transaction_status} - ${updateHistory.join(', ')}`,
-                    created_by: 0, // System user
-                    created_at: new Date()
-                }, { transaction: t });
 
                 return { message: 'Notification processed successfully' };
             });
@@ -587,19 +564,6 @@ export class PaymentsService {
                     await transactionPayment.destroy({ transaction: t });
                     console.log(`Transaction payment entry untuk ${no_tracking} berhasil dihapus`);
                 }
-
-                // 8. Tulis order_histories untuk audit trail
-                await this.orderHistoryModel.create({
-                    order_id: orderId,
-                    status: 'Payment Cancelled',
-                    provinsi: '-',
-                    kota: '-',
-                    date: new Date(),
-                    time: new Date().toTimeString().slice(0, 8),
-                    remark: 'VA payment cancelled via public endpoint',
-                    created_by: 0, // System user
-                    created_at: new Date()
-                }, { transaction: t });
 
                 return {
                     message: 'Pembayaran berhasil dibatalkan.'

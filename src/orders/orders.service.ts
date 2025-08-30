@@ -1400,18 +1400,6 @@ export class OrdersService {
             );
         }
 
-        // Tambahkan ke order_histories
-        const { date, time } = getOrderHistoryDateTime();
-        await this.orderHistoryModel.create({
-            order_id: order.id,
-            status: 'Missing Item Resolved',
-            remark: `Piece ${dto.piece_id} ditemukan di ${hub.nama_hub}. ${dto.notes_on_finding}`,
-            user_id: dto.resolved_by_user_id,
-            date: date,
-            time: time,
-            created_at: new Date()
-        } as any);
-
         // Cek apakah semua piece yang hilang sudah ditemukan
         const totalMissingPieces = await this.orderPieceModel.count({
             where: {
@@ -4942,19 +4930,6 @@ export class OrdersService {
             // 7. Catat di order histories
             const pieceIds = editReweightRequestDto.pieces.map(p => p.piece_id).join(', ');
             const historyRemark = `Koreksi reweight diajukan untuk pieces [${pieceIds}]. Note: ${editReweightRequestDto.note || ''}`;
-
-            const { date, time } = getOrderHistoryDateTime();
-            await this.orderHistoryModel.create({
-                order_id: orderId,
-                status: 'Reweight Correction Requested',
-                remark: historyRemark,
-                date: date,
-                time: time,
-                created_by: userId,
-                created_at: new Date(),
-                provinsi: '', // default empty string untuk field wajib
-                kota: ''     // default empty string untuk field wajib
-            });
 
             // 8. Hitung estimasi waktu approval (24-48 jam)
             const estimatedApprovalTime = new Date();
