@@ -33,4 +33,5 @@ export * from './user.model';
 export * from './transaction-payment.model';
 export * from './truck-list.model';
 export * from './reweight-correction-request.model';
-export * from './job-assign.model'; 
+export * from './job-assign.model';
+export * from './order-manifest-inbound.model'; 
