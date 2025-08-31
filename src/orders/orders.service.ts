@@ -815,6 +815,99 @@ export class OrdersService {
                 total_price: 0,
             }, { transaction });
 
+            // 6. Buat invoice
+            const invoiceAmounts = this.calculateInvoiceAmounts(shipmentData, createOrderDto);
+            const invoiceDate = new Date();
+
+            const invoice = await this.orderInvoiceModel.create({
+                order_id: order.id,
+                invoice_no: noTracking,
+                invoice_date: invoiceDate,
+                payment_terms: 'Net 30',
+                vat: 0,
+                discount: 0,
+                packing: invoiceAmounts.packing,
+                asuransi: invoiceAmounts.asuransi,
+                ppn: invoiceAmounts.ppn,
+                pph: 0,
+                kode_unik: 0,
+                konfirmasi_bayar: 0,
+                notes: `Invoice untuk order ${noTracking}`,
+                beneficiary_name: createOrderDto.billing_name || createOrderDto.nama_pengirim,
+                acc_no: '',
+                bank_name: '',
+                bank_address: '',
+                swift_code: '',
+                paid_attachment: '',
+                payment_info: 0,
+                fm: 0,
+                lm: 0,
+                bill_to_name: createOrderDto.billing_name || createOrderDto.nama_pengirim,
+                bill_to_phone: createOrderDto.billing_phone || createOrderDto.no_telepon_pengirim,
+                bill_to_address: createOrderDto.billing_address || createOrderDto.alamat_pengirim,
+                create_date: invoiceDate,
+                created_at: invoiceDate,
+                updated_at: invoiceDate,
+                isGrossUp: 0,
+                isUnreweight: 0,
+                noFaktur: '',
+            }, { transaction });
+
+            // 7. Buat invoice details
+            const invoiceDetails: any[] = [];
+
+            // Tambahkan item pengiriman dengan chargeable weight
+            invoiceDetails.push({
+                invoice_id: invoice.id,
+                description: "Biaya Pengiriman Barang",
+                qty: invoiceAmounts.chargeableWeight,
+                uom: 'KG',
+                unit_price: invoiceAmounts.subtotal / invoiceAmounts.chargeableWeight, // Harga per kg
+                remark: `Berat terberat: ${invoiceAmounts.chargeableWeight.toFixed(2)} kg (Aktual: ${shipmentData.totalBerat.toFixed(2)} kg, Volume: ${shipmentData.beratVolume.toFixed(2)} kg)`,
+                created_at: invoiceDate,
+                updated_at: invoiceDate,
+            });
+
+            // Tambahkan packing dan asuransi sebagai item terpisah jika ada
+            if (invoiceAmounts.packing > 0) {
+                invoiceDetails.push({
+                    invoice_id: invoice.id,
+                    description: 'Biaya Packing',
+                    qty: 1,
+                    uom: 'KG',
+                    unit_price: invoiceAmounts.packing,
+                    remark: 'Biaya packing dan handling',
+                    created_at: invoiceDate,
+                    updated_at: invoiceDate,
+                });
+            }
+
+            if (invoiceAmounts.asuransi > 0) {
+                invoiceDetails.push({
+                    invoice_id: invoice.id,
+                    description: 'Biaya Asuransi',
+                    qty: 1,
+                    uom: 'KG',
+                    unit_price: invoiceAmounts.asuransi,
+                    remark: 'Biaya asuransi pengiriman',
+                    created_at: invoiceDate,
+                    updated_at: invoiceDate,
+                });
+            }
+
+            // Bulk insert invoice details
+            await this.orderInvoiceDetailModel.bulkCreate(invoiceDetails, { transaction });
+
+            // 8. Update order dengan invoice info
+            await this.orderModel.update({
+                invoiceStatus: INVOICE_STATUS.BELUM_PROSES,
+                isUnpaid: 1,
+                total_harga: invoiceAmounts.total,
+            }, {
+                where: { id: order.id },
+                transaction
+            });
+
             // Commit transaction
             await transaction.commit();
 
@@ -823,6 +916,12 @@ export class OrdersService {
                 no_tracking: noTracking,
                 status: 'Order diproses',
                 message: 'Order berhasil dibuat',
+                invoice: {
+                    invoice_no: noTracking,
+                    invoice_date: invoiceDate.toISOString(),
+                    total_amount: invoiceAmounts.total,
+                    status: INVOICE_STATUS.BELUM_PROSES
+                }
             };
 
         } catch (error) {
@@ -5149,6 +5248,36 @@ export class OrdersService {
 
             throw new InternalServerErrorException('Terjadi kesalahan saat mengambil bukti foto reweight');
         }
+    }
+
+    /**
+     * Calculate invoice amounts
+     */
+    private calculateInvoiceAmounts(shipmentData: any, createOrderDto: CreateOrderDto): {
+        subtotal: number;
+        packing: number;
+        asuransi: number;
+        ppn: number;
+        total: number;
+        chargeableWeight: number;
+    } {
+        // Hitung chargeable weight (berat terberat antara berat aktual dan berat volume)
+        const chargeableWeight = Math.max(shipmentData.totalBerat, shipmentData.beratVolume);
+
+        const subtotal = chargeableWeight * 1000; // Asumsi harga per kg
+        const packing = createOrderDto.packing || 0;
+        const asuransi = createOrderDto.asuransi || 0;
+        const ppn = Math.round(subtotal * 0.11); // 11% PPN
+        const total = subtotal + packing + asuransi + ppn;
+
+        return {
+            subtotal,
+            packing,
+            asuransi,
+            ppn,
+            total,
+            chargeableWeight
+        };
     }
 
     /**

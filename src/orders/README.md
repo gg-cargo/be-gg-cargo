@@ -5,7 +5,138 @@
 ### 1. Create Order
 **POST** `/orders`
 
-Creates a new order with pieces and shipments.
+Creates a new order with pieces and shipments. Invoice will be automatically generated after order creation.
+
+#### Request Body
+```json
+{
+  "nama_pengirim": "Budi Santoso",
+  "alamat_pengirim": "Jl. Merdeka No. 10, Surabaya",
+  "provinsi_pengirim": "Jawa Timur",
+  "kota_pengirim": "Surabaya",
+  "kecamatan_pengirim": "Kecamatan A",
+  "kelurahan_pengirim": "Kelurahan A",
+  "kodepos_pengirim": "60111",
+  "no_telepon_pengirim": "6281234567890",
+  "email_pengirim": "budi@example.com",
+  "nama_penerima": "Citra Dewi",
+  "alamat_penerima": "Jl. Damai No. 5, Jakarta",
+  "provinsi_penerima": "DKI Jakarta",
+  "kota_penerima": "Jakarta Selatan",
+  "kecamatan_penerima": "Kecamatan B",
+  "kelurahan_penerima": "Kelurahan B",
+  "kodepos_penerima": "12190",
+  "no_telepon_penerima": "6287654321098",
+  "email_penerima": "citra@example.com",
+  "nama_barang": "PAKET (Isi Pakaian)",
+  "layanan": "Express",
+  "no_referensi": "REF-001",
+  "asuransi": 5000,
+  "packing": 10000,
+  "harga_barang": 500000,
+  "billing_name": "Budi Santoso",
+  "billing_phone": "6281234567890",
+  "billing_address": "Jl. Merdeka No. 10, Surabaya",
+  "billing_email": "budi@example.com",
+  "pieces": [
+    {
+      "qty": 2,
+      "berat": 5,
+      "panjang": 30,
+      "lebar": 20,
+      "tinggi": 15
+    }
+  ]
+}
+```
+
+#### Field Descriptions
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `nama_pengirim` | string | ✅ | Nama pengirim |
+| `alamat_pengirim` | string | ✅ | Alamat pengirim |
+| `provinsi_pengirim` | string | ✅ | Provinsi pengirim |
+| `kota_pengirim` | string | ✅ | Kota pengirim |
+| `kecamatan_pengirim` | string | ✅ | Kecamatan pengirim |
+| `kelurahan_pengirim` | string | ✅ | Kelurahan pengirim |
+| `kodepos_pengirim` | string | ✅ | Kode pos pengirim |
+| `no_telepon_pengirim` | string | ✅ | Telepon pengirim |
+| `email_pengirim` | string | ❌ | Email pengirim |
+| `nama_penerima` | string | ✅ | Nama penerima |
+| `alamat_penerima` | string | ✅ | Alamat penerima |
+| `provinsi_penerima` | string | ✅ | Provinsi penerima |
+| `kota_penerima` | string | ✅ | Kota penerima |
+| `kecamatan_penerima` | string | ✅ | Kecamatan penerima |
+| `kelurahan_penerima` | string | ✅ | Kelurahan penerima |
+| `kodepos_penerima` | string | ✅ | Kode pos penerima |
+| `no_telepon_penerima` | string | ✅ | Telepon penerima |
+| `email_penerima` | string | ❌ | Email penerima |
+| `nama_barang` | string | ✅ | Nama barang yang dikirim |
+| `layanan` | string | ✅ | Jenis layanan |
+| `no_referensi` | string | ❌ | Nomor referensi |
+| `asuransi` | number | ❌ | Biaya asuransi (default: 0) |
+| `packing` | number | ❌ | Biaya packing (default: 0) |
+| `harga_barang` | number | ❌ | Nilai barang untuk asuransi (default: 0) |
+| `billing_name` | string | ❌ | Nama untuk billing (default: nama_pengirim) |
+| `billing_phone` | string | ❌ | Telepon untuk billing (default: no_telepon_pengirim) |
+| `billing_address` | string | ❌ | Alamat untuk billing (default: alamat_pengirim) |
+| `billing_email` | string | ❌ | Email untuk billing (default: email_pengirim) |
+| `pieces` | array | ✅ | Array of pieces dengan qty, berat, dimensi |
+
+#### Response
+```json
+{
+  "order_id": 123,
+  "no_tracking": "GG250831123456",
+  "status": "Order diproses",
+  "message": "Order berhasil dibuat",
+  "invoice": {
+    "invoice_no": "INV-20250831-001",
+    "invoice_date": "2025-08-31T15:30:00.000Z",
+    "total_amount": 150000,
+    "status": "pending"
+  }
+}
+```
+
+#### cURL Example
+```bash
+curl -X POST \
+  http://localhost:3000/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "nama_pengirim": "Budi Santoso",
+    "alamat_pengirim": "Jl. Merdeka No. 10, Surabaya",
+    "provinsi_pengirim": "Jawa Timur",
+    "kota_pengirim": "Surabaya",
+    "no_telepon_pengirim": "6281234567890",
+    "nama_penerima": "Citra Dewi",
+    "alamat_penerima": "Jl. Damai No. 5, Jakarta",
+    "provinsi_penerima": "DKI Jakarta",
+    "kota_penerima": "Jakarta Selatan",
+    "no_telepon_penerima": "6287654321098",
+    "nama_barang": "PAKET (Isi Pakaian)",
+    "layanan": "Express",
+    "packing": 10000,
+    "asuransi": 5000,
+    "pieces": [
+      {
+        "qty": 2,
+        "berat": 5,
+        "panjang": 30,
+        "lebar": 20,
+        "tinggi": 15
+      }
+    ]
+  }'
+```
+
+#### Business Rules
+- **Invoice Generation**: Invoice akan dibuat otomatis setelah order berhasil dibuat
+- **Pricing**: Harga dihitung berdasarkan berat (Rp 1.000/kg) + packing + asuransi + PPN 11%
+- **Hub Assignment**: Hub source dan destination akan ditentukan berdasarkan alamat
+- **Transaction Safety**: Semua operasi dalam satu transaction untuk konsistensi data
 
 ### 2. Update Order
 **PATCH** `/orders/:no_resi`
