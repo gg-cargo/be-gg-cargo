@@ -46,7 +46,7 @@ export class TrackingsService {
         // 2. Ambil riwayat perjalanan
         const histories = await this.orderHistoryModel.findAll({
             where: { order_id: order.getDataValue('id') },
-            order: [['created_at', 'DESC']],
+            order: [['created_at', 'ASC']],
             raw: true,
         });
 
