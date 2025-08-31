@@ -473,8 +473,8 @@ export class DriversService {
 
                 const totalCurrentTasks = currentPickupTasks + currentDeliveryTasks;
 
-                // Kurir dianggap tersedia jika tugas < 3
-                if (totalCurrentTasks < 3) {
+                // Kurir dianggap tersedia jika tugas < 10
+                if (totalCurrentTasks < 10) {
                     // Parse lokasi kurir
                     let driverLocation: DriverLocationDto = { lat: 0, lng: 0 };
                     const driverLatlng = driver.getDataValue('latlng');
