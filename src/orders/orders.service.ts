@@ -862,7 +862,7 @@ export class OrdersService {
                 description: "Biaya Pengiriman Barang",
                 qty: invoiceAmounts.chargeableWeight,
                 uom: 'KG',
-                unit_price: invoiceAmounts.subtotal / invoiceAmounts.chargeableWeight, // Harga per kg
+                unit_price: 0,
                 remark: `Berat terberat: ${invoiceAmounts.chargeableWeight.toFixed(2)} kg (Aktual: ${shipmentData.totalBerat.toFixed(2)} kg, Volume: ${shipmentData.beratVolume.toFixed(2)} kg)`,
                 created_at: invoiceDate,
                 updated_at: invoiceDate,
