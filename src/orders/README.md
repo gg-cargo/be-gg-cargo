@@ -498,6 +498,15 @@ console.log(result);
 |-------|------|----------|-------------|
 | `completed_by_user_id` | number | Yes | ID user yang mengkonfirmasi penyelesaian order |
 
+**Response Data Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `no_tracking` | string | Nomor tracking order |
+| `status` | string | Status order setelah complete |
+| `completed_at` | string | Timestamp kapan order diselesaikan |
+| `completed_by` | number | ID user yang menyelesaikan order |
+| `no_delivery_note` | string | Nomor delivery note (jika ada) |
+
 **Success Response (200 OK):**
 ```json
 {
@@ -507,7 +516,8 @@ console.log(result);
     "no_tracking": "GG250831123456",
     "status": "Completed",
     "completed_at": "2025-08-31T15:30:00.000Z",
-    "completed_by": 101
+    "completed_by": 101,
+    "no_delivery_note": "DN-2025-001234"
   }
 }
 ```

@@ -5220,6 +5220,17 @@ export class OrdersService {
                 throw new InternalServerErrorException('Gagal mengambil data order yang sudah diupdate');
             }
 
+            // 8. Cari delivery note untuk order ini
+            const deliveryNote = await this.orderDeliveryNoteModel.findOne({
+                where: {
+                    no_tracking: {
+                        [Op.like]: `%${noTracking}%`
+                    }
+                },
+                attributes: ['no_delivery_note'],
+                raw: true
+            });
+
             return {
                 message: 'Pesanan berhasil diselesaikan',
                 success: true,
@@ -5227,7 +5238,8 @@ export class OrdersService {
                     no_tracking: noTracking,
                     status: updatedOrder.getDataValue('status'),
                     completed_at: updatedOrder.getDataValue('updated_at'),
-                    completed_by: completedByUserId
+                    completed_by: completedByUserId,
+                    no_delivery_note: deliveryNote?.no_delivery_note || undefined
                 }
             };
 

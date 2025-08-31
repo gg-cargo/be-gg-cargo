@@ -331,8 +331,6 @@ export class OrdersController {
         return this.ordersService.getOpsOrders(query, userId);
     }
 
-
-
     @UseGuards(JwtAuthGuard)
     @Get(':no_tracking/labels')
     async getOrderLabelsLink(

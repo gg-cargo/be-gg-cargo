@@ -14,5 +14,6 @@ export class CompleteOrderResponseDto {
         status: string;
         completed_at: string;
         completed_by: number;
+        no_delivery_note?: string;
     };
 }
