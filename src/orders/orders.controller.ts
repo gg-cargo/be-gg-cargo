@@ -247,6 +247,7 @@ export class OrdersController {
             },
         };
     }
+    @UseGuards(JwtAuthGuard)
     @Post()
     @HttpCode(HttpStatus.CREATED)
     async createOrder(
@@ -254,8 +255,10 @@ export class OrdersController {
         @Request() req: any,
     ): Promise<CreateOrderResponseDto> {
         // Ambil user ID dari request (asumsikan sudah ada middleware auth)
-        const userId = req.user?.id || 1; // Fallback ke 1 jika belum ada auth
-
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new BadRequestException('User ID tidak ditemukan');
+        }
         return this.ordersService.createOrder(createOrderDto, userId);
     }
 
