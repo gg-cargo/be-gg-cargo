@@ -28,7 +28,6 @@ export class InboundScanResponseDto {
         orders_updated: {
             order_id: number;
             no_tracking: string;
-            status: string;
             current_hub: number;
         }[];
         manifest_records_created: number;

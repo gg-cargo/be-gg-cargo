@@ -19,7 +19,6 @@ export class InboundConfirmWebResponseDto {
         orders_updated: {
             order_id: number;
             no_tracking: string;
-            status: string;
             current_hub: number;
         }[];
         pieces_updated: {

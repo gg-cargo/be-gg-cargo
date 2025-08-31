@@ -580,7 +580,7 @@ export class OrdersService {
                 {
                     order_id: orderId,
                     status: statusText,
-                    remark: `proses di service center ${hubAsalName}`,
+                    remark: `pesanan diproses di ${hubAsalName}`,
                     provinsi: order.getDataValue('provinsi_pengirim') || '',
                     kota: order.getDataValue('kota_pengirim') || '',
                     date: date,
@@ -4744,7 +4744,7 @@ export class OrdersService {
             await this.orderHistoryModel.create({
                 order_id: orderId,
                 status: 'Reweight Finalized',
-                remark: `proses di service center ${hubAsalName}`,
+                remark: `pesanan diproses di${hubAsalName}`,
                 date: date,
                 time: time,
                 created_by: submitReweightDto.submitted_by_user_id,

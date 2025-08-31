@@ -199,7 +199,7 @@ export class DeliveryNotesService {
             await this.orderHistoryModel.create({
                 order_id: order.id,
                 status: 'Delivery Note Created',
-                remark: `berangkat ke svc ${hubTujuan.getDataValue('nama')}`,
+                remark: `Pesanan berangkat ke ${hubTujuan.getDataValue('nama')}`,
                 date: date,
                 time: time,
                 created_by: createdByUserId,
@@ -677,7 +677,7 @@ export class DeliveryNotesService {
         try {
             const now = new Date();
             const piecesUpdated: { piece_id: string; status: 'success' | 'failed'; message: string; }[] = [];
-            const ordersUpdated: { order_id: number; no_tracking: string; status: string; current_hub: number; }[] = [];
+            const ordersUpdated: { order_id: number; no_tracking: string; current_hub: number; }[] = [];
             let manifestRecordsCreated = 0;
             let historyRecordsCreated = 0;
 
@@ -746,7 +746,6 @@ export class DeliveryNotesService {
                     ordersUpdated.push({
                         order_id: order.id,
                         no_tracking: order.no_tracking,
-                        status: order.status,
                         current_hub: dto.destination_hub_id,
                     });
 
@@ -858,7 +857,7 @@ export class DeliveryNotesService {
         try {
             const now = new Date();
             const piecesUpdated: { piece_id: string; status: 'success' | 'failed'; message: string; }[] = [];
-            const ordersUpdated: { order_id: number; no_tracking: string; status: string; current_hub: number; }[] = [];
+            const ordersUpdated: { order_id: number; no_tracking: string; current_hub: number; }[] = [];
             let historyRecordsCreated = 0;
 
             // Update semua pieces secara massal
@@ -879,7 +878,6 @@ export class DeliveryNotesService {
             const orderUpdateResult = await this.orderModel.update(
                 {
                     current_hub: String(dto.destination_hub_id),
-                    status: 'Arrived at Destination Hub',
                     issetManifest_inbound: 1,
                     updatedAt: now,
                 },
@@ -922,7 +920,6 @@ export class DeliveryNotesService {
                 ordersUpdated.push({
                     order_id: order.id,
                     no_tracking: order.no_tracking,
-                    status: 'Arrived at Destination Hub',
                     current_hub: dto.destination_hub_id,
                 });
             }
