@@ -30,6 +30,7 @@ import { DeleteOrderResponseDto } from './dto/delete-order-response.dto';
 import { ReportMissingItemDto } from './dto/report-missing-item.dto';
 import { ResolveMissingItemDto, ResolveMissingItemFormDto } from './dto/resolve-missing-item.dto';
 import { GetReweightProofResponseDto } from './dto/reweight-proof-response.dto';
+import { CompleteOrderDto, CompleteOrderResponseDto } from './dto/complete-order.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -520,4 +521,13 @@ export class OrdersController {
     ): Promise<GetReweightProofResponseDto> {
         return this.ordersService.getReweightProof(orderId);
     }
-} 
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_tracking/complete')
+    async completeOrder(
+        @Param('no_tracking') noTracking: string,
+        @Body() completeOrderDto: CompleteOrderDto,
+    ): Promise<CompleteOrderResponseDto> {
+        return this.ordersService.completeOrder(noTracking, completeOrderDto.completed_by_user_id);
+    }
+}

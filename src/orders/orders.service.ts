@@ -5151,5 +5151,96 @@ export class OrdersService {
         }
     }
 
+    /**
+     * Mengkonfirmasi bahwa seluruh proses order telah selesai
+     */
+    async completeOrder(noTracking: string, completedByUserId: number): Promise<{ message: string; success: boolean; data: any }> {
+        try {
+            // 1. Validasi order exists
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noTracking }
+            });
+
+            if (!order) {
+                throw new NotFoundException(`Order dengan nomor tracking ${noTracking} tidak ditemukan`);
+            }
+
+            // 3. Validasi status pembayaran
+            const paymentStatus = order.getDataValue('payment_status');
+            const invoiceStatus = order.getDataValue('invoiceStatus');
+            const isUnpaid = order.getDataValue('isUnpaid');
+
+            // Cek apakah pembayaran sudah lunas
+            const isPaymentComplete =
+                paymentStatus === 'paid' ||
+                (invoiceStatus === INVOICE_STATUS.LUNAS && isUnpaid === 0);
+
+            if (!isPaymentComplete) {
+                throw new BadRequestException('Pesanan tidak dapat diselesaikan karena belum lunas');
+            }
+
+            // 4. Validasi user yang melakukan complete
+            const user = await this.userModel.findByPk(completedByUserId);
+            if (!user) {
+                throw new NotFoundException(`User dengan ID ${completedByUserId} tidak ditemukan`);
+            }
+
+            // 5. Update status order menjadi 'Completed'
+            await this.orderModel.update(
+                {
+                    status: ORDER_STATUS.DELIVERED,
+                    updated_at: new Date()
+                },
+                {
+                    where: { no_tracking: noTracking }
+                }
+            );
+
+            // 6. Buat order history
+            const { date, time } = getOrderHistoryDateTime();
+
+            await this.orderHistoryModel.create({
+                order_id: order.getDataValue('id'),
+                status: ORDER_STATUS.DELIVERED,
+                remark: 'Pesanan diterima',
+                date: date,
+                time: time,
+                provinsi: '',
+                kota: '',
+                created_by: completedByUserId,
+                created_at: new Date()
+            });
+
+            // 7. Ambil data order yang sudah diupdate
+            const updatedOrder = await this.orderModel.findOne({
+                where: { no_tracking: noTracking }
+            });
+
+            if (!updatedOrder) {
+                throw new InternalServerErrorException('Gagal mengambil data order yang sudah diupdate');
+            }
+
+            return {
+                message: 'Pesanan berhasil diselesaikan',
+                success: true,
+                data: {
+                    no_tracking: noTracking,
+                    status: updatedOrder.getDataValue('status'),
+                    completed_at: updatedOrder.getDataValue('updated_at'),
+                    completed_by: completedByUserId
+                }
+            };
+
+        } catch (error) {
+            this.logger.error(`Error completing order ${noTracking}: ${error.message}`, error.stack);
+
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Terjadi kesalahan saat menyelesaikan pesanan');
+        }
+    }
+
 
 } 

@@ -473,3 +473,128 @@ console.log(result);
 - File diurutkan berdasarkan `created_at` DESC (terbaru dulu)
 - Jika order tidak ditemukan, akan mengembalikan error 404
 - Jika tidak ada file bukti, akan mengembalikan array kosong 
+
+## Complete Order
+
+**Endpoint:** `PATCH /orders/:no_tracking/complete`
+
+**Description:** Mengkonfirmasi bahwa seluruh proses order telah selesai, termasuk pengantaran dan pembayaran, sehingga order dapat ditandai dengan status Completed.
+
+**Headers:**
+- `Authorization: Bearer <token>`
+
+**Parameters:**
+- `no_tracking` (path, string): Nomor resi unik order yang akan diselesaikan
+
+**Request Body:**
+```json
+{
+  "completed_by_user_id": 101
+}
+```
+
+**Request Body Fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `completed_by_user_id` | number | Yes | ID user yang mengkonfirmasi penyelesaian order |
+
+**Success Response (200 OK):**
+```json
+{
+  "message": "Pesanan berhasil diselesaikan",
+  "success": true,
+  "data": {
+    "no_tracking": "GG250831123456",
+    "status": "Completed",
+    "completed_at": "2025-08-31T15:30:00.000Z",
+    "completed_by": 101
+  }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request - Order belum terkirim:**
+```json
+{
+  "success": false,
+  "message": "Pesanan tidak dapat diselesaikan karena belum terkirim. Status pengantaran harus \"Delivered\"",
+  "error": "Bad Request",
+  "statusCode": 400
+}
+```
+
+**400 Bad Request - Pembayaran belum lunas:**
+```json
+{
+  "success": false,
+  "message": "Pesanan tidak dapat diselesaikan karena belum lunas. Status pembayaran harus \"paid\" atau invoice status \"success\" dengan isUnpaid = 0",
+  "error": "Bad Request",
+  "statusCode": 400
+}
+```
+
+**404 Not Found - Order tidak ditemukan:**
+```json
+{
+  "success": false,
+  "message": "Order dengan nomor tracking GG250831123456 tidak ditemukan",
+  "error": "Not Found",
+  "statusCode": 404
+}
+```
+
+**404 Not Found - User tidak ditemukan:**
+```json
+{
+  "success": false,
+  "message": "User dengan ID 101 tidak ditemukan",
+  "error": "Not Found",
+  "statusCode": 404
+}
+```
+
+**Business Rules:**
+- Order harus memiliki status `'Delivered'`
+- Order harus sudah lunas dengan salah satu kondisi:
+  - `payment_status = 'paid'` **ATAU**
+  - `invoiceStatus = 'success'` **DAN** `isUnpaid = 0`
+- User yang melakukan complete harus exists di sistem
+- Setelah complete, status order akan berubah menjadi `'Completed'`
+- Order history akan dibuat dengan status `'Order Completed'`
+
+**Contoh Penggunaan:**
+
+**cURL:**
+```bash
+curl -X PATCH \
+  "http://localhost:3000/orders/GG250831123456/complete" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "completed_by_user_id": 101
+  }'
+```
+
+**JavaScript/Fetch:**
+```javascript
+const response = await fetch('/orders/GG250831123456/complete', {
+  method: 'PATCH',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    completed_by_user_id: 101
+  })
+});
+
+const result = await response.json();
+console.log(result);
+```
+
+**Catatan:**
+- Endpoint ini berfungsi sebagai titik akhir dalam alur proses logistik
+- Semua validasi harus terpenuhi sebelum order dapat diselesaikan
+- Audit trail lengkap akan dibuat di tabel `order_histories`
+- Status order akan berubah dari `'Delivered'` menjadi `'Completed'`
