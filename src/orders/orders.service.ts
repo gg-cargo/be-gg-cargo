@@ -5264,7 +5264,10 @@ export class OrdersService {
         // Hitung chargeable weight (berat terberat antara berat aktual dan berat volume)
         const chargeableWeight = Math.max(shipmentData.totalBerat, shipmentData.beratVolume);
 
-        const subtotal = chargeableWeight * 1000; // Asumsi harga per kg
+        // Pastikan chargeableWeight minimal 1 kg untuk menghindari division by zero
+        const safeChargeableWeight = Math.max(chargeableWeight, 1);
+
+        const subtotal = safeChargeableWeight * 1000; // Asumsi harga per kg
         const packing = createOrderDto.packing || 0;
         const asuransi = createOrderDto.asuransi || 0;
         const ppn = Math.round(subtotal * 0.11); // 11% PPN
@@ -5276,7 +5279,7 @@ export class OrdersService {
             asuransi,
             ppn,
             total,
-            chargeableWeight
+            chargeableWeight: safeChargeableWeight
         };
     }
 

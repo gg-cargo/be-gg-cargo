@@ -692,7 +692,10 @@ export class FinanceService {
 
             // Calculate totals
             const subtotalLayanan = invoiceDetails.reduce((sum, detail) => {
-                return sum + (detail.unit_price * detail.qty);
+                const unitPrice = detail.unit_price || 0;
+                const qty = detail.qty || 0;
+                const itemTotal = unitPrice * qty;
+                return sum + (isNaN(itemTotal) ? 0 : itemTotal);
             }, 0);
 
             const diskon = invoice.getDataValue('discount') || 0;
@@ -701,13 +704,19 @@ export class FinanceService {
             const totalAkhir = subtotalLayanan - diskon + ppn - pph;
 
             // Transform invoice details
-            const itemTagihan = invoiceDetails.map(detail => ({
-                deskripsi: detail.getDataValue('description'),
-                qty: detail.getDataValue('qty'),
-                uom: detail.getDataValue('uom'),
-                harga_satuan: detail.getDataValue('unit_price'),
-                total: detail.getDataValue('unit_price') * detail.getDataValue('qty')
-            }));
+            const itemTagihan = invoiceDetails.map(detail => {
+                const unitPrice = detail.getDataValue('unit_price') || 0;
+                const qty = detail.getDataValue('qty') || 0;
+                const itemTotal = unitPrice * qty;
+
+                return {
+                    deskripsi: detail.getDataValue('description'),
+                    qty: qty,
+                    uom: detail.getDataValue('uom'),
+                    harga_satuan: unitPrice,
+                    total: isNaN(itemTotal) ? 0 : itemTotal
+                };
+            });
 
             const response = {
                 invoice_details: {
@@ -728,8 +737,20 @@ export class FinanceService {
                     detail_pengiriman: {
                         pengirim: order.getDataValue('nama_pengirim'),
                         alamat_pengirim: order.getDataValue('alamat_pengirim'),
+                        provinsi_pengirim: order.getDataValue('provinsi_pengirim'),
+                        kota_pengirim: order.getDataValue('kota_pengirim'),
+                        kecamatan_pengirim: order.getDataValue('kecamatan_pengirim'),
+                        kelurahan_pengirim: order.getDataValue('kelurahan_pengirim'),
+                        kodepos_pengirim: order.getDataValue('kodepos_pengirim'),
+                        no_telepon_pengirim: order.getDataValue('no_telepon_pengirim'),
                         penerima: order.getDataValue('nama_penerima'),
                         alamat_penerima: order.getDataValue('alamat_penerima'),
+                        provinsi_penerima: order.getDataValue('provinsi_penerima'),
+                        kota_penerima: order.getDataValue('kota_penerima'),
+                        kecamatan_penerima: order.getDataValue('kecamatan_penerima'),
+                        kelurahan_penerima: order.getDataValue('kelurahan_penerima'),
+                        kodepos_penerima: order.getDataValue('kodepos_penerima'),
+                        no_telepon_penerima: order.getDataValue('no_telepon_penerima'),
                         layanan: order.getDataValue('layanan')
                     },
                     item_tagihan: itemTagihan,
