@@ -30,6 +30,11 @@ export class OpsOrdersQueryDto {
     @Transform(({ value }) => parseInt(value, 10))
     @IsNumber({}, { message: 'Next Hub harus berupa angka' })
     next_hub?: number;
+
+    @IsOptional()
+    @Transform(({ value }) => parseInt(value, 10))
+    @IsNumber({}, { message: 'Hub ID harus berupa angka' })
+    hub_id?: number;
 }
 
 export class CustomerDto {

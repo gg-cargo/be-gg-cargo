@@ -4036,7 +4036,18 @@ export class OrdersService {
 
             // 2. Buat base query dengan filter area
             let areaFilter = {};
-            if (userHubId) {
+            const requestedHubId = query.hub_id;
+
+            // Jika query.hub_id diberikan, gunakan itu sebagai prioritas filter area
+            if (requestedHubId) {
+                areaFilter = {
+                    [Op.or]: [
+                        { hub_source_id: requestedHubId },
+                        { hub_dest_id: requestedHubId },
+                        { current_hub: requestedHubId }
+                    ]
+                };
+            } else if (userHubId) {
                 areaFilter = {
                     [Op.or]: [
                         { hub_source_id: userHubId },      // Order Pickup (First Mile)
@@ -4106,7 +4117,9 @@ export class OrdersService {
 
             // Jika status adalah 'order kirim', batasi area filter hanya pada hub_dest_id
             if (query.status === 'order kirim') {
-                if (userHubId) {
+                if (requestedHubId) {
+                    areaFilter = { hub_dest_id: requestedHubId };
+                } else if (userHubId) {
                     areaFilter = { hub_dest_id: userHubId };
                 } else if (userServiceCenterId) {
                     areaFilter = { hub_dest_id: userServiceCenterId };
