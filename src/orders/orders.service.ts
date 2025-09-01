@@ -911,6 +911,9 @@ export class OrdersService {
             // Commit transaction
             await transaction.commit();
 
+            // Schedule automatic "pesanan diproses" entry after 5 minutes
+            this.scheduleAutoProcessOrder(order.id, userId);
+
             return {
                 order_id: order.id,
                 no_tracking: noTracking,
@@ -5386,5 +5389,74 @@ export class OrdersService {
         }
     }
 
+    /**
+     * Schedule automatic "pesanan diproses" entry after 5 minutes
+     */
+    private scheduleAutoProcessOrder(orderId: number, userId: number) {
+        setTimeout(async () => {
+            try {
+                // Get database connection to ensure it's still active
+                const sequelize = this.orderHistoryModel.sequelize;
+
+                if (!sequelize) {
+                    throw new Error('Database connection not available');
+                }
+
+                // Test connection before proceeding
+                await sequelize.authenticate();
+
+                // Check if there are any new entries after "Pesanan berhasil dibuat"
+                const latestHistory = await this.orderHistoryModel.findOne({
+                    where: { order_id: orderId },
+                    order: [['created_at', 'DESC']]
+                });
+
+                if (latestHistory) {
+                    const latestRemark = latestHistory.getDataValue('remark');
+
+                    // If the latest entry is still "Pesanan berhasil dibuat", create "pesanan diproses"
+                    if (latestRemark === 'Pesanan berhasil dibuat') {
+                        const { date, time } = getOrderHistoryDateTime();
+                        await this.orderHistoryModel.create({
+                            order_id: orderId,
+                            status: ORDER_STATUS.READY_FOR_PICKUP,
+                            date: date,
+                            time: time,
+                            remark: 'pesanan diproses',
+                            provinsi: '', // Will be updated from order data if needed
+                            kota: '', // Will be updated from order data if needed
+                            created_by: userId,
+                        });
+
+                        this.logger.log(`Auto-created "pesanan diproses" entry for order ${orderId}`);
+                    } else {
+                        this.logger.log(`Skipped auto-process for order ${orderId} - already processed (latest: ${latestRemark})`);
+                    }
+                } else {
+                    this.logger.warn(`No history found for order ${orderId} during auto-process`);
+                }
+            } catch (error) {
+                this.logger.error(`Error in auto-process order ${orderId}: ${error.message}`);
+
+                // Log additional error details for debugging
+                if (error.code === 'ECONNRESET') {
+                    this.logger.error(`Database connection reset for order ${orderId} - this is expected after 5 minutes`);
+                }
+
+                // Try to reconnect and retry once
+                try {
+                    const sequelize = this.orderHistoryModel.sequelize;
+                    if (sequelize) {
+                        await sequelize.authenticate();
+                        this.logger.log(`Database reconnected successfully for order ${orderId}`);
+                    } else {
+                        this.logger.error(`Database connection not available for reconnection - order ${orderId}`);
+                    }
+                } catch (reconnectError) {
+                    this.logger.error(`Failed to reconnect database for order ${orderId}: ${reconnectError.message}`);
+                }
+            }
+        }, 5 * 60 * 1000); // 5 minutes in milliseconds
+    }
 
 } 
