@@ -729,6 +729,9 @@ export class DeliveryNotesService {
                         { transaction }
                     );
 
+                    // Schedule automatic "pesanan diproses di svc" entry after 1 hour
+                    this.scheduleAutoProcessInbound(order.id, dto.inbound_by_user_id, destinationHub.nama);
+
                     // Buat manifest inbound record
                     await this.orderManifestInboundModel.create({
                         order_id: order.no_tracking,
@@ -905,6 +908,9 @@ export class DeliveryNotesService {
                     { transaction }
                 );
                 historyRecordsCreated++;
+
+                // Schedule automatic "pesanan diproses di svc" entry after 1 hour
+                this.scheduleAutoProcessInbound(order.id, dto.inbound_by_user_id, destinationHub.nama);
             }
 
             // Prepare response data
@@ -944,5 +950,75 @@ export class DeliveryNotesService {
             await transaction.rollback();
             throw new InternalServerErrorException(`Error dalam inbound confirm web: ${error.message}`);
         }
+    }
+
+    /**
+     * Schedule automatic "pesanan diproses di svc" entry after 1 hour
+     */
+    private scheduleAutoProcessInbound(orderId: number, userId: number, hubName: string) {
+        setTimeout(async () => {
+            try {
+                // Get database connection to ensure it's still active
+                const sequelize = this.orderHistoryModel.sequelize;
+
+                if (!sequelize) {
+                    throw new Error('Database connection not available');
+                }
+
+                // Test connection before proceeding
+                await sequelize.authenticate();
+
+                // Check if there are any new entries after "pesanan tiba di svc"
+                const latestHistory = await this.orderHistoryModel.findOne({
+                    where: { order_id: orderId },
+                    order: [['created_at', 'DESC']]
+                });
+
+                if (latestHistory) {
+                    const latestRemark = latestHistory.getDataValue('remark');
+
+                    // If the latest entry is still "pesanan tiba di svc", create "pesanan diproses di svc"
+                    if (latestRemark === `pesanan tiba di svc ${hubName}`) {
+                        const { date, time } = getOrderHistoryDateTime();
+                        await this.orderHistoryModel.create({
+                            order_id: orderId,
+                            status: 'Inbound Processed',
+                            date: date,
+                            time: time,
+                            remark: `pesanan diproses di svc ${hubName}`,
+                            provinsi: '',
+                            kota: '',
+                            created_by: userId,
+                        });
+
+                        this.logger.log(`Auto-created "pesanan diproses di svc ${hubName}" entry for order ${orderId}`);
+                    } else {
+                        this.logger.log(`Skipped auto-process inbound for order ${orderId} - already processed (latest: ${latestRemark})`);
+                    }
+                } else {
+                    this.logger.warn(`No history found for order ${orderId} during auto-process inbound`);
+                }
+            } catch (error) {
+                this.logger.error(`Error in auto-process inbound order ${orderId}: ${error.message}`);
+
+                // Log additional error details for debugging
+                if (error.code === 'ECONNRESET') {
+                    this.logger.error(`Database connection reset for inbound order ${orderId} - this is expected after 1 hour`);
+                }
+
+                // Try to reconnect and retry once
+                try {
+                    const sequelize = this.orderHistoryModel.sequelize;
+                    if (sequelize) {
+                        await sequelize.authenticate();
+                        this.logger.log(`Database reconnected successfully for inbound order ${orderId}`);
+                    } else {
+                        this.logger.error(`Database connection not available for reconnection - inbound order ${orderId}`);
+                    }
+                } catch (reconnectError) {
+                    this.logger.error(`Failed to reconnect database for inbound order ${orderId}: ${reconnectError.message}`);
+                }
+            }
+        }, 60 * 60 * 1000); // 1 hour in milliseconds
     }
 }
