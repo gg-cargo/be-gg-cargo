@@ -31,6 +31,7 @@ import { ReportMissingItemDto } from './dto/report-missing-item.dto';
 import { ResolveMissingItemDto, ResolveMissingItemFormDto } from './dto/resolve-missing-item.dto';
 import { GetReweightProofResponseDto } from './dto/reweight-proof-response.dto';
 import { CompleteOrderDto, CompleteOrderResponseDto } from './dto/complete-order.dto';
+import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -518,6 +519,15 @@ export class OrdersController {
         @Param('order_id', ParseIntPipe) orderId: number,
     ): Promise<GetReweightProofResponseDto> {
         return this.ordersService.getReweightProof(orderId);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_resi/forward-to-vendor')
+    async forwardToVendor(
+        @Param('no_resi') noResi: string,
+        @Body() forwardToVendorDto: ForwardToVendorDto,
+    ): Promise<ForwardToVendorResponseDto> {
+        return this.ordersService.forwardToVendor(noResi, forwardToVendorDto);
     }
 
     @UseGuards(JwtAuthGuard)

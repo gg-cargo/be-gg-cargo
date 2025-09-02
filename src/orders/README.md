@@ -605,6 +605,188 @@ console.log(result);
 - Jika order tidak ditemukan, akan mengembalikan error 404
 - Jika tidak ada file bukti, akan mengembalikan array kosong 
 
+## Forward Order to Vendor
+
+**Endpoint:** `PATCH /orders/:no_resi/forward-to-vendor`
+
+**Description:** Merekam bahwa sebuah order akan diteruskan dari hub transit ke hub tujuan akhir melalui transporter pihak ketiga (vendor). Endpoint ini mengalihkan tanggung jawab pengiriman dan mencatat detail vendor.
+
+**Headers:**
+- `Authorization: Bearer <token>`
+
+**Parameters:**
+- `no_resi` (path, string): Nomor resi order yang akan diteruskan ke vendor
+
+**Request Body:**
+```json
+{
+  "vendor_name": "PT. Vendor Logistik",
+  "pic_vendor": "Budi",
+  "vendor_phone": "08112345678",
+  "forwarding_note": "Penerusan ke Bali via vendor",
+  "forwarded_by_user_id": 102
+}
+```
+
+**Request Body Fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `vendor_name` | string | Yes | Nama vendor/transporter pihak ketiga |
+| `pic_vendor` | string | Yes | PIC atau kontak person vendor |
+| `vendor_phone` | string | Yes | Nomor telepon vendor |
+| `forwarding_note` | string | No | Catatan tambahan untuk penerusan |
+| `forwarded_by_user_id` | number | Yes | ID user yang melakukan penerusan |
+
+**Response Data Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `no_resi` | string | Nomor resi order |
+| `vendor_name` | string | Nama vendor |
+| `pic_vendor` | string | PIC vendor |
+| `vendor_phone` | string | Telepon vendor |
+| `forwarding_note` | string | Catatan penerusan |
+| `forwarded_by_user_id` | number | ID user yang meneruskan |
+| `status` | string | Status order setelah forwarding |
+| `remark_traffic` | string | Detail vendor dalam remark traffic |
+| `next_hub` | number | ID hub tujuan akhir |
+| `vendor_details` | object | Detail lengkap vendor dan informasi forwarding |
+
+**Success Response (200 OK):**
+```json
+{
+  "message": "Order berhasil diteruskan ke vendor",
+  "data": {
+    "no_resi": "GG250831123456",
+    "vendor_name": "PT. Vendor Logistik",
+    "pic_vendor": "Budi",
+    "vendor_phone": "08112345678",
+    "forwarding_note": "Penerusan ke Bali via vendor",
+    "forwarded_by_user_id": 102,
+    "status": "In Transit",
+    "remark_traffic": "Vendor: PT. Vendor Logistik | PIC: Budi | Phone: 08112345678 | Note: Penerusan ke Bali via vendor",
+    "next_hub": 5,
+    "vendor_details": {
+      "name": "PT. Vendor Logistik",
+      "pic": "Budi",
+      "phone": "08112345678",
+      "note": "Penerusan ke Bali via vendor",
+      "forwarded_at": "2025-08-31T15:30:00.000Z",
+      "forwarded_by": "John Doe",
+      "destination_hub": {
+        "id": 5,
+        "name": "Hub Bali",
+        "code": "DPS"
+      }
+    }
+  }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request - User tidak memiliki akses:**
+```json
+{
+  "success": false,
+  "message": "User tidak memiliki hak akses untuk meneruskan order",
+  "error": "Bad Request",
+  "statusCode": 400
+}
+```
+
+**400 Bad Request - Status order tidak valid:**
+```json
+{
+  "success": false,
+  "message": "Order tidak dapat diteruskan. Status saat ini: Order Created",
+  "error": "Bad Request",
+  "statusCode": 400
+}
+```
+
+**404 Not Found - Order tidak ditemukan:**
+```json
+{
+  "success": false,
+  "message": "Order dengan nomor resi GG250831123456 tidak ditemukan",
+  "error": "Not Found",
+  "statusCode": 404
+}
+```
+
+**404 Not Found - User tidak ditemukan:**
+```json
+{
+  "success": false,
+  "message": "User yang meneruskan tidak ditemukan",
+  "error": "Not Found",
+  "statusCode": 404
+}
+```
+
+**Business Rules:**
+- User yang melakukan forwarding harus memiliki level 1 (admin) atau 2 (checker)
+- Order harus memiliki status yang valid: `'In Transit'` atau `'Out for Delivery'`
+- Order akan diupdate dengan status `'In Transit'`
+- `transporter_id` akan diset ke `null` (vendor tidak terdaftar sebagai user)
+- `remark_traffic` akan berisi detail vendor dalam format: `"Vendor: {nama} | PIC: {pic} | Phone: {phone} | Note: {note}"`
+- `next_hub` akan diset ke ID hub tujuan akhir
+- Order history akan dibuat dengan remark: `"Order diteruskan ke vendor {nama} menuju {hub_tujuan}"`
+- Detail vendor akan ditambahkan ke response untuk tracking yang lebih lengkap
+
+**Contoh Penggunaan:**
+
+**cURL:**
+```bash
+curl -X PATCH \
+  "http://localhost:3000/orders/GG250831123456/forward-to-vendor" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vendor_name": "PT. Vendor Logistik",
+    "pic_vendor": "Budi",
+    "vendor_phone": "08112345678",
+    "forwarding_note": "Penerusan ke Bali via vendor",
+    "forwarded_by_user_id": 102
+  }'
+```
+
+**JavaScript/Fetch:**
+```javascript
+const response = await fetch('/orders/GG250831123456/forward-to-vendor', {
+  method: 'PATCH',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    vendor_name: 'PT. Vendor Logistik',
+    pic_vendor: 'Budi',
+    vendor_phone: '08112345678',
+    forwarding_note: 'Penerusan ke Bali via vendor',
+    forwarded_by_user_id: 102
+  })
+});
+
+const result = await response.json();
+console.log(result);
+```
+
+**Catatan:**
+- Endpoint ini berfungsi sebagai jembatan antara alur internal dan pengiriman pihak ketiga
+- Detail vendor akan disimpan di `remark_traffic` untuk audit trail
+- Order history akan mencatat peristiwa penerusan ke vendor
+- Status order akan berubah menjadi `'In Transit'` dengan detail vendor
+- Field `vendor_details` berisi informasi lengkap vendor dan metadata forwarding:
+  - `name`: Nama vendor
+  - `pic`: PIC/kontak person vendor
+  - `phone`: Nomor telepon vendor
+  - `note`: Catatan penerusan (jika ada)
+  - `forwarded_at`: Timestamp kapan order diteruskan
+  - `forwarded_by`: Nama user yang melakukan forwarding
+  - `destination_hub`: Detail hub tujuan (id, nama, kode)
+- **PDF Resi**: Jika order sudah diteruskan ke vendor, informasi vendor akan muncul di PDF resi dalam section "Informasi Vendor"
+
 ## Complete Order
 
 **Endpoint:** `PATCH /orders/:no_tracking/complete`

@@ -1,5 +1,6 @@
 import { Column, DataType, Model, Table, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { Order } from './order.model';
+import { User } from './user.model';
 
 @Table({
     tableName: 'order_histories',
@@ -133,4 +134,7 @@ export class OrderHistory extends Model {
 
     @BelongsTo(() => Order, { foreignKey: 'order_id', as: 'order' })
     order: Order;
+
+    @BelongsTo(() => User, { foreignKey: 'created_by', as: 'createdByUser' })
+    createdByUser: User;
 } 

@@ -49,6 +49,7 @@ import { Hub } from '../models/hub.model';
 import { generateOrderLabelsPDF } from './helpers/generate-order-labels-pdf.helper';
 import { ReportMissingItemDto } from './dto/report-missing-item.dto';
 import { ResolveMissingItemDto } from './dto/resolve-missing-item.dto';
+import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 
 @Injectable()
@@ -495,7 +496,6 @@ export class OrdersService {
                     {
                         reweight_status: 1,
                         isUnreweight: 0,
-                        invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH, // Update invoiceStatus menjadi "belum ditagih"
                     },
                     {
                         where: { id: orderId },
@@ -555,25 +555,9 @@ export class OrdersService {
                 }
             }
 
-            // 4. Auto-create invoice jika bypass diaktifkan dan status berubah menjadi BELUM_DITAGIH
-            let invoiceData: {
-                invoice_no: string;
-                invoice_id: number;
-                total_amount: number;
-            } | null = null;
-            if (isBypassEnabled) {
-                try {
-                    invoiceData = await this.autoCreateInvoice(orderId, transaction);
-                } catch (invoiceError) {
-                    console.warn(`Gagal auto-create invoice untuk order ${orderId}:`, invoiceError.message);
-                    // Lanjutkan proses meskipun invoice gagal dibuat
-                }
-            }
-
             // 5. Create order_histories
             const hubAsalName = hubAsal?.nama || 'Unknown Hub';
             const statusText = isBypassEnabled ? 'Reweight Bypass Enabled' : 'Reweight Bypass Disabled';
-            const historyRemark = `${statusText} oleh User ID ${updated_by_user_id}${reason ? ` dengan alasan: ${reason}` : ''}${proofImageData ? ` - Foto bukti: ${proofImageData.file_name}` : ''}${invoiceData ? ` - Invoice otomatis dibuat: ${invoiceData.invoice_no}` : ''}`;
 
             const { date, time } = getOrderHistoryDateTime();
             await this.orderHistoryModel.create(
@@ -607,11 +591,6 @@ export class OrdersService {
                         file_name: proofImageData.file_name,
                         file_path: proofImageData.file_path,
                         file_id: proofImageData.id
-                    } : null,
-                    invoice_created: invoiceData ? {
-                        invoice_no: invoiceData.invoice_no,
-                        invoice_id: invoiceData.invoice_id,
-                        total_amount: invoiceData.total_amount
                     } : null,
                 },
             };
@@ -1584,7 +1563,7 @@ export class OrdersService {
         const beratVolume = volumeWeight.toFixed(2);
 
         // 5. Siapkan data untuk PDF
-        const dataPDF = {
+        const dataPDF: any = {
             no_tracking: noTracking,
             created_at: order.created_at,
             pengirim: {
@@ -1621,6 +1600,54 @@ export class OrdersService {
             },
             ringkasan: shipmentItems, // Array item shipment satu-satu
         };
+
+        // 5.1. Tambahkan informasi vendor jika order sudah diteruskan ke vendor
+        if (order.remark_traffic && order.remark_traffic.includes('Vendor:')) {
+            // Parse vendor details dari remark_traffic
+            const vendorMatch = order.remark_traffic.match(/Vendor: ([^|]+) \| PIC: ([^|]+) \| Phone: ([^|]+)(?:\s*\|\s*Note: ([^|]+))?/);
+
+            if (vendorMatch) {
+                const vendorName = vendorMatch[1]?.trim();
+                const vendorPic = vendorMatch[2]?.trim();
+                const vendorPhone = vendorMatch[3]?.trim();
+                const vendorNote = vendorMatch[4]?.trim() || '';
+
+                // Ambil informasi user yang meneruskan dari order history
+                const forwardingHistory = await this.orderHistoryModel.findOne({
+                    where: {
+                        order_id: orderId,
+                        remark: { [Op.like]: '%diteruskan ke vendor%' }
+                    },
+                    order: [['created_at', 'DESC']],
+                    include: [
+                        {
+                            model: this.userModel,
+                            as: 'createdByUser',
+                            attributes: ['name']
+                        }
+                    ]
+                });
+
+                // Ambil informasi hub tujuan
+                const destinationHub = await this.hubModel.findByPk(order.next_hub, {
+                    attributes: ['id', 'nama', 'kode']
+                });
+
+                dataPDF.vendor_details = {
+                    name: vendorName,
+                    pic: vendorPic,
+                    phone: vendorPhone,
+                    note: vendorNote,
+                    forwarded_at: forwardingHistory?.getDataValue('created_at') || order.updated_at,
+                    forwarded_by: forwardingHistory?.getDataValue('createdByUser')?.getDataValue('name') || 'System',
+                    destination_hub: destinationHub ? {
+                        id: destinationHub.getDataValue('id'),
+                        name: destinationHub.getDataValue('nama'),
+                        code: destinationHub.getDataValue('kode')
+                    } : null
+                };
+            }
+        }
 
         // 6. Generate PDF
         let url;
@@ -2125,7 +2152,6 @@ export class OrdersService {
             await order.update({
                 status: 'Cancelled',
                 is_gagal_pickup: 1,
-                remark_traffic: reason,
                 updated_at: new Date()
             });
 
@@ -4828,8 +4854,6 @@ export class OrdersService {
                 {
                     reweight_status: 1, // Completed/Final
                     total_berat: chargeableWeight,
-                    status: ORDER_STATUS.PICKED_UP,
-                    invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH,
                     updatedAt: new Date()
                 },
                 {
@@ -5399,6 +5423,121 @@ export class OrdersService {
             }
 
             throw new InternalServerErrorException('Terjadi kesalahan saat menyelesaikan pesanan');
+        }
+    }
+
+    /**
+     * Forward order to vendor for transit to final destination
+     */
+    async forwardToVendor(noResi: string, dto: ForwardToVendorDto): Promise<ForwardToVendorResponseDto> {
+        try {
+            // 1. Validasi user yang melakukan forwarding
+            const forwardedByUser = await this.userModel.findByPk(dto.forwarded_by_user_id, {
+                attributes: ['id', 'name', 'level', 'hub_id']
+            });
+
+            if (!forwardedByUser) {
+                throw new NotFoundException('User yang meneruskan tidak ditemukan');
+            }
+
+            // // Validasi level user (checker atau admin)
+            // const userLevel = forwardedByUser.getDataValue('level');
+            // if (userLevel !== 2 && userLevel !== 1) { // Assuming level 2 = checker, level 1 = admin
+            //     throw new BadRequestException('User tidak memiliki hak akses untuk meneruskan order');
+            // }
+
+            // 2. Validasi order
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noResi },
+                include: [
+                    {
+                        model: this.hubModel,
+                        as: 'hubDestination',
+                        attributes: ['id', 'nama', 'kode']
+                    }
+                ]
+            });
+
+            if (!order) {
+                throw new NotFoundException(`Order dengan nomor resi ${noResi} tidak ditemukan`);
+            }
+
+            // 3. Validasi status order
+            const currentStatus = order.getDataValue('status');
+            const validStatuses = [ORDER_STATUS.IN_TRANSIT, ORDER_STATUS.OUT_FOR_DELIVERY];
+
+            if (!validStatuses.includes(currentStatus)) {
+                throw new BadRequestException(`Order tidak dapat diteruskan. Status saat ini: ${currentStatus}`);
+            }
+
+            // 4. Ambil data hub tujuan
+            const hubDestination = order.getDataValue('hubDestination');
+            if (!hubDestination) {
+                throw new BadRequestException('Data hub tujuan tidak ditemukan');
+            }
+
+            const destinationHubName = hubDestination.getDataValue('nama');
+            const destinationHubCode = hubDestination.getDataValue('kode');
+
+            // 5. Buat remark traffic dengan detail vendor
+            const remarkTraffic = `Vendor: ${dto.vendor_name} | PIC: ${dto.pic_vendor} | Phone: ${dto.vendor_phone}${dto.forwarding_note ? ` | Note: ${dto.forwarding_note}` : ''}`;
+
+            // 6. Update order
+            const updatedOrder = await this.orderModel.update({
+                transporter_id: null, // Vendor tidak terdaftar sebagai user
+                status: ORDER_STATUS.IN_TRANSIT,
+                remark_traffic: remarkTraffic,
+                next_hub: hubDestination.getDataValue('id')
+            }, {
+                where: { no_tracking: noResi },
+                returning: true
+            });
+
+            if (updatedOrder[0] === 0) {
+                throw new InternalServerErrorException('Gagal memperbarui status order');
+            }
+
+            // 7. Ambil order yang sudah diupdate
+            const updatedOrderData = await this.orderModel.findOne({
+                where: { no_tracking: noResi }
+            });
+
+            return {
+                message: 'Order berhasil diteruskan ke vendor',
+                data: {
+                    no_resi: noResi,
+                    vendor_name: dto.vendor_name,
+                    pic_vendor: dto.pic_vendor,
+                    vendor_phone: dto.vendor_phone,
+                    forwarding_note: dto.forwarding_note,
+                    forwarded_by_user_id: dto.forwarded_by_user_id,
+                    status: ORDER_STATUS.IN_TRANSIT,
+                    remark_traffic: remarkTraffic,
+                    next_hub: hubDestination.getDataValue('id'),
+                    vendor_details: {
+                        name: dto.vendor_name,
+                        pic: dto.pic_vendor,
+                        phone: dto.vendor_phone,
+                        note: dto.forwarding_note || '',
+                        forwarded_at: new Date().toISOString(),
+                        forwarded_by: forwardedByUser.getDataValue('name'),
+                        destination_hub: {
+                            id: hubDestination.getDataValue('id'),
+                            name: destinationHubName,
+                            code: destinationHubCode
+                        }
+                    }
+                }
+            };
+
+        } catch (error) {
+            this.logger.error(`Error forwarding order ${noResi} to vendor: ${error.message}`, error.stack);
+
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Terjadi kesalahan saat meneruskan order ke vendor');
         }
     }
 

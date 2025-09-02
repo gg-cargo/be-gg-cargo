@@ -12,6 +12,7 @@ import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForD
 import { DriverStatusSummaryQueryDto, DriverStatusSummaryResponseDto, DriverStatusSummaryDto, DriverWorkloadDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
+import { ORDER_STATUS } from 'src/common/constants/order-status.constants';
 
 @Injectable()
 export class DriversService {
@@ -854,7 +855,7 @@ export class DriversService {
                     {
                         assign_driver: assignDriverDto.driver_id,
                         pickup_by: driver.getDataValue('name'),
-                        status_pickup: 'Assigned',
+                        status_pickup: ORDER_STATUS.PICKED_UP,
                         updatedAt: new Date()
                     },
                     {
@@ -866,7 +867,7 @@ export class DriversService {
                 await this.orderModel.update(
                     {
                         deliver_by: assignDriverDto.driver_id,
-                        status: 'Out for Delivery',
+                        status: ORDER_STATUS.OUT_FOR_DELIVERY,
                         updatedAt: new Date()
                     },
                     {
