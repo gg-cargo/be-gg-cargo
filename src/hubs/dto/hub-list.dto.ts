@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsNumber } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class HubListQueryDto {
@@ -6,6 +6,11 @@ export class HubListQueryDto {
     @IsString({ message: 'Search harus berupa string' })
     @Transform(({ value }) => value?.trim())
     search?: string;
+
+    @IsOptional()
+    @Transform(({ value }) => parseInt(value, 10))
+    @IsNumber({}, { message: 'User ID harus berupa angka' })
+    user_id?: number;
 }
 
 export class HubDataDto {
