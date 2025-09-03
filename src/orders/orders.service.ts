@@ -1907,7 +1907,7 @@ export class OrdersService {
         // Ambil histories
         const histories = await this.orderHistoryModel.findAll({
             where: { order_id: orderId },
-            order: [['created_at', 'DESC'], ['id', 'DESC']],
+            order: [['created_at', 'ASC'], ['id', 'DESC']],
             raw: true,
         });
 
