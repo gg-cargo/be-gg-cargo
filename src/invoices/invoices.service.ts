@@ -386,7 +386,8 @@ export class InvoicesService {
                             'billing_phone',
                             'nama_penerima',
                             'email_penerima',
-                            'no_telepon_penerima'
+                            'no_telepon_penerima',
+                            'total_harga'
                         ]
                     }
                 ]
@@ -406,7 +407,7 @@ export class InvoicesService {
             const billingName = order.getDataValue('billing_name') || order.getDataValue('nama_penerima');
             const billingEmail = order.getDataValue('billing_email') || order.getDataValue('email_penerima');
             const billingNomer = order.getDataValue('billing_phone') || order.getDataValue('no_telepon_penerima');
-            const harga = invoice.getDataValue('amount') || 0;
+            const harga = order.getDataValue('total_harga') || 0;
 
             // 3. Buat subject email
             const emailSubject = `Invoice ${noTracking}`;
