@@ -16,25 +16,25 @@ export class OrderKendala extends Model {
         type: DataType.STRING(100),
         allowNull: true,
     })
-    order_id: string;
+    declare order_id: string;
 
     @Column({
         type: DataType.STRING(100),
         allowNull: true,
     })
-    user_id: string;
+    declare user_id: string;
 
     @Column({
         type: DataType.TEXT,
         allowNull: true,
     })
-    message: string;
+    declare message: string;
 
     @Column({
         type: DataType.TEXT,
         allowNull: true,
     })
-    message_completed: string;
+    declare message_completed: string;
 
     @Column({
         type: DataType.INTEGER,
@@ -42,74 +42,74 @@ export class OrderKendala extends Model {
         defaultValue: 0,
         comment: '0: Ongoing | 1: Completed',
     })
-    status: number;
+    declare status: number;
 
     @Column({
         type: DataType.DATE,
         allowNull: false,
         defaultValue: DataType.NOW,
     })
-    created_at: Date;
+    declare created_at: Date;
+
+    @Column({
+        type: DataType.DATE,
+        allowNull: true,
+    })
+    declare updated_at: Date;
 
     @Column({
         type: DataType.STRING(200),
         allowNull: true,
     })
-    updated_at: string;
+    declare code_image_1: string;
 
     @Column({
         type: DataType.STRING(200),
         allowNull: true,
     })
-    code_image_1: string;
+    declare code_image_2: string;
 
     @Column({
         type: DataType.STRING(200),
         allowNull: true,
     })
-    code_image_2: string;
-
-    @Column({
-        type: DataType.STRING(200),
-        allowNull: true,
-    })
-    code_image_3: string;
+    declare code_image_3: string;
 
     @Column({
         type: DataType.TEXT,
         allowNull: true,
     })
-    url_image_1: string;
+    declare url_image_1: string;
 
     @Column({
         type: DataType.TEXT,
         allowNull: true,
     })
-    url_image_2: string;
+    declare url_image_2: string;
 
     @Column({
         type: DataType.TEXT,
         allowNull: true,
     })
-    url_image_3: string;
+    declare url_image_3: string;
 
     @Column({
         type: DataType.TEXT,
         allowNull: true,
     })
-    latlng: string;
+    declare latlng: string;
 
     @Column({
         type: DataType.TEXT,
         allowNull: true,
     })
-    latlng_completed: string;
+    declare latlng_completed: string;
 
     @Column({
         type: DataType.TEXT,
         allowNull: true,
     })
-    location: string;
+    declare location: string;
 }
 
 

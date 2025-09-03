@@ -445,11 +445,12 @@ curl -X PATCH \
 
 **Body (multipart/form-data):**
 - `piece_id` (string, required): ID piece yang ditemukan
-- `found_at_hub_id` (number, required): ID hub tempat barang ditemukan
+- `found_at_hub_id` (number, required): ID hub tempat barang ditemukan (akan dikonversi otomatis dari string)
 - `notes_on_finding` (string, required): Catatan tentang penemuan barang (max 500 karakter)
-- `photo` (file, optional): Foto bukti penemuan barang
+- `photo` (file, required): Foto bukti penemuan barang
   - Format: JPEG, PNG, GIF
   - Ukuran maksimal: 5MB
+- `resolved_by_user_id` (number, required): ID user yang menyelesaikan masalah (akan dikonversi otomatis dari string)
 
 **Response:**
 ```json
@@ -474,6 +475,31 @@ curl -X PATCH \
 - Hub ID harus valid
 - File foto harus dalam format gambar yang didukung
 - Ukuran file tidak boleh lebih dari 5MB
+- Field "photo" (file) wajib dikirim untuk bukti penemuan
+
+**Error Responses:**
+
+**400 Bad Request - Unexpected field:**
+```json
+{
+  "success": false,
+  "message": "Unexpected field - photo_base64",
+  "error": "Bad Request",
+  "statusCode": 400
+}
+```
+*Solusi: Gunakan field "photo" alih-alih "photo_base64" untuk upload file*
+
+**400 Bad Request - Missing photo:**
+```json
+{
+  "success": false,
+  "message": "Field \"photo\" (file) diperlukan untuk bukti penemuan barang. Gunakan multipart/form-data dengan field \"photo\" untuk upload file.",
+  "error": "Bad Request", 
+  "statusCode": 400
+}
+```
+*Solusi: Pastikan mengirim file foto dengan field name "photo"*
 
 **Catatan:**
 - Foto akan disimpan di folder `/public/uploads/` dengan nama file yang unik
@@ -490,6 +516,7 @@ curl -X PATCH \
   -F "piece_id=PIECE001" \
   -F "found_at_hub_id=1" \
   -F "notes_on_finding=Barang ditemukan di gudang utama, kondisi baik" \
+  -F "resolved_by_user_id=1" \
   -F "photo=@/path/to/photo.jpg"
 ```
 
@@ -501,6 +528,7 @@ curl -X PATCH \
    - `piece_id`: `PIECE001`
    - `found_at_hub_id`: `1`
    - `notes_on_finding`: `Barang ditemukan di gudang utama, kondisi baik`
+   - `resolved_by_user_id`: `1`
    - `photo`: Select file (tipe: File)
 
 **JavaScript/Fetch:**
@@ -509,6 +537,7 @@ const formData = new FormData();
 formData.append('piece_id', 'PIECE001');
 formData.append('found_at_hub_id', '1');
 formData.append('notes_on_finding', 'Barang ditemukan di gudang utama, kondisi baik');
+formData.append('resolved_by_user_id', '1');
 formData.append('photo', fileInput.files[0]);
 
 const response = await fetch('/orders/TRK123456789/resolve-missing', {

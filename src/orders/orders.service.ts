@@ -51,6 +51,7 @@ import { ReportMissingItemDto } from './dto/report-missing-item.dto';
 import { ResolveMissingItemDto } from './dto/resolve-missing-item.dto';
 import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
+import { OrderKendala } from '../models/order-kendala.model';
 
 @Injectable()
 export class OrdersService {
@@ -77,6 +78,8 @@ export class OrdersService {
         private readonly orderInvoiceModel: typeof OrderInvoice,
         @InjectModel(OrderInvoiceDetail)
         private readonly orderInvoiceDetailModel: typeof OrderInvoiceDetail,
+        @InjectModel(OrderKendala)
+        private readonly orderKendalaModel: typeof OrderKendala,
         @InjectModel(Bank)
         private readonly bankModel: typeof Bank,
         @InjectModel(Level)
@@ -1354,19 +1357,17 @@ export class OrdersService {
         }
 
         // Buat entri di order_kendala
-        const orderKendala = await this.orderModel.sequelize?.models.OrderKendala?.create({
-            order_id: order.id,
-            user_id: dto.reported_by_user_id,
+        const orderKendala = await this.orderKendalaModel.create({
+            order_id: String(order.id),
+            user_id: String(dto.reported_by_user_id),
             message: dto.message,
-            status: 0, // Ongoing
-            created_at: new Date(),
-            updated_at: new Date()
-        } as any);
+            status: 0 // Ongoing
+        });
 
-        // Update status pieces yang hilang
+        // Update status pieces yang hilang - gunakan inbound_status = 2 untuk menandai missing
         await this.orderPieceModel.update(
             {
-                status: 'Missing',
+                inbound_status: 2, // 2 = Missing
                 updated_at: new Date()
             },
             {
@@ -1410,17 +1411,17 @@ export class OrdersService {
 
         if (!resolver) throw new NotFoundException('User yang menyelesaikan tidak ditemukan');
 
-        // Validasi level user (harus traffic controller atau admin - level 1, 2, atau 3)
-        if (!resolver.levelData || ![1, 2, 3].includes(resolver.levelData.level)) {
-            throw new BadRequestException('Hanya Traffic Controller atau Admin yang dapat menyelesaikan masalah');
-        }
+        // // Validasi level user (harus traffic controller atau admin - level 1, 2, atau 3)
+        // if (!resolver.levelData || ![1, 2, 3].includes(resolver.levelData.level)) {
+        //     throw new BadRequestException('Hanya Traffic Controller atau Admin yang dapat menyelesaikan masalah');
+        // }
 
         // Validasi piece ID
         const piece: any = await this.orderPieceModel.findOne({
             where: {
                 order_id: order.id,
                 piece_id: dto.piece_id,
-                status: 'Missing'
+                inbound_status: 2 // 2 = Missing
             },
             raw: true
         });
@@ -1433,11 +1434,11 @@ export class OrdersService {
         const hub: any = await this.hubModel.findByPk(dto.found_at_hub_id, { raw: true });
         if (!hub) throw new NotFoundException('Hub tidak ditemukan');
 
-        // Update status piece menjadi 'Found'
+        // Update status piece menjadi 'Found' (inbound_status = 1)
         await this.orderPieceModel.update(
             {
-                status: 'Found',
-                found_at_hub_id: dto.found_at_hub_id,
+                inbound_status: 1, // 1 = Found/Received
+                hub_current_id: dto.found_at_hub_id,
                 updated_at: new Date()
             },
             {
@@ -1449,9 +1450,9 @@ export class OrdersService {
         );
 
         // Cari dan update order_kendala
-        const orderKendala: any = await this.orderModel.sequelize?.models.OrderKendala?.findOne({
+        const orderKendala: any = await this.orderKendalaModel.findOne({
             where: {
-                order_id: order.id,
+                order_id: String(order.id),
                 status: 0 // Ongoing
             },
             order: [['created_at', 'DESC']],
@@ -1460,7 +1461,7 @@ export class OrdersService {
 
         if (orderKendala) {
             // Update status kendala
-            await this.orderModel.sequelize?.models.OrderKendala?.update(
+            await this.orderKendalaModel.update(
                 {
                     status: 1, // Completed
                     message_completed: dto.notes_on_finding,
@@ -1475,7 +1476,7 @@ export class OrdersService {
         const totalMissingPieces = await this.orderPieceModel.count({
             where: {
                 order_id: order.id,
-                status: 'Missing'
+                inbound_status: 2 // 2 = Missing
             }
         });
 
@@ -1502,6 +1503,40 @@ export class OrdersService {
                 all_pieces_found: totalMissingPieces === 0,
                 order_status: totalMissingPieces === 0 ? 'Ready for Delivery' : 'Item Missing'
             }
+        };
+    }
+
+    async getMissingItems(noTracking: string): Promise<{ success: boolean; message: string; data: any }> {
+        // Ambil order
+        const order: any = await this.orderModel.findOne({ where: { no_tracking: noTracking }, raw: true });
+        if (!order) throw new NotFoundException('Order tidak ditemukan');
+
+        // Ambil pieces yang missing (inbound_status = 2)
+        const pieces = await this.orderPieceModel.findAll({
+            where: {
+                order_id: order.id,
+                inbound_status: 2 // 2 = Missing
+            },
+            attributes: ['id', 'piece_id', 'berat', 'panjang', 'lebar', 'tinggi', 'updated_at'],
+            raw: true,
+        });
+
+        // Ambil kendala terbaru (ongoing) jika ada
+        const kendala = await this.orderKendalaModel.findOne({
+            where: { order_id: String(order.id), status: 0 },
+            order: [['created_at', 'DESC']],
+            raw: true,
+        });
+
+        return {
+            success: true,
+            message: 'Data missing items berhasil diambil',
+            data: {
+                no_tracking: noTracking,
+                total_missing: Array.isArray(pieces) ? pieces.length : 0,
+                pieces,
+                kendala,
+            },
         };
     }
 

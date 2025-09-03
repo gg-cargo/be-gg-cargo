@@ -185,7 +185,20 @@ export class OrdersController {
             dto.photo_file = filePath;
         }
 
+        // Validasi: jika tidak ada file upload, berikan pesan error yang jelas
+        if (!photo) {
+            throw new BadRequestException('Field "photo" (file) diperlukan untuk bukti penemuan barang. Gunakan multipart/form-data dengan field "photo" untuk upload file.');
+        }
+
         return this.ordersService.resolveMissingItem(noTracking, dto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get(':no_tracking/missing-items')
+    async getMissingItems(
+        @Param('no_tracking') noTracking: string,
+    ): Promise<{ success: boolean; message: string; data: any }> {
+        return this.ordersService.getMissingItems(noTracking);
     }
 
     private async saveFile(file: any, type: string): Promise<string> {
@@ -212,7 +225,7 @@ export class OrdersController {
             const randomString = Math.random().toString(36).substring(2, 15);
             const fileExtension = file.originalname.split('.').pop();
             const fileName = `${type}_${timestamp}_${randomString}.${fileExtension}`;
-            const filePath = `/public/uploads/${fileName}`;
+            const filePath = `https://api.99delivery.id/uploads/${fileName}`;
 
             // Buat direktori jika belum ada
             const fs = require('fs');

@@ -22,6 +22,7 @@ import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
 import { LogGps } from '../models/log-gps.model';
 import { Hub } from '../models/hub.model';
+import { OrderKendala } from '../models/order-kendala.model';
 import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
 import { DriversModule } from '../drivers/drivers.module';
@@ -49,7 +50,8 @@ import { DriversModule } from '../drivers/drivers.module';
             OrderPickupDriver,
             OrderDeliverDriver,
             LogGps,
-            Hub
+            Hub,
+            OrderKendala
         ])
     ],
     controllers: [OrdersController],
