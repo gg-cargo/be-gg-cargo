@@ -692,8 +692,8 @@ export class FinanceService {
 
             // Calculate totals
             const subtotalLayanan = invoiceDetails.reduce((sum, detail) => {
-                const unitPrice = detail.unit_price || 0;
-                const qty = detail.qty || 0;
+                const unitPrice = detail.getDataValue('unit_price') || 0;
+                const qty = detail.getDataValue('qty') || 0;
                 const itemTotal = unitPrice * qty;
                 return sum + (isNaN(itemTotal) ? 0 : itemTotal);
             }, 0);
@@ -701,7 +701,7 @@ export class FinanceService {
             const diskon = invoice.getDataValue('discount') || 0;
             const ppn = invoice.getDataValue('ppn') || 0;
             const pph = invoice.getDataValue('pph') || 0;
-            const totalAkhir = subtotalLayanan - diskon + ppn - pph;
+            const totalAkhir = subtotalLayanan + ppn - pph;
 
             // Transform invoice details
             const itemTagihan = invoiceDetails.map(detail => {
@@ -920,7 +920,12 @@ export class FinanceService {
                     });
                 }
                 // Subtotal
-                const subtotal = items.reduce((sum, i) => sum + i.unit_price * i.qty, 0);
+                const subtotal = items.reduce((sum, i) => {
+                    const unitPrice = i.unit_price || 0;
+                    const qty = i.qty || 0;
+                    const itemTotal = unitPrice * qty;
+                    return sum + (isNaN(itemTotal) ? 0 : itemTotal);
+                }, 0);
                 // Pajak
                 const ppn = Math.round(subtotal * 0.1); // 10% PPN
                 const pph = 0; // default 0, bisa diatur sesuai kebutuhan
@@ -1079,7 +1084,10 @@ export class FinanceService {
 
             // Calculate totals
             const subtotal = invoiceDetails.reduce((sum: number, detail: any) => {
-                return sum + (detail.getDataValue('unit_price') * detail.getDataValue('qty'));
+                const unitPrice = detail.getDataValue('unit_price') || 0;
+                const qty = detail.getDataValue('qty') || 0;
+                const itemTotal = unitPrice * qty;
+                return sum + (isNaN(itemTotal) ? 0 : itemTotal);
             }, 0);
 
             const ppnAmount = invoice.getDataValue('ppn') || 0;
@@ -1126,26 +1134,38 @@ export class FinanceService {
 
                     billing_items: invoiceDetails
                         .filter((detail: any) => detail.getDataValue('description') === 'Biaya Pengiriman Barang')
-                        .map((detail: any) => ({
-                            description: detail.getDataValue('description'),
-                            quantity: detail.getDataValue('qty'),
-                            uom: detail.getDataValue('uom'),
-                            unit_price: detail.getDataValue('unit_price'),
-                            total: detail.getDataValue('unit_price') * detail.getDataValue('qty'),
-                            remarks: detail.getDataValue('remark')
-                        })),
+                        .map((detail: any) => {
+                            const unitPrice = detail.getDataValue('unit_price') || 0;
+                            const qty = detail.getDataValue('qty') || 0;
+                            const total = unitPrice * qty;
+
+                            return {
+                                description: detail.getDataValue('description'),
+                                quantity: qty,
+                                uom: detail.getDataValue('uom'),
+                                unit_price: unitPrice,
+                                total: isNaN(total) ? 0 : total,
+                                remarks: detail.getDataValue('remark')
+                            };
+                        }),
 
                     discount_voucher_contract: invoice.getDataValue('discount') || 0,
                     additional_fees: invoiceDetails
                         .filter((detail: any) => detail.getDataValue('description') !== 'Biaya Pengiriman Barang')
-                        .map((detail: any) => ({
-                            description: detail.getDataValue('description'),
-                            quantity: detail.getDataValue('qty'),
-                            uom: detail.getDataValue('uom'),
-                            unit_price: detail.getDataValue('unit_price'),
-                            total: detail.getDataValue('unit_price') * detail.getDataValue('qty'),
-                            remarks: detail.getDataValue('remark')
-                        })),
+                        .map((detail: any) => {
+                            const unitPrice = detail.getDataValue('unit_price') || 0;
+                            const qty = detail.getDataValue('qty') || 0;
+                            const total = unitPrice * qty;
+
+                            return {
+                                description: detail.getDataValue('description'),
+                                quantity: qty,
+                                uom: detail.getDataValue('uom'),
+                                unit_price: unitPrice,
+                                total: isNaN(total) ? 0 : total,
+                                remarks: detail.getDataValue('remark')
+                            };
+                        }),
                     asuransi_amount: invoice.getDataValue('asuransi') || 0,
                     packing_amount: invoice.getDataValue('packing') || 0,
                     pph_percentage: 2,
@@ -1354,12 +1374,16 @@ export class FinanceService {
 
                     // Create new invoice details
                     for (const item of billing_items) {
+                        // Konversi string ke number untuk qty dan unit_price
+                        const qty = typeof item.quantity === 'string' ? parseFloat(item.quantity) : (item.quantity || 0);
+                        const unitPrice = typeof item.unit_price === 'string' ? parseFloat(item.unit_price) : (item.unit_price || 0);
+
                         await this.orderInvoiceDetailModel.create({
                             invoice_id: invoice.id,
                             description: item.description,
-                            qty: item.quantity,
+                            qty: qty,
                             uom: item.uom,
-                            unit_price: item.unit_price,
+                            unit_price: unitPrice,
                             remark: item.remarks || ''
                         }, { transaction: t });
                     }
@@ -1424,8 +1448,11 @@ export class FinanceService {
                 // Hitung subtotal dari billing items
                 if (billing_items && billing_items.length > 0) {
                     const billingItemsTotal = billing_items.reduce((sum, item) => {
-                        const itemTotal = (item.quantity || 0) * (item.unit_price || 0);
-                        return sum + itemTotal;
+                        // Konversi string ke number untuk perhitungan yang aman
+                        const qty = typeof item.quantity === 'string' ? parseFloat(item.quantity) : (item.quantity || 0);
+                        const unitPrice = typeof item.unit_price === 'string' ? parseFloat(item.unit_price) : (item.unit_price || 0);
+                        const itemTotal = qty * unitPrice;
+                        return sum + (isNaN(itemTotal) ? 0 : itemTotal);
                     }, 0);
                     calculatedTotalHarga = billingItemsTotal;
                     calculationDetails.push(`Subtotal billing items: Rp ${billingItemsTotal.toLocaleString()}`);
