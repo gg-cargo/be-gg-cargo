@@ -155,6 +155,13 @@ export class FinanceService {
                 }
             }) || 0;
 
+            const totalBelumProsesAmount = await this.orderModel.sum('total_harga', {
+                where: {
+                    ...orderWhereCondition,
+                    invoiceStatus: INVOICE_STATUS.BELUM_PROSES
+                }
+            }) || 0;
+
             // 11. Get total pembayaran untuk pending (sudah ditagih)
             const totalPendingAmount = await this.orderModel.sum('total_harga', {
                 where: {
@@ -178,6 +185,13 @@ export class FinanceService {
                 }
             });
 
+            const belumProsesCount = await this.orderModel.count({
+                where: {
+                    ...orderWhereCondition,
+                    invoiceStatus: INVOICE_STATUS.BELUM_PROSES
+                }
+            });
+
             return {
                 message: 'Finance summary berhasil diambil',
                 success: true,
@@ -194,13 +208,17 @@ export class FinanceService {
                     payment_statistics: paymentStats,
                     payment_order_statistics: paymentOrderStats,
                     total_pembayaran: {
-                        draft: {
+                        belum_ditagih: {
                             count: draftCount,
                             amount: totalDraftAmount
                         },
-                        pending: {
+                        sudah_ditagih: {
                             count: pendingCount,
                             amount: totalPendingAmount
+                        },
+                        belum_proses: {
+                            count: belumProsesCount,
+                            amount: totalBelumProsesAmount
                         }
                     }
                 },
