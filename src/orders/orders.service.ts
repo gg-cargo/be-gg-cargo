@@ -52,6 +52,7 @@ import { ResolveMissingItemDto } from './dto/resolve-missing-item.dto';
 import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { OrderKendala } from '../models/order-kendala.model';
+import { ListOrdersDto } from './dto/list-orders.dto';
 
 @Injectable()
 export class OrdersService {
@@ -1736,7 +1737,61 @@ export class OrdersService {
         };
     }
 
-    async listOrders(userId: number) {
+    async listOrders(userId: number, query?: ListOrdersDto) {
+        if (query?.missing_items) {
+            const missingItemsOrders = await this.orderModel.findAll({
+                include: [
+                    {
+                        model: this.orderShipmentModel,
+                        as: 'shipments',
+                        attributes: [],
+                    },
+                    {
+                        model: this.orderPieceModel,
+                        as: 'pieces',
+                        where: {
+                            inbound_status: 2 // Missing items
+                        },
+                        attributes: [],
+                        required: true
+                    },
+                ],
+                attributes: [
+                    'id',
+                    'no_tracking',
+                    'nama_pengirim',
+                    'nama_penerima',
+                    'layanan',
+                    'invoiceStatus',
+                    'status',
+                    'id_kontrak',
+                    'created_at',
+                    'order_by',
+                    [fn('SUM', col('shipments.qty')), 'total_koli'],
+                ],
+                group: ['Order.id'],
+                order: [['created_at', 'DESC']],
+                raw: true,
+            });
+
+            return {
+                message: 'Data order dengan missing items berhasil diambil',
+                data: missingItemsOrders.map(order => ({
+                    id: order.id,
+                    no_tracking: order.no_tracking,
+                    nama_pengirim: order.nama_pengirim,
+                    nama_penerima: order.nama_penerima,
+                    layanan: order.layanan,
+                    status_tagihan: order.invoiceStatus,
+                    status_pengiriman: order.status,
+                    id_kontrak: order.id_kontrak,
+                    created_at: order.created_at,
+                    order_by: order.order_by,
+                    total_koli: order.total_koli,
+                })),
+            };
+        }
+
         // Ambil orders milik user, join ke order_shipments, hitung total koli, hanya field tertentu
         const orders = await this.orderModel.findAll({
             where: { order_by: userId },

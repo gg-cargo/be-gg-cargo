@@ -5,6 +5,7 @@ import { OrderPiece } from './order-piece.model';
 import { OrderInvoice } from './order-invoice.model';
 import { TransactionPayment } from './transaction-payment.model';
 import { Hub } from './hub.model';
+import { OrderKendala } from './order-kendala.model';
 import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 
 @Table({
@@ -1082,6 +1083,9 @@ export class Order extends Model {
 
     @HasMany(() => OrderPiece, { foreignKey: 'order_id', as: 'pieces' })
     pieces: OrderPiece[];
+
+    @HasMany(() => OrderKendala, { foreignKey: 'order_id', as: 'kendala', sourceKey: 'no_tracking' })
+    kendala: OrderKendala[];
 
     @HasOne(() => OrderInvoice, { foreignKey: 'order_id', as: 'orderInvoice' })
     orderInvoice: OrderInvoice;

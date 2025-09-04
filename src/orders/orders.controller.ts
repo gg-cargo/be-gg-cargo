@@ -32,6 +32,7 @@ import { ResolveMissingItemDto, ResolveMissingItemFormDto } from './dto/resolve-
 import { GetReweightProofResponseDto } from './dto/reweight-proof-response.dto';
 import { CompleteOrderDto, CompleteOrderResponseDto } from './dto/complete-order.dto';
 import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
+import { ListOrdersDto } from './dto/list-orders.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -294,9 +295,9 @@ export class OrdersController {
 
     @UseGuards(JwtAuthGuard)
     @Get()
-    async listOrders(@Req() req) {
+    async listOrders(@Req() req, @Query() query: ListOrdersDto) {
         // Asumsi user login ada di req.user.id
-        return this.ordersService.listOrders(req.user.id);
+        return this.ordersService.listOrders(req.user.id, query);
     }
 
     @UseGuards(JwtAuthGuard)
