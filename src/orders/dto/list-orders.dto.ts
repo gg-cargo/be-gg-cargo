@@ -10,4 +10,13 @@ export class ListOrdersDto {
         return value;
     })
     missing_items?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    @Transform(({ value }) => {
+        if (value === 'true') return true;
+        if (value === 'false') return false;
+        return value;
+    })
+    missing_hub?: boolean;
 }

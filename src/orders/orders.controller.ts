@@ -33,6 +33,7 @@ import { GetReweightProofResponseDto } from './dto/reweight-proof-response.dto';
 import { CompleteOrderDto, CompleteOrderResponseDto } from './dto/complete-order.dto';
 import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
 import { ListOrdersDto } from './dto/list-orders.dto';
+import { UpdateOrderFieldsDto } from './dto/update-order-fields.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -516,6 +517,15 @@ export class OrdersController {
         @Body() updateOrderDto: UpdateOrderDto
     ): Promise<UpdateOrderResponseDto> {
         return this.ordersService.updateOrder(noResi, updateOrderDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_resi/update-fields')
+    async updateOrderFields(
+        @Param('no_resi') noResi: string,
+        @Body() dto: UpdateOrderFieldsDto,
+    ) {
+        return this.ordersService.updateOrderFields(noResi, dto);
     }
 
     @UseGuards(JwtAuthGuard)

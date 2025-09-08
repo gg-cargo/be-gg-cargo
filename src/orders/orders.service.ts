@@ -172,11 +172,11 @@ export class OrdersService {
                 if (byCity) return byCity.id;
             }
 
-            // Default hub id 1 jika tidak ditemukan
-            return 1;
+            // Default hub id 0 jika tidak ditemukan
+            return 0;
         } catch (err) {
-            // Jika terjadi error, fallback default hub 1
-            return 1;
+            // Jika terjadi error, fallback default hub 0
+            return 0;
         }
     }
 
@@ -1787,6 +1787,59 @@ export class OrdersService {
                     id_kontrak: order.id_kontrak,
                     created_at: order.created_at,
                     order_by: order.order_by,
+                    total_koli: order.total_koli,
+                })),
+            };
+        }
+
+        if (query?.missing_hub) {
+            const missingHubOrders = await this.orderModel.findAll({
+                where: {
+                    [Op.or]: [
+                        { hub_dest_id: 0 },
+                        { hub_source_id: 0 }
+                    ]
+                },
+                include: [
+                    {
+                        model: this.orderShipmentModel,
+                        as: 'shipments',
+                        attributes: [],
+                    },
+                ],
+                attributes: [
+                    'id',
+                    'no_tracking',
+                    'nama_pengirim',
+                    'nama_penerima',
+                    'layanan',
+                    'invoiceStatus',
+                    'status',
+                    'id_kontrak',
+                    'created_at',
+                    'hub_dest_id',
+                    'hub_source_id',
+                    [fn('SUM', col('shipments.qty')), 'total_koli'],
+                ],
+                group: ['Order.id'],
+                order: [['created_at', 'DESC']],
+                raw: true,
+            });
+
+            return {
+                message: 'Data order dengan missing hub berhasil diambil',
+                data: missingHubOrders.map(order => ({
+                    id: order.id,
+                    no_tracking: order.no_tracking,
+                    nama_pengirim: order.nama_pengirim,
+                    nama_penerima: order.nama_penerima,
+                    layanan: order.layanan,
+                    status_tagihan: order.invoiceStatus,
+                    status_pengiriman: order.status,
+                    id_kontrak: order.id_kontrak,
+                    created_at: order.created_at,
+                    hub_dest_id: order.hub_dest_id,
+                    hub_source_id: order.hub_source_id,
                     total_koli: order.total_koli,
                 })),
             };
@@ -3590,6 +3643,38 @@ export class OrdersService {
             await transaction.rollback();
             throw error;
         }
+    }
+
+    async updateOrderFields(noResi: string, payload: { data: Record<string, any>, updated_by_user_id: number }) {
+        const order = await this.orderModel.findOne({ where: { no_tracking: noResi } });
+        if (!order) {
+            throw new NotFoundException('Order tidak ditemukan');
+        }
+        if (!payload.updated_by_user_id) {
+            throw new BadRequestException('updated_by_user_id diperlukan');
+        }
+
+        const allowedFields = Object.keys(this.orderModel.getAttributes());
+        const updates: Record<string, any> = {};
+        for (const [key, value] of Object.entries(payload.data || {})) {
+            if (allowedFields.includes(key) && key !== 'id' && key !== 'no_tracking' && key !== 'order_by' && key !== 'created_at') {
+                updates[key] = value;
+            }
+        }
+
+        if (Object.keys(updates).length === 0) {
+            throw new BadRequestException('Tidak ada field yang valid untuk diupdate');
+        }
+
+        updates.updated_at = new Date();
+
+        await this.orderModel.update(updates, { where: { id: order.id } });
+
+        const refreshed = await this.orderModel.findOne({ where: { id: order.id } });
+        return {
+            message: 'Order berhasil diupdate',
+            data: refreshed,
+        };
     }
 
     private validateOrderUpdatePermission(order: Order): void {
