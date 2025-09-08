@@ -3646,7 +3646,7 @@ export class OrdersService {
     }
 
     async updateOrderFields(noResi: string, payload: { data: Record<string, any>, updated_by_user_id: number }) {
-        const order = await this.orderModel.findOne({ where: { no_tracking: noResi } });
+        const order = await this.orderModel.findOne({ where: { no_tracking: noResi }, raw: true });
         if (!order) {
             throw new NotFoundException('Order tidak ditemukan');
         }
@@ -3656,24 +3656,34 @@ export class OrdersService {
 
         const allowedFields = Object.keys(this.orderModel.getAttributes());
         const updates: Record<string, any> = {};
-        for (const [key, value] of Object.entries(payload.data || {})) {
-            if (allowedFields.includes(key) && key !== 'id' && key !== 'no_tracking' && key !== 'order_by' && key !== 'created_at') {
-                updates[key] = value;
-            }
+        const changes: Record<string, { old: any; new: any }> = {};
+
+        for (const [key, incomingValue] of Object.entries(payload.data || {})) {
+            const isAllowed = allowedFields.includes(key) && key !== 'id' && key !== 'no_tracking' && key !== 'order_by' && key !== 'created_at';
+            if (!isAllowed) continue;
+
+            const currentValue = (order as any)[key];
+            const hasChanged = incomingValue !== currentValue;
+            if (!hasChanged) continue;
+
+            updates[key] = incomingValue;
+            changes[key] = { old: currentValue, new: incomingValue };
         }
 
         if (Object.keys(updates).length === 0) {
-            throw new BadRequestException('Tidak ada field yang valid untuk diupdate');
+            throw new BadRequestException('Tidak ada perubahan nilai yang dikirim');
         }
 
         updates.updated_at = new Date();
+        await this.orderModel.update(updates, { where: { id: (order as any).id } });
 
-        await this.orderModel.update(updates, { where: { id: order.id } });
-
-        const refreshed = await this.orderModel.findOne({ where: { id: order.id } });
         return {
             message: 'Order berhasil diupdate',
-            data: refreshed,
+            success: true,
+            data: {
+                no_tracking: (order as any).no_tracking,
+                changes,
+            },
         };
     }
 
