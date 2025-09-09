@@ -1075,6 +1075,9 @@ export class Order extends Model {
     @BelongsTo(() => Hub, { foreignKey: 'hub_dest_id', as: 'hubDestination' })
     hubDestination: Hub;
 
+    @BelongsTo(() => Hub, { foreignKey: 'hub_source_id', as: 'hubSource' })
+    hubSource: Hub;
+
     @BelongsTo(() => Hub, { foreignKey: 'next_hub', as: 'hubNext' })
     hubNext: Hub;
 
