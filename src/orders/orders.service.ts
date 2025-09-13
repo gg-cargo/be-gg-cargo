@@ -1936,7 +1936,7 @@ export class OrdersService {
                 [fn('SUM', literal(`CASE WHEN status = 'Delivered' THEN 1 ELSE 0 END`)), 'completed'],
                 [fn('SUM', literal(`CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END`)), 'canceled'],
                 [fn('SUM', literal(`CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END`)), 'payment_completed'],
-                [fn('SUM', literal(`CASE WHEN payment_status != 'paid' THEN 1 ELSE 0 END`)), 'payment_pending'],
+                [fn('SUM', literal(`CASE WHEN payment_status IS NULL OR payment_status != 'paid' THEN 1 ELSE 0 END`)), 'payment_pending'],
                 // Monthly statistics
                 [fn('SUM', literal(`CASE WHEN created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_total'],
                 [fn('SUM', literal(`CASE WHEN status IN ('Draft', 'Ready for Pickup', 'Picked Up') AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_on_going'],
