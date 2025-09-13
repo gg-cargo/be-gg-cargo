@@ -1931,17 +1931,18 @@ export class OrdersService {
             where: { order_by: userId },
             attributes: [
                 [fn('COUNT', col('id')), 'total_shipment'],
-                [fn('SUM', literal(`CASE WHEN status = 'Menunggu diproses' THEN 1 ELSE 0 END`)), 'on_going'],
-                [fn('SUM', literal(`CASE WHEN status = 'diantarkan' THEN 1 ELSE 0 END`)), 'on_delivery'],
-                [fn('SUM', literal(`CASE WHEN status = 'diterima' THEN 1 ELSE 0 END`)), 'completed'],
-                [fn('SUM', literal(`CASE WHEN status = 'dibatalkan' THEN 1 ELSE 0 END`)), 'canceled'],
+                [fn('SUM', literal(`CASE WHEN status IN ('Draft', 'Ready for Pickup', 'Picked Up') THEN 1 ELSE 0 END`)), 'on_going'],
+                [fn('SUM', literal(`CASE WHEN status IN ('In Transit', 'Out for Delivery') THEN 1 ELSE 0 END`)), 'on_delivery'],
+                [fn('SUM', literal(`CASE WHEN status = 'Delivered' THEN 1 ELSE 0 END`)), 'completed'],
+                [fn('SUM', literal(`CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END`)), 'canceled'],
                 [fn('SUM', literal(`CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END`)), 'payment_completed'],
                 [fn('SUM', literal(`CASE WHEN payment_status = 'unpaid' THEN 1 ELSE 0 END`)), 'payment_pending'],
                 // Monthly statistics
                 [fn('SUM', literal(`CASE WHEN created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_total'],
-                [fn('SUM', literal(`CASE WHEN status = 'On Going' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_on_going'],
-                [fn('SUM', literal(`CASE WHEN status = 'Completed' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_completed'],
-                [fn('SUM', literal(`CASE WHEN status = 'Canceled' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_canceled'],
+                [fn('SUM', literal(`CASE WHEN status IN ('Draft', 'Ready for Pickup', 'Picked Up') AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_on_going'],
+                [fn('SUM', literal(`CASE WHEN status IN ('In Transit', 'Out for Delivery') AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_on_delivery'],
+                [fn('SUM', literal(`CASE WHEN status = 'Delivered' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_completed'],
+                [fn('SUM', literal(`CASE WHEN status = 'Cancelled' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_canceled'],
             ],
             raw: true,
         }) as any;
@@ -1963,6 +1964,7 @@ export class OrdersService {
                 month: monthNames[currentDate.getMonth()],
                 total: parseInt(result?.monthly_total) || 0,
                 on_going: parseInt(result?.monthly_on_going) || 0,
+                on_delivery: parseInt(result?.monthly_on_delivery) || 0,
                 completed: parseInt(result?.monthly_completed) || 0,
                 canceled: parseInt(result?.monthly_canceled) || 0,
             }
