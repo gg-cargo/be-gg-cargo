@@ -2316,11 +2316,36 @@ export class OrdersService {
             const orderId = order.getDataValue('id');
             this.logger.log(`Found order: ${orderId} with status: ${order.getDataValue('status')}`);
 
-            // 3. Validasi status order (tidak bisa dibatalkan jika sudah delivered atau cancelled)
+            // 3. Validasi status order (tidak bisa dibatalkan jika sudah dalam proses atau selesai)
             const currentStatus = order.getDataValue('status');
-            if (currentStatus === 'Delivered' || currentStatus === 'Cancelled' || currentStatus === 'dibatalkan') {
+            if (currentStatus === 'Ready for Pickup' || currentStatus === 'Picked Up' || currentStatus === 'In Transit' || currentStatus === 'Out for Delivery' || currentStatus === 'Delivered' || currentStatus === 'Cancelled') {
                 this.logger.warn(`Order ${orderId} cannot be cancelled - current status: ${currentStatus}`);
-                throw new Error('Order tidak bisa dibatalkan karena sudah delivered atau cancelled');
+
+                let errorMessage = '';
+                switch (currentStatus) {
+                    case 'Ready for Pickup':
+                        errorMessage = 'Order tidak bisa dibatalkan karena sudah siap untuk diambil';
+                        break;
+                    case 'Picked Up':
+                        errorMessage = 'Order tidak bisa dibatalkan karena sudah diambil';
+                        break;
+                    case 'In Transit':
+                        errorMessage = 'Order tidak bisa dibatalkan karena sedang dalam perjalanan';
+                        break;
+                    case 'Out for Delivery':
+                        errorMessage = 'Order tidak bisa dibatalkan karena sedang dalam pengiriman';
+                        break;
+                    case 'Delivered':
+                        errorMessage = 'Order tidak bisa dibatalkan karena sudah dikirim';
+                        break;
+                    case 'Cancelled':
+                        errorMessage = 'Order tidak bisa dibatalkan karena sudah dibatalkan sebelumnya';
+                        break;
+                    default:
+                        errorMessage = 'Order tidak bisa dibatalkan karena status tidak memungkinkan';
+                }
+
+                throw new Error(errorMessage);
             }
 
             // 4. Validasi payment status (tidak bisa dibatalkan jika sudah dibayar)
@@ -2334,7 +2359,7 @@ export class OrdersService {
 
             // 5. Update order status menjadi 'Cancelled'
             await order.update({
-                status: 'Cancelled',
+                status: ORDER_STATUS.CANCELLED,
                 is_gagal_pickup: 1,
                 updated_at: new Date()
             });
