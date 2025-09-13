@@ -37,6 +37,7 @@ export class MarkAllAsReadDto {
 
     @IsString()
     @IsOptional()
+    @IsIn(['Order Masuk', 'Reweight', 'Dalam pengiriman', 'hub kosong', 'hub missing'])
     menu_name?: string;
 }
 
@@ -48,6 +49,7 @@ export class GetNotificationBadgesDto {
 
     @IsString()
     @IsOptional()
+    @IsIn(['Order Masuk', 'Reweight', 'Dalam pengiriman', 'hub kosong', 'hub missing'])
     menu_name?: string;
 
     @IsNumber()

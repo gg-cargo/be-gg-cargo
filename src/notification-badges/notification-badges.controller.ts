@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, ParseIntPipe, BadRequestException } from '@nestjs/common';
 import { NotificationBadgesService } from './notification-badges.service';
 import {
     CreateNotificationBadgeDto,
@@ -30,6 +30,19 @@ export class NotificationBadgesController {
     async getNotificationBadges(
         @Query() query: GetNotificationBadgesDto
     ) {
+        // Konversi hub missing menjadi hub kosong
+        if (query.menu_name === 'hub missing') {
+            query.menu_name = 'hub kosong';
+        }
+
+        // Validasi menu_name jika diberikan
+        if (query.menu_name) {
+            const allowedMenus = ['Order Masuk', 'Reweight', 'Dalam pengiriman', 'hub kosong', 'hub missing'];
+            if (!allowedMenus.includes(query.menu_name)) {
+                throw new BadRequestException(`menu_name harus salah satu dari: ${allowedMenus.join(', ')}`);
+            }
+        }
+
         return this.notificationBadgesService.getNotificationBadges(query);
     }
 
@@ -65,6 +78,19 @@ export class NotificationBadgesController {
     async markAllAsRead(
         @Body() markAllAsReadDto: MarkAllAsReadDto
     ) {
+        // Konversi hub missing menjadi hub kosong
+        if (markAllAsReadDto.menu_name === 'hub missing') {
+            markAllAsReadDto.menu_name = 'hub kosong';
+        }
+
+        // Validasi menu_name jika diberikan
+        if (markAllAsReadDto.menu_name) {
+            const allowedMenus = ['Order Masuk', 'Reweight', 'Dalam pengiriman', 'hub kosong', 'hub missing'];
+            if (!allowedMenus.includes(markAllAsReadDto.menu_name)) {
+                throw new BadRequestException(`menu_name harus salah satu dari: ${allowedMenus.join(', ')}`);
+            }
+        }
+
         return this.notificationBadgesService.markAllAsRead(markAllAsReadDto.hub_id ?? null, markAllAsReadDto.menu_name);
     }
 
