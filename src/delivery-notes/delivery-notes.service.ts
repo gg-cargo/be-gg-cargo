@@ -18,6 +18,7 @@ import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { OrderManifestInbound } from '../models/order-manifest-inbound.model';
 import { InboundScanDto, InboundScanResponseDto } from './dto/inbound-scan.dto';
 import { InboundConfirmWebDto, InboundConfirmWebResponseDto } from './dto/inbound-confirm-web.dto';
+import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
 
 @Injectable()
 export class DeliveryNotesService {
@@ -33,6 +34,7 @@ export class DeliveryNotesService {
         @InjectModel(User) private readonly userModel: typeof User,
         @InjectModel(OrderHistory) private readonly orderHistoryModel: typeof OrderHistory,
         @InjectModel(OrderManifestInbound) private readonly orderManifestInboundModel: typeof OrderManifestInbound,
+        private readonly notificationBadgesService: NotificationBadgesService,
     ) { }
 
     private generateDeliveryNoteNumber(date: Date, hubKode: string, seq: number): string {
@@ -126,7 +128,7 @@ export class DeliveryNotesService {
             sealString = cleaned.join(',');
         }
 
-        await this.orderDeliveryNoteModel.create({
+        const createdDeliveryNote = await this.orderDeliveryNoteModel.create({
             no_delivery_note: noDeliveryNote,
             no_tracking: dto.resi_list.join(','),
             tanggal: today,
@@ -169,6 +171,19 @@ export class DeliveryNotesService {
             };
 
             await this.orderModel.update(updateData, { where: { id: order.id } });
+
+            // Buat notification badge untuk delivery note baru (gunakan ID delivery note)
+            const menuName = isFinalDestination ? 'Order kirim' : 'Dalam pengiriman';
+            await this.createNotificationBadge(createdDeliveryNote.id, menuName, 'delivery-note');
+
+            // Mark as read berdasarkan menuName
+            if (menuName === 'Order kirim') {
+                // Jika Order kirim, mark "Dalam pengiriman" sebagai read
+                await this.markDalamPengirimanAsRead(order.id);
+            } else if (menuName === 'Dalam pengiriman') {
+                // Jika Dalam pengiriman, mark "Dalam pengiriman" sebelumnya sebagai read
+                await this.markDalamPengirimanPreviousAsRead(order.id);
+            }
         }
 
         await this.orderPieceModel.update(
@@ -1020,5 +1035,95 @@ export class DeliveryNotesService {
                 }
             }
         }, 60 * 60 * 1000); // 1 hour in milliseconds
+    }
+
+    /**
+     * Helper method untuk membuat notification badge
+     */
+    private async createNotificationBadge(
+        itemId: number | string,
+        menuName: string,
+        itemType: string = 'delivery-note'
+    ): Promise<void> {
+        try {
+            // Dapatkan user yang relevan untuk notifikasi (ops team, admin, dll)
+            const opsUsers = await this.userModel.findAll({
+                where: {
+                    [Op.or]: [
+                        { level: 3 }, // Admin
+                        { level: 6 }, // finance
+                        { level: 7 }, // Ops
+                        { level: 9 }, // traffic
+                    ]
+                },
+                attributes: ['id'],
+                raw: true,
+            });
+
+            const userIds = opsUsers.map(user => user.id);
+
+            if (userIds.length > 0) {
+                // Ambil hub_id berdasarkan jenis notification dan item type
+                let hubId = 0;
+
+                if (itemType === 'delivery-note') {
+                    const deliveryNote = await this.orderDeliveryNoteModel.findOne({
+                        where: { id: typeof itemId === 'string' ? parseInt(itemId) : itemId },
+                        attributes: ['hub_id', 'agent_id'],
+                        raw: true
+                    });
+
+                    if (menuName === 'Order kirim') {
+                        hubId = deliveryNote?.hub_id || 0; // Hub tujuan
+                    } else {
+                        hubId = deliveryNote?.agent_id || 0; // Hub asal
+                    }
+                } else {
+                    const order = await this.orderModel.findByPk(typeof itemId === 'string' ? parseInt(itemId) : itemId,
+                        { attributes: ['hub_source_id', 'hub_dest_id', 'current_hub', 'next_hub'], raw: true });
+
+                    if (menuName === 'Order Masuk') {
+                        hubId = order?.hub_source_id || 0;
+                    } else if (menuName === 'Dalam pengiriman') {
+                        hubId = order?.hub_source_id || 0;
+                    } else if (menuName === 'Order kirim') {
+                        hubId = Number(order?.next_hub) || order?.hub_dest_id || 0;
+                    } else {
+                        hubId = order?.hub_source_id || order?.hub_dest_id || 0;
+                    }
+                }
+
+                await this.notificationBadgesService.createNotificationBadgeForHub(
+                    menuName,
+                    typeof itemId === 'string' ? parseInt(itemId) : itemId,
+                    itemType,
+                    hubId
+                );
+            }
+        } catch (error) {
+            this.logger.error(`Error creating ${menuName} notification for item ${itemId}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Helper method untuk menandai notification "Dalam pengiriman" sebagai sudah dibaca
+     */
+    private async markDalamPengirimanAsRead(orderId: number): Promise<void> {
+        try {
+            await this.notificationBadgesService.markDalamPengirimanAsRead(orderId);
+        } catch (error) {
+            this.logger.error(`Error marking Dalam pengiriman as read for order ${orderId}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Helper method untuk menandai notification "Dalam pengiriman" sebelumnya sebagai sudah dibaca
+     */
+    private async markDalamPengirimanPreviousAsRead(orderId: number): Promise<void> {
+        try {
+            await this.notificationBadgesService.markDalamPengirimanPreviousAsRead(orderId);
+        } catch (error) {
+            this.logger.error(`Error marking Dalam pengiriman previous as read for order ${orderId}: ${error.message}`);
+        }
     }
 }

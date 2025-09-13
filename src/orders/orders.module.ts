@@ -26,10 +26,12 @@ import { OrderKendala } from '../models/order-kendala.model';
 import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
 import { DriversModule } from '../drivers/drivers.module';
+import { NotificationBadgesModule } from '../notification-badges/notification-badges.module';
 
 @Module({
     imports: [
         DriversModule,
+        NotificationBadgesModule,
         SequelizeModule.forFeature([
             Order,
             OrderShipment,

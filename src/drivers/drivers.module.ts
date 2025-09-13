@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { NotificationBadgesModule } from '../notification-badges/notification-badges.module';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { DriversController } from './drivers.controller';
 import { DriversService } from './drivers.service';
@@ -21,6 +22,7 @@ import { OrderHistory } from '../models/order-history.model';
             Hub,
             OrderHistory,
         ]),
+        NotificationBadgesModule,
     ],
     controllers: [DriversController],
     providers: [DriversService],

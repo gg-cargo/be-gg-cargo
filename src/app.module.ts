@@ -23,6 +23,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { DeliveryNotesModule } from './delivery-notes/delivery-notes.module';
 import { TransportersModule } from './transporters/transporters.module';
+import { NotificationBadgesModule } from './notification-badges/notification-badges.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { TransportersModule } from './transporters/transporters.module';
     VehiclesModule,
     DeliveryNotesModule,
     TransportersModule,
+    NotificationBadgesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

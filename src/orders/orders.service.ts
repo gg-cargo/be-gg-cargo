@@ -47,6 +47,7 @@ import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
 import { Hub } from '../models/hub.model';
 import { generateOrderLabelsPDF } from './helpers/generate-order-labels-pdf.helper';
+import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
 import { ReportMissingItemDto } from './dto/report-missing-item.dto';
 import { ResolveMissingItemDto } from './dto/resolve-missing-item.dto';
 import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
@@ -95,6 +96,7 @@ export class OrdersService {
         private readonly hubModel: typeof Hub,
         private readonly fileService: FileService,
         private readonly driversService: DriversService,
+        private readonly notificationBadgesService: NotificationBadgesService,
     ) { }
 
     /**
@@ -559,6 +561,14 @@ export class OrdersService {
                 }
             }
 
+            if (isBypassEnabled) {
+                // Buat notification badge untuk order baru
+                await this.createNotificationBadge(orderId, 'Dalam pengiriman', 'order');
+
+                // Tandai notification "Reweight" sebagai sudah dibaca
+                await this.markOrderReweight(orderId);
+            }
+
             // 5. Create order_histories
             const hubAsalName = hubAsal?.nama || 'Unknown Hub';
             const statusText = isBypassEnabled ? 'Reweight Bypass Enabled' : 'Reweight Bypass Disabled';
@@ -896,6 +906,14 @@ export class OrdersService {
 
             // Schedule automatic "pesanan diproses" entry after 5 minutes
             this.scheduleAutoProcessOrder(order.id, userId);
+
+            // Buat notification badge untuk order baru
+            await this.createNotificationBadge(order.id, 'Order Masuk', 'order');
+
+            // Buat notification badge untuk hub kosong jika ada hub_id yang 0
+            if (hubSourceId === 0 || hubDestId === 0) {
+                await this.createNotificationBadge(order.id, 'hub kosong', 'order');
+            }
 
             return {
                 order_id: order.id,
@@ -4908,6 +4926,10 @@ export class OrdersService {
                 ? 'Driver Assigned for Pickup'
                 : 'Driver Assigned for Delivery';
 
+            // Buat notification badge untuk order baru
+            const menuName = assignDriverDto.task_type === 'pickup' ? 'Reweight' : 'Order Ditugaskan';
+            await this.createNotificationBadge(assignDriverDto.order_id, menuName, 'order');
+
             const historyRemark = `Order ditugaskan kepada ${driver.getDataValue('name')} untuk tugas ${assignDriverDto.task_type}`;
 
             const { date, time } = getOrderHistoryDateTime();
@@ -5072,6 +5094,12 @@ export class OrdersService {
                 this.logger.error(`Gagal auto-create invoice untuk order ${orderId}: ${error.message}`);
                 // Invoice gagal dibuat, tapi reweight tetap berhasil
             }
+
+            // Buat notification badge untuk order baru
+            await this.createNotificationBadge(orderId, 'Dalam pengiriman', 'order');
+
+            // Tandai notification "Reweight" sebagai sudah dibaca
+            await this.markOrderReweight(orderId);
 
             // 9. Catat di order histories
             const hubAsalName = hubAsal?.nama || 'Unknown Hub';
@@ -5808,6 +5836,75 @@ export class OrdersService {
                 }
             }
         }, 5 * 60 * 1000); // 5 minutes in milliseconds
+    }
+
+    /**
+     * Helper method untuk menandai notification "Reweight" sebagai sudah dibaca
+     */
+    private async markOrderReweight(orderId: number): Promise<void> {
+        try {
+            await this.notificationBadgesService.markOrderReweight(orderId);
+        } catch (error) {
+            this.logger.error(`Error marking Reweight as read for order ${orderId}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Helper method untuk membuat notification badge
+     */
+    private async createNotificationBadge(
+        orderId: number,
+        menuName: string,
+        itemType: string = 'order'
+    ): Promise<void> {
+        try {
+            // Dapatkan user yang relevan untuk notifikasi (ops team, admin, dll)
+            const opsUsers = await this.userModel.findAll({
+                where: {
+                    [Op.or]: [
+                        { level: 3 }, // Admin
+                        { level: 6 }, // finance
+                        { level: 7 }, // Ops
+                        { level: 9 }, // traffic
+                    ]
+                },
+                attributes: ['id'],
+                raw: true,
+            });
+
+            const userIds = opsUsers.map(user => user.id);
+
+            if (userIds.length > 0) {
+                // Ambil hub_id dari order berdasarkan jenis notification
+                const order = await this.orderModel.findByPk(orderId, {
+                    attributes: ['hub_source_id', 'hub_dest_id', 'current_hub', 'next_hub'],
+                    raw: true
+                });
+
+                let hubId = 0;
+                if (menuName === 'Order Masuk') {
+                    hubId = order?.hub_source_id || 0;
+                } else if (menuName === 'Dalam pengiriman') {
+                    hubId = order?.hub_source_id || 0;
+                } else if (menuName === 'Order kirim') {
+                    hubId = Number(order?.next_hub) || order?.hub_dest_id || 0;
+                } else if (menuName === 'hub kosong') {
+                    // Untuk hub kosong, gunakan hub yang tidak kosong atau default 0
+                    hubId = order?.hub_source_id || order?.hub_dest_id || 0;
+                } else {
+                    hubId = order?.hub_source_id || order?.hub_dest_id || 0;
+                }
+
+                await this.notificationBadgesService.createNotificationBadgeForHub(
+                    menuName,
+                    orderId,
+                    itemType,
+                    hubId
+                );
+            }
+        } catch (error) {
+            this.logger.error(`Error creating ${menuName} notification for order ${orderId}: ${error.message}`);
+        }
     }
 
 } 

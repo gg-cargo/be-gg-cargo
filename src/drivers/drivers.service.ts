@@ -13,6 +13,7 @@ import { DriverStatusSummaryQueryDto, DriverStatusSummaryResponseDto, DriverStat
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { ORDER_STATUS } from 'src/common/constants/order-status.constants';
+import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
 
 @Injectable()
 export class DriversService {
@@ -33,6 +34,7 @@ export class DriversService {
         private hubModel: typeof Hub,
         @InjectModel(OrderHistory)
         private orderHistoryModel: typeof OrderHistory,
+        private readonly notificationBadgesService: NotificationBadgesService,
     ) { }
 
     async getAvailableDrivers(params: AvailableDriversDto) {
@@ -856,6 +858,7 @@ export class DriversService {
                         assign_driver: assignDriverDto.driver_id,
                         pickup_by: driver.getDataValue('name'),
                         status_pickup: ORDER_STATUS.PICKED_UP,
+                        status: "Assigned",
                         updatedAt: new Date()
                     },
                     {
@@ -902,6 +905,19 @@ export class DriversService {
                     notes: '', // default empty string untuk field wajib
                     signature: '' // default empty string untuk field wajib
                 }, { transaction });
+            }
+
+            // Buat notification badge untuk order baru
+            const menuName = assignDriverDto.task_type === 'pickup' ? 'Reweight' : 'Order Ditugaskan';
+            await this.createNotificationBadge(assignDriverDto.order_id, menuName, 'order');
+
+            // Mark as read berdasarkan menuName
+            if (menuName === 'Reweight') {
+                // Jika Reweight, mark Order Masuk sebagai read
+                await this.markOrderMasukAsRead(assignDriverDto.order_id);
+            } else if (menuName === 'Order Ditugaskan') {
+                // Jika Order Ditugaskan, mark Order kirim sebagai read
+                await this.markOrderKirimAsRead(assignDriverDto.order_id);
             }
 
             // 7. Catat di order histories
@@ -1171,6 +1187,83 @@ export class DriversService {
                 dalam_pengiriman: 0,
                 dalam_penjemputan: 0
             };
+        }
+    }
+
+    /**
+     * Helper method untuk membuat notification badge
+     */
+    private async createNotificationBadge(
+        orderId: number,
+        menuName: string,
+        itemType: string = 'order'
+    ): Promise<void> {
+        try {
+            // Dapatkan user yang relevan untuk notifikasi (ops team, admin, dll)
+            const opsUsers = await this.userModel.findAll({
+                where: {
+                    [Op.or]: [
+                        { level: 3 }, // Admin
+                        { level: 6 }, // finance
+                        { level: 7 }, // Ops
+                        { level: 9 }, // traffic
+                    ]
+                },
+                attributes: ['id'],
+                raw: true,
+            });
+
+            const userIds = opsUsers.map(user => user.id);
+
+            if (userIds.length > 0) {
+                // Ambil hub_id dari order berdasarkan jenis notification
+                const order = await this.orderModel.findByPk(orderId, {
+                    attributes: ['hub_source_id', 'hub_dest_id', 'current_hub', 'next_hub'],
+                    raw: true
+                });
+
+                let hubId = 0;
+                if (menuName === 'Order Masuk') {
+                    hubId = order?.hub_source_id || 0;
+                } else if (menuName === 'Dalam pengiriman') {
+                    hubId = order?.hub_source_id || 0;
+                } else if (menuName === 'Order kirim') {
+                    hubId = Number(order?.next_hub) || order?.hub_dest_id || 0;
+                } else {
+                    hubId = order?.hub_source_id || order?.hub_dest_id || 0;
+                }
+
+                await this.notificationBadgesService.createNotificationBadgeForHub(
+                    menuName,
+                    orderId,
+                    itemType,
+                    hubId
+                );
+            }
+        } catch (error) {
+            this.logger.error(`Error creating ${menuName} notification for order ${orderId}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Helper method untuk menandai notification "Order Masuk" sebagai sudah dibaca
+     */
+    private async markOrderMasukAsRead(orderId: number): Promise<void> {
+        try {
+            await this.notificationBadgesService.markOrderMasukAsRead(orderId);
+        } catch (error) {
+            this.logger.error(`Error marking Order Masuk as read for order ${orderId}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Helper method untuk menandai notification "Order kirim" sebagai sudah dibaca
+     */
+    private async markOrderKirimAsRead(orderId: number): Promise<void> {
+        try {
+            await this.notificationBadgesService.markOrderKirimAsRead(orderId);
+        } catch (error) {
+            this.logger.error(`Error marking Order kirim as read for order ${orderId}: ${error.message}`);
         }
     }
 } 

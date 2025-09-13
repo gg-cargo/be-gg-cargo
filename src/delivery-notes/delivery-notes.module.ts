@@ -11,9 +11,13 @@ import { JobAssign } from '../models/job-assign.model';
 import { User } from '../models/user.model';
 import { OrderHistory } from '../models/order-history.model';
 import { OrderManifestInbound } from '../models/order-manifest-inbound.model';
+import { NotificationBadgesModule } from '../notification-badges/notification-badges.module';
 
 @Module({
-    imports: [SequelizeModule.forFeature([Order, OrderPiece, OrderDeliveryNote, Hub, TruckList, JobAssign, User, OrderHistory, OrderManifestInbound])],
+    imports: [
+        NotificationBadgesModule,
+        SequelizeModule.forFeature([Order, OrderPiece, OrderDeliveryNote, Hub, TruckList, JobAssign, User, OrderHistory, OrderManifestInbound])
+    ],
     controllers: [DeliveryNotesController],
     providers: [DeliveryNotesService],
     exports: [DeliveryNotesService],
