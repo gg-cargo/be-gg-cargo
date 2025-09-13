@@ -1,5 +1,5 @@
 import { IsString, IsNumber, IsOptional, IsIn } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 export class CreateNotificationBadgeDto {
     @IsNumber()
@@ -37,7 +37,8 @@ export class MarkAllAsReadDto {
 
     @IsString()
     @IsOptional()
-    @IsIn(['Order Masuk', 'Reweight', 'Dalam pengiriman', 'hub kosong', 'hub missing'])
+    @Transform(({ value }) => value ? value.toLowerCase() : value)
+    @IsIn(['order masuk', 'reweight', 'dalam pengiriman', 'hub kosong', 'hub missing'])
     menu_name?: string;
 }
 
@@ -49,7 +50,8 @@ export class GetNotificationBadgesDto {
 
     @IsString()
     @IsOptional()
-    @IsIn(['Order Masuk', 'Reweight', 'Dalam pengiriman', 'hub kosong', 'hub missing'])
+    @Transform(({ value }) => value ? value.toLowerCase() : value)
+    @IsIn(['order masuk', 'reweight', 'dalam pengiriman', 'hub kosong', 'hub missing'])
     menu_name?: string;
 
     @IsNumber()

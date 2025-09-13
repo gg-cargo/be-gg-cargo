@@ -37,7 +37,7 @@ export class NotificationBadgesController {
 
         // Validasi menu_name jika diberikan
         if (query.menu_name) {
-            const allowedMenus = ['Order Masuk', 'Reweight', 'Dalam pengiriman', 'hub kosong', 'hub missing'];
+            const allowedMenus = ['order masuk', 'reweight', 'dalam pengiriman', 'hub kosong'];
             if (!allowedMenus.includes(query.menu_name)) {
                 throw new BadRequestException(`menu_name harus salah satu dari: ${allowedMenus.join(', ')}`);
             }
@@ -85,7 +85,7 @@ export class NotificationBadgesController {
 
         // Validasi menu_name jika diberikan
         if (markAllAsReadDto.menu_name) {
-            const allowedMenus = ['Order Masuk', 'Reweight', 'Dalam pengiriman', 'hub kosong', 'hub missing'];
+            const allowedMenus = ['order masuk', 'reweight', 'dalam pengiriman', 'hub kosong'];
             if (!allowedMenus.includes(markAllAsReadDto.menu_name)) {
                 throw new BadRequestException(`menu_name harus salah satu dari: ${allowedMenus.join(', ')}`);
             }
