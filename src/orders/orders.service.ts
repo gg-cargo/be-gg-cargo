@@ -1936,7 +1936,7 @@ export class OrdersService {
                 [fn('SUM', literal(`CASE WHEN status = 'Delivered' THEN 1 ELSE 0 END`)), 'completed'],
                 [fn('SUM', literal(`CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END`)), 'canceled'],
                 [fn('SUM', literal(`CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END`)), 'payment_completed'],
-                [fn('SUM', literal(`CASE WHEN payment_status = 'unpaid' THEN 1 ELSE 0 END`)), 'payment_pending'],
+                [fn('SUM', literal(`CASE WHEN payment_status != 'paid' THEN 1 ELSE 0 END`)), 'payment_pending'],
                 // Monthly statistics
                 [fn('SUM', literal(`CASE WHEN created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_total'],
                 [fn('SUM', literal(`CASE WHEN status IN ('Draft', 'Ready for Pickup', 'Picked Up') AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_on_going'],
@@ -2323,9 +2323,16 @@ export class OrdersService {
                 throw new Error('Order tidak bisa dibatalkan karena sudah delivered atau cancelled');
             }
 
+            // 4. Validasi payment status (tidak bisa dibatalkan jika sudah dibayar)
+            const paymentStatus = order.getDataValue('payment_status');
+            if (paymentStatus === 'paid') {
+                this.logger.warn(`Order ${orderId} cannot be cancelled - payment status: ${paymentStatus}`);
+                throw new Error('Order tidak bisa dibatalkan karena sudah dibayar');
+            }
+
             const updateHistory: string[] = [];
 
-            // 4. Update order status menjadi 'Cancelled'
+            // 5. Update order status menjadi 'Cancelled'
             await order.update({
                 status: 'Cancelled',
                 is_gagal_pickup: 1,
@@ -2335,7 +2342,7 @@ export class OrdersService {
             updateHistory.push('Status order diubah menjadi Cancelled');
             updateHistory.push('Flag is_gagal_pickup diatur menjadi 1');
 
-            // 5. Buat entri baru di request_cancel
+            // 6. Buat entri baru di request_cancel
             await this.requestCancelModel.create({
                 order_id: orderId,
                 user_id: cancelled_by_user_id,
@@ -2346,7 +2353,7 @@ export class OrdersService {
 
             updateHistory.push('Request cancel berhasil dibuat');
 
-            // 6. Update status order_pieces menjadi 0 (tidak di-pickup)
+            // 7. Update status order_pieces menjadi 0 (tidak di-pickup)
             const pieces = await this.orderPieceModel.findAll({
                 where: { order_id: orderId }
             });
@@ -2361,12 +2368,18 @@ export class OrdersService {
                 updateHistory.push(`${pieces.length} pieces diupdate menjadi tidak di-pickup`);
             }
 
-            // 7. Tambah entri riwayat di order_histories
-            await this.addOrderHistory(orderId, {
-                status: 'Order Cancelled',
-                remark: reason,
-                created_by: cancelled_by_user_id
-            } as any);
+            // 8. Tambah entri riwayat di order_histories
+            const { date, time } = getOrderHistoryDateTime();
+            await this.orderHistoryModel.create({
+                order_id: order.id,
+                status: ORDER_STATUS.CANCELLED,
+                date: date,
+                time: time,
+                remark: 'Pesanan dibatalkan',
+                provinsi: order.provinsi_pengirim,
+                kota: order.kota_pengirim,
+                created_by: cancelled_by_user_id,
+            });
 
             updateHistory.push('History order berhasil ditambahkan');
 
@@ -4131,15 +4144,6 @@ export class OrdersService {
                 order_delivery_notes: 0,
                 order_histories: 0
             };
-
-            // 5. Catat riwayat sebelum menghapus
-            await this.addOrderHistory(orderId, {
-                status: 'Order Deleted',
-                remark: `Order dihapus oleh ${user.getDataValue('name')} (ID: ${user_id}) pada ${new Date().toISOString()}`,
-                created_by: user_id
-            } as any);
-
-            // 6. Hapus data dari tabel anak secara berurutan
 
             // 6.1. Hapus order_pieces
             const deletedPieces = await this.orderPieceModel.destroy({
