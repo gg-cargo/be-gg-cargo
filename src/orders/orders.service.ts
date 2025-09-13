@@ -855,7 +855,7 @@ export class OrdersService {
                 description: "Biaya Pengiriman Barang",
                 qty: invoiceAmounts.chargeableWeight,
                 uom: 'KG',
-                unit_price: 0,
+                unit_price: 1000,
                 remark: `Berat terberat: ${invoiceAmounts.chargeableWeight.toFixed(2)} kg (Aktual: ${shipmentData.totalBerat.toFixed(2)} kg, Volume: ${shipmentData.beratVolume.toFixed(2)} kg)`,
                 created_at: invoiceDate,
                 updated_at: invoiceDate,
@@ -2376,8 +2376,8 @@ export class OrdersService {
                 date: date,
                 time: time,
                 remark: 'Pesanan dibatalkan',
-                provinsi: order.provinsi_pengirim,
-                kota: order.kota_pengirim,
+                provinsi: '',
+                kota: '',
                 created_by: cancelled_by_user_id,
             });
 

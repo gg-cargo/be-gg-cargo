@@ -29,13 +29,13 @@ export class OrderHistory extends Model {
 
     @Column({
         type: DataType.STRING(255),
-        allowNull: false,
+        allowNull: true,
     })
     provinsi: string;
 
     @Column({
         type: DataType.STRING(255),
-        allowNull: false,
+        allowNull: true,
     })
     kota: string;
 
