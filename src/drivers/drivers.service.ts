@@ -858,7 +858,7 @@ export class DriversService {
                         assign_driver: assignDriverDto.driver_id,
                         pickup_by: driver.getDataValue('name'),
                         status_pickup: ORDER_STATUS.PICKED_UP,
-                        status: "Assigned",
+                        status: ORDER_STATUS.PICKED_UP,
                         updatedAt: new Date()
                     },
                     {
