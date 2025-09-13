@@ -32,7 +32,8 @@ export class MarkAsReadDto {
 export class MarkAllAsReadDto {
     @IsNumber()
     @Type(() => Number)
-    hub_id: number;
+    @IsOptional()
+    hub_id?: number;
 
     @IsString()
     @IsOptional()

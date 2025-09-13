@@ -65,7 +65,7 @@ export class NotificationBadgesController {
     async markAllAsRead(
         @Body() markAllAsReadDto: MarkAllAsReadDto
     ) {
-        return this.notificationBadgesService.markAllAsRead(markAllAsReadDto.hub_id, markAllAsReadDto.menu_name);
+        return this.notificationBadgesService.markAllAsRead(markAllAsReadDto.hub_id ?? null, markAllAsReadDto.menu_name);
     }
 
     /**

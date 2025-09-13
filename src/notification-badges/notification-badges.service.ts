@@ -198,11 +198,19 @@ export class NotificationBadgesService {
     /**
      * Mark semua notification sebagai read untuk menu tertentu atau semua menu
      */
-    async markAllAsRead(hubId: number, menuName?: string): Promise<{ message: string; success: boolean }> {
-        const whereClause: any = { hub_id: hubId, is_read: 0 };
+    async markAllAsRead(hubId: number | null, menuName?: string): Promise<{ message: string; success: boolean }> {
+        let whereClause: any = { is_read: 0 };
 
-        if (menuName) {
-            whereClause.menu_name = menuName;
+        // Kasus khusus: jika hub_id null dan menu_name "hub kosong", mark semua notification "hub kosong" tanpa melihat hub_id
+        if (hubId === null && menuName === 'hub kosong') {
+            whereClause.menu_name = 'hub kosong';
+        } else {
+            // Kasus normal: filter berdasarkan hub_id
+            whereClause.hub_id = hubId;
+
+            if (menuName) {
+                whereClause.menu_name = menuName;
+            }
         }
 
         const [affectedCount] = await this.notificationBadgeModel.update(
