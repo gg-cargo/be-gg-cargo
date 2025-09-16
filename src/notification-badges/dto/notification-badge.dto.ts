@@ -38,7 +38,7 @@ export class MarkAllAsReadDto {
     @IsString()
     @IsOptional()
     @Transform(({ value }) => value ? value.toLowerCase() : value)
-    @IsIn(['order masuk', 'reweight', 'dalam pengiriman', 'hub kosong', 'hub missing'])
+    @IsIn(['order masuk', 'reweight', 'dalam pengiriman', 'order kirim', 'hub kosong', 'hub missing'])
     menu_name?: string;
 }
 
@@ -51,7 +51,7 @@ export class GetNotificationBadgesDto {
     @IsString()
     @IsOptional()
     @Transform(({ value }) => value ? value.toLowerCase() : value)
-    @IsIn(['order masuk', 'reweight', 'dalam pengiriman', 'hub kosong', 'hub missing'])
+    @IsIn(['order masuk', 'reweight', 'dalam pengiriman', 'order kirim', 'hub kosong', 'hub missing'])
     menu_name?: string;
 
     @IsNumber()
