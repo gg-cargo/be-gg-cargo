@@ -85,7 +85,7 @@ export class NotificationBadgesController {
 
         // Validasi menu_name jika diberikan
         if (markAllAsReadDto.menu_name) {
-            const allowedMenus = ['order masuk', 'reweight', 'dalam pengiriman', 'hub kosong'];
+            const allowedMenus = ['order masuk', 'reweight', 'dalam pengiriman', 'order kirim', 'hub kosong'];
             if (!allowedMenus.includes(markAllAsReadDto.menu_name)) {
                 throw new BadRequestException(`menu_name harus salah satu dari: ${allowedMenus.join(', ')}`);
             }
