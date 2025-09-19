@@ -1,4 +1,5 @@
 import { IsString, IsEmail, IsNumber, IsOptional, IsIn, MinLength, Matches } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateUserDto {
     @IsString()
@@ -23,10 +24,20 @@ export class CreateUserDto {
 
     @IsOptional()
     @IsNumber()
+    @Transform(({ value }) => {
+        if (value === undefined || value === null || value === '') return null;
+        const num = Number(value);
+        return Number.isNaN(num) ? value : num;
+    })
     hub_id?: number;
 
     @IsOptional()
     @IsNumber()
+    @Transform(({ value }) => {
+        if (value === undefined || value === null || value === '') return null;
+        const num = Number(value);
+        return Number.isNaN(num) ? value : num;
+    })
     service_center_id?: number;
 
     @IsOptional()

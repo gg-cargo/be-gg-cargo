@@ -31,8 +31,12 @@ export class MarkAsReadDto {
 
 export class MarkAllAsReadDto {
     @IsNumber()
-    @Type(() => Number)
     @IsOptional()
+    @Transform(({ value }) => {
+        if (value === undefined || value === null || value === '') return null;
+        const num = Number(value);
+        return Number.isNaN(num) ? value : num;
+    })
     hub_id?: number;
 
     @IsString()
@@ -44,8 +48,12 @@ export class MarkAllAsReadDto {
 
 export class GetNotificationBadgesDto {
     @IsNumber()
-    @Type(() => Number)
     @IsOptional()
+    @Transform(({ value }) => {
+        if (value === undefined || value === null || value === '') return null;
+        const num = Number(value);
+        return Number.isNaN(num) ? value : num;
+    })
     hub_id?: number;
 
     @IsString()
