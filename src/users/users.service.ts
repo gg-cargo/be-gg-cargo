@@ -59,7 +59,7 @@ export class UsersService {
         let levelWhereCondition = {};
         if (level) {
             levelWhereCondition = {
-                nama: level
+                level: level
             };
         }
 
