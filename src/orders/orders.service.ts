@@ -54,6 +54,9 @@ import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { OrderKendala } from '../models/order-kendala.model';
 import { ListOrdersDto } from './dto/list-orders.dto';
+import { CreateTruckRentalOrderDto } from './dto/create-truck-rental-order.dto';
+import { CreateTruckRentalOrderResponseDto } from './dto/create-truck-rental-order-response.dto';
+import { RatesService } from '../rates/rates.service';
 
 @Injectable()
 export class OrdersService {
@@ -97,6 +100,7 @@ export class OrdersService {
         private readonly fileService: FileService,
         private readonly driversService: DriversService,
         private readonly notificationBadgesService: NotificationBadgesService,
+        private readonly ratesService: RatesService,
     ) { }
 
     /**
@@ -5935,6 +5939,214 @@ export class OrdersService {
             }
         } catch (error) {
             this.logger.error(`Error creating ${menuName} notification for order ${orderId}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Membuat pesanan sewa truk baru
+     */
+    async createTruckRentalOrder(createTruckRentalDto: CreateTruckRentalOrderDto, userId: number): Promise<CreateTruckRentalOrderResponseDto> {
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            // Generate no_tracking
+            const noTracking = TrackingHelper.generateNoTracking();
+
+            // Hitung estimasi harga menggunakan rates service
+            const priceEstimate = await this.ratesService.calculateTruckRentalRate(
+                createTruckRentalDto.origin_latlng,
+                createTruckRentalDto.destination_latlng
+            );
+
+            // Tentukan jarak berdasarkan isUseToll
+            const selectedRoute = createTruckRentalDto.isUseToll ?
+                priceEstimate.data.estimasi_harga.tol :
+                priceEstimate.data.estimasi_harga.non_tol;
+
+            // Parse harga dari format rupiah ke number
+            const hargaDasar = this.parseRupiahToNumber(selectedRoute.harga_dasar);
+            const totalHarga = this.parseRupiahToNumber(selectedRoute.total);
+
+            // Tentukan hub source/dest berdasarkan alamat
+            const hubSourceId = await this.findHubIdForAddress(
+                createTruckRentalDto.provinsi_pengirim,
+                createTruckRentalDto.kota_pengirim,
+                createTruckRentalDto.alamat_pengirim,
+            );
+            const hubDestId = await this.findHubIdForAddress(
+                createTruckRentalDto.provinsi_penerima,
+                createTruckRentalDto.kota_penerima,
+                createTruckRentalDto.alamat_penerima,
+            );
+
+            // Buat pesanan baru
+            const newOrder = await this.orderModel.create({
+                no_tracking: noTracking,
+                user_id: userId,
+                layanan: createTruckRentalDto.layanan,
+                nama_pengirim: createTruckRentalDto.nama_pengirim,
+                alamat_pengirim: createTruckRentalDto.alamat_pengirim,
+                provinsi_pengirim: createTruckRentalDto.provinsi_pengirim,
+                kota_pengirim: createTruckRentalDto.kota_pengirim,
+                kecamatan_pengirim: createTruckRentalDto.kecamatan_pengirim,
+                kelurahan_pengirim: createTruckRentalDto.kelurahan_pengirim,
+                kodepos_pengirim: createTruckRentalDto.kodepos_pengirim,
+                no_telepon_pengirim: createTruckRentalDto.no_telepon_pengirim,
+                nama_penerima: createTruckRentalDto.nama_penerima,
+                alamat_penerima: createTruckRentalDto.alamat_penerima,
+                provinsi_penerima: createTruckRentalDto.provinsi_penerima,
+                kota_penerima: createTruckRentalDto.kota_penerima,
+                kecamatan_penerima: createTruckRentalDto.kecamatan_penerima,
+                kelurahan_penerima: createTruckRentalDto.kelurahan_penerima,
+                kodepos_penerima: createTruckRentalDto.kodepos_penerima,
+                no_telepon_penerima: createTruckRentalDto.no_telepon_penerima,
+                nama_barang: createTruckRentalDto.keterangan_barang || "Muatan sewa truck",
+                harga_barang: 0, // Default untuk sewa truk
+                asuransi: 0, // Default untuk sewa truk
+                total_harga: totalHarga,
+                order_by: userId, // Gunakan user_id sebagai order_by
+                latlngAsal: createTruckRentalDto.origin_latlng,
+                latlngTujuan: createTruckRentalDto.destination_latlng,
+                isUseToll: createTruckRentalDto.isUseToll,
+                metode_bayar_truck: createTruckRentalDto.toll_payment_method,
+                truck_type: createTruckRentalDto.truck_type,
+                pickup_time: new Date(createTruckRentalDto.pickup_time),
+                hub_source_id: hubSourceId,
+                hub_dest_id: hubDestId,
+                current_hub: hubSourceId,
+                next_hub: hubDestId,
+                status: ORDER_STATUS.READY_FOR_PICKUP,
+                invoice_status: INVOICE_STATUS.BELUM_PROSES,
+                created_at: new Date(),
+                updated_at: new Date()
+            }, { transaction });
+
+            // Buat shipment data (untuk konsistensi dengan sistem existing)
+            await this.orderShipmentModel.create({
+                order_id: newOrder.id,
+                qty: 1, // Truk dianggap 1 qty
+                berat: 0, // Tidak ada berat untuk sewa truk
+                panjang: 0, // Tidak ada dimensi untuk sewa truk
+                lebar: 0, // Tidak ada dimensi untuk sewa truk
+                tinggi: 0, // Tidak ada dimensi untuk sewa truk
+                total_koli: 1, // Truk dianggap 1 koli
+                total_berat: 0, // Tidak ada berat untuk sewa truk
+                total_volume: 0, // Tidak ada volume untuk sewa truk
+                total_berat_volume: 0,
+                created_at: new Date(),
+                updated_at: new Date()
+            }, { transaction });
+
+            // Buat order history
+            const { date, time } = getOrderHistoryDateTime();
+            await this.orderHistoryModel.create({
+                order_id: newOrder.id,
+                status: ORDER_STATUS.DRAFT,
+                date: date,
+                time: time,
+                remark: 'Pesanan berhasil dibuat',
+                provinsi: createTruckRentalDto.provinsi_pengirim,
+                kota: createTruckRentalDto.kota_pengirim,
+                created_by: userId,
+            }, { transaction });
+
+            // Buat order list
+            await this.orderListModel.create({
+                no_tracking: noTracking,
+                nama_pengirim: createTruckRentalDto.nama_pengirim,
+                alamat_pengirim: createTruckRentalDto.alamat_pengirim,
+                provinsi_pengirim: createTruckRentalDto.provinsi_pengirim,
+                kota_pengirim: createTruckRentalDto.kota_pengirim,
+                kecamatan_pengirim: createTruckRentalDto.kecamatan_pengirim,
+                kelurahan_pengirim: createTruckRentalDto.kelurahan_pengirim,
+                kodepos_pengirim: createTruckRentalDto.kodepos_pengirim,
+                no_telepon_pengirim: createTruckRentalDto.no_telepon_pengirim,
+                nama_penerima: createTruckRentalDto.nama_penerima,
+                alamat_penerima: createTruckRentalDto.alamat_penerima,
+                provinsi_penerima: createTruckRentalDto.provinsi_penerima,
+                kota_penerima: createTruckRentalDto.kota_penerima,
+                kecamatan_penerima: createTruckRentalDto.kecamatan_penerima,
+                kelurahan_penerima: createTruckRentalDto.kelurahan_penerima,
+                kodepos_penerima: createTruckRentalDto.kodepos_penerima,
+                no_telepon_penerima: createTruckRentalDto.no_telepon_penerima,
+                nama_barang: createTruckRentalDto.keterangan_barang || "Muatan sewa truck",
+                status: ORDER_STATUS.DRAFT,
+                total_harga: totalHarga
+            } as any, { transaction });
+
+            await transaction.commit();
+
+            // Schedule automatic "pesanan diproses" entry after 5 minutes
+            this.scheduleAutoProcessOrder(newOrder.id, userId);
+
+            // Buat notification badge untuk order baru
+            await this.createNotificationBadge(newOrder.id, 'Order Masuk', 'order');
+
+            // Buat notification badge untuk hub kosong jika ada hub_id yang 0
+            if (hubSourceId === 0 || hubDestId === 0) {
+                await this.createNotificationBadge(newOrder.id, 'hub kosong', 'order');
+            }
+
+            // Format response
+            const response: CreateTruckRentalOrderResponseDto = {
+                message: 'Pesanan sewa truk berhasil dibuat',
+                data: {
+                    no_tracking: noTracking,
+                    layanan: createTruckRentalDto.layanan,
+                    origin_latlng: createTruckRentalDto.origin_latlng,
+                    destination_latlng: createTruckRentalDto.destination_latlng,
+                    jarak_km: selectedRoute.jarak_km,
+                    isUseToll: createTruckRentalDto.isUseToll,
+                    toll_payment_method: createTruckRentalDto.toll_payment_method,
+                    truck_type: createTruckRentalDto.truck_type,
+                    pickup_time: createTruckRentalDto.pickup_time,
+                    harga_dasar: selectedRoute.harga_dasar,
+                    total_harga: selectedRoute.total,
+                    estimasi_waktu: this.calculateEstimatedTime(selectedRoute.jarak_km),
+                    keterangan_barang: createTruckRentalDto.keterangan_barang,
+                    status: ORDER_STATUS.READY_FOR_PICKUP,
+                    created_at: newOrder.created_at ? newOrder.created_at.toISOString() : new Date().toISOString()
+                }
+            };
+
+            this.logger.log(`Truck rental order created successfully: ${noTracking}`);
+            return response;
+
+        } catch (error) {
+            // Cek apakah transaction masih aktif sebelum rollback
+            try {
+                if (transaction) {
+                    await transaction.rollback();
+                }
+            } catch (rollbackError) {
+                this.logger.warn(`Transaction rollback failed: ${rollbackError.message}`);
+            }
+            this.logger.error(`Error creating truck rental order: ${error.message}`);
+            throw new InternalServerErrorException(`Gagal membuat pesanan sewa truk: ${error.message}`);
+        }
+    }
+
+    /**
+     * Parse format rupiah ke number
+     */
+    private parseRupiahToNumber(rupiahString: string): number {
+        // Remove "Rp" and replace dots with empty string, then parse to number
+        return parseInt(rupiahString.replace('Rp', '').replace(/\./g, ''));
+    }
+
+    /**
+     * Hitung estimasi waktu berdasarkan jarak
+     */
+    private calculateEstimatedTime(distanceKm: number): string {
+        // Estimasi kecepatan rata-rata 60 km/jam
+        const hours = Math.ceil(distanceKm / 60);
+
+        if (hours < 24) {
+            return `${hours} jam`;
+        } else {
+            const days = Math.floor(hours / 24);
+            const remainingHours = hours % 24;
+            return remainingHours > 0 ? `${days} hari ${remainingHours} jam` : `${days} hari`;
         }
     }
 

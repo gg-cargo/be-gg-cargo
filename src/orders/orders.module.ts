@@ -27,11 +27,13 @@ import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
 import { DriversModule } from '../drivers/drivers.module';
 import { NotificationBadgesModule } from '../notification-badges/notification-badges.module';
+import { RatesModule } from '../rates/rates.module';
 
 @Module({
     imports: [
         DriversModule,
         NotificationBadgesModule,
+        RatesModule,
         SequelizeModule.forFeature([
             Order,
             OrderShipment,

@@ -34,6 +34,8 @@ import { CompleteOrderDto, CompleteOrderResponseDto } from './dto/complete-order
 import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
 import { ListOrdersDto } from './dto/list-orders.dto';
 import { UpdateOrderFieldsDto } from './dto/update-order-fields.dto';
+import { CreateTruckRentalOrderDto } from './dto/create-truck-rental-order.dto';
+import { CreateTruckRentalOrderResponseDto } from './dto/create-truck-rental-order-response.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -561,5 +563,16 @@ export class OrdersController {
         @Body() completeOrderDto: CompleteOrderDto,
     ): Promise<CompleteOrderResponseDto> {
         return this.ordersService.completeOrder(noTracking, completeOrderDto.completed_by_user_id);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('sewa-truk')
+    @HttpCode(HttpStatus.CREATED)
+    async createTruckRentalOrder(
+        @Body() createTruckRentalDto: CreateTruckRentalOrderDto,
+        @Request() req: any,
+    ): Promise<CreateTruckRentalOrderResponseDto> {
+        const userId = req.user.id;
+        return this.ordersService.createTruckRentalOrder(createTruckRentalDto, userId);
     }
 }
