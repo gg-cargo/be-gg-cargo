@@ -24,6 +24,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
 import { DeliveryNotesModule } from './delivery-notes/delivery-notes.module';
 import { TransportersModule } from './transporters/transporters.module';
 import { NotificationBadgesModule } from './notification-badges/notification-badges.module';
+import { RatesModule } from './rates/rates.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { NotificationBadgesModule } from './notification-badges/notification-bad
     DeliveryNotesModule,
     TransportersModule,
     NotificationBadgesModule,
+    RatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
