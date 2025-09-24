@@ -9,6 +9,7 @@ export class RatesController {
     async getTruckRentalRate(
         @Query('origin_latlng') originLatLng: string,
         @Query('destination_latlng') destinationLatLng: string,
+        @Query('is_toll') isToll?: string,
     ) {
         // Validasi parameter yang diperlukan
         if (!originLatLng || !destinationLatLng) {
@@ -58,8 +59,23 @@ export class RatesController {
             );
         }
 
+        // Validasi parameter is_toll
+        let tollFilter: boolean | undefined;
+        if (isToll !== undefined && isToll !== null && isToll !== '') {
+            if (isToll.toLowerCase() === 'true') {
+                tollFilter = true;
+            } else if (isToll.toLowerCase() === 'false') {
+                tollFilter = false;
+            } else {
+                throw new HttpException(
+                    'Parameter is_toll harus berupa boolean (true atau false)',
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+        }
+
         try {
-            return await this.ratesService.calculateTruckRentalRate(originLatLng, destinationLatLng);
+            return await this.ratesService.calculateTruckRentalRate(originLatLng, destinationLatLng, tollFilter);
         } catch (error) {
             throw new HttpException(
                 error.message || 'Terjadi kesalahan saat menghitung estimasi harga',

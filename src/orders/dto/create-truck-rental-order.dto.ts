@@ -1,11 +1,11 @@
 import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsEnum, IsDateString, MaxLength, Matches, IsNumber } from 'class-validator';
 
 export enum TruckType {
-    FUSO = 'Fuso',
-    WINGBOX = 'Wingbox',
-    CDD = 'CDD',
-    CDE = 'CDE',
-    TRONTON = 'Tronton'
+    CDD = 'CDD box',
+    CDDL = 'CDDL box',
+    PICKUP = 'Pick Up box',
+    FUSO = 'Fuso box',
+    CDE = 'CDE box'
 }
 
 export enum TollPaymentMethod {
@@ -119,4 +119,8 @@ export class CreateTruckRentalOrderDto {
     @IsOptional()
     @MaxLength(100, { message: 'keterangan_barang maksimal 100 karakter' })
     keterangan_barang?: string;
+
+    @IsNumber()
+    @IsOptional()
+    asuransi?: number;
 }

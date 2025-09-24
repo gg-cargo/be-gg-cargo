@@ -5966,6 +5966,8 @@ export class OrdersService {
             // Parse harga dari format rupiah ke number
             const hargaDasar = this.parseRupiahToNumber(selectedRoute.harga_dasar);
             const totalHarga = this.parseRupiahToNumber(selectedRoute.total);
+            const asuransiValue = createTruckRentalDto.asuransi ? 1 : 0;
+            const totalHargaFinal = totalHarga;
 
             // Tentukan hub source/dest berdasarkan alamat
             const hubSourceId = await this.findHubIdForAddress(
@@ -6002,8 +6004,8 @@ export class OrdersService {
                 no_telepon_penerima: createTruckRentalDto.no_telepon_penerima,
                 nama_barang: createTruckRentalDto.keterangan_barang || "Muatan sewa truck",
                 harga_barang: 0, // Default untuk sewa truk
-                asuransi: 0, // Default untuk sewa truk
-                total_harga: totalHarga,
+                asuransi: asuransiValue,
+                total_harga: totalHargaFinal,
                 order_by: userId, // Gunakan user_id sebagai order_by
                 latlngAsal: createTruckRentalDto.origin_latlng,
                 latlngTujuan: createTruckRentalDto.destination_latlng,
@@ -6071,7 +6073,7 @@ export class OrdersService {
                 no_telepon_penerima: createTruckRentalDto.no_telepon_penerima,
                 nama_barang: createTruckRentalDto.keterangan_barang || "Muatan sewa truck",
                 status: ORDER_STATUS.DRAFT,
-                total_harga: totalHarga
+                total_harga: totalHargaFinal
             } as any, { transaction });
 
             await transaction.commit();
@@ -6101,7 +6103,7 @@ export class OrdersService {
                     truck_type: createTruckRentalDto.truck_type,
                     pickup_time: createTruckRentalDto.pickup_time,
                     harga_dasar: selectedRoute.harga_dasar,
-                    total_harga: selectedRoute.total,
+                    total_harga: this.formatRupiah(totalHargaFinal),
                     estimasi_waktu: this.calculateEstimatedTime(selectedRoute.jarak_km),
                     keterangan_barang: createTruckRentalDto.keterangan_barang,
                     status: ORDER_STATUS.READY_FOR_PICKUP,
@@ -6148,6 +6150,10 @@ export class OrdersService {
             const remainingHours = hours % 24;
             return remainingHours > 0 ? `${days} hari ${remainingHours} jam` : `${days} hari`;
         }
+    }
+
+    private formatRupiah(value: number): string {
+        return 'Rp ' + value.toLocaleString('id-ID');
     }
 
 } 
