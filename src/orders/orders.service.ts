@@ -6017,8 +6017,9 @@ export class OrdersService {
                 hub_dest_id: hubDestId,
                 current_hub: hubSourceId,
                 next_hub: hubDestId,
-                status: ORDER_STATUS.READY_FOR_PICKUP,
-                invoice_status: INVOICE_STATUS.BELUM_PROSES,
+                status: ORDER_STATUS.DRAFT,
+                invoiceStatus: INVOICE_STATUS.BELUM_PROSES,
+                isUnpaid: 1,
                 created_at: new Date(),
                 updated_at: new Date()
             }, { transaction });
