@@ -2043,6 +2043,60 @@ export class OrdersService {
         };
     }
 
+    async getTruckRentalReorderData(orderId: number, userId: number) {
+        // Ambil data order sewa truk
+        const order = await this.orderModel.findOne({
+            where: {
+                id: orderId,
+                order_by: userId, // Pastikan user hanya bisa reorder order miliknya
+                layanan: 'Sewa truck' // Pastikan ini adalah order sewa truk
+            },
+        });
+
+        if (!order) {
+            throw new NotFoundException('Order sewa truk tidak ditemukan atau tidak memiliki akses');
+        }
+
+        // Transform data untuk response reorder sewa truk
+        const reorderData = {
+            // Data Pengirim
+            nama_pengirim: order.getDataValue('nama_pengirim'),
+            alamat_pengirim: order.getDataValue('alamat_pengirim'),
+            provinsi_pengirim: order.getDataValue('provinsi_pengirim'),
+            kota_pengirim: order.getDataValue('kota_pengirim'),
+            kecamatan_pengirim: order.getDataValue('kecamatan_pengirim'),
+            kelurahan_pengirim: order.getDataValue('kelurahan_pengirim'),
+            kodepos_pengirim: order.getDataValue('kodepos_pengirim'),
+            no_telepon_pengirim: order.getDataValue('no_telepon_pengirim'),
+
+            // Data Penerima
+            nama_penerima: order.getDataValue('nama_penerima'),
+            alamat_penerima: order.getDataValue('alamat_penerima'),
+            provinsi_penerima: order.getDataValue('provinsi_penerima'),
+            kota_penerima: order.getDataValue('kota_penerima'),
+            kecamatan_penerima: order.getDataValue('kecamatan_penerima'),
+            kelurahan_penerima: order.getDataValue('kelurahan_penerima'),
+            kodepos_penerima: order.getDataValue('kodepos_penerima'),
+            no_telepon_penerima: order.getDataValue('no_telepon_penerima'),
+
+            // Data Pesanan Spesifik Sewa Truk
+            layanan: order.getDataValue('layanan'),
+            origin_latlng: order.getDataValue('latlngAsal'),
+            destination_latlng: order.getDataValue('latlngTujuan'),
+            isUseToll: order.getDataValue('isUseToll') === 1,
+            toll_payment_method: order.getDataValue('metode_bayar_truck'),
+            truck_type: order.getDataValue('truck_type'),
+            pickup_time: order.getDataValue('pickup_time') ? new Date(order.getDataValue('pickup_time')).toISOString() : null,
+            keterangan_barang: order.getDataValue('nama_barang'),
+            asuransi: order.getDataValue('asuransi') === 1,
+        };
+
+        return {
+            message: 'Data reorder sewa truk berhasil diambil',
+            data: reorderData,
+        };
+    }
+
     async getOrderHistoryByOrderId(orderId: number) {
         // Ambil data order
         const order = await this.orderModel.findByPk(orderId, { raw: true });

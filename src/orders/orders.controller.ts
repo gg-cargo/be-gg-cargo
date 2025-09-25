@@ -331,6 +331,15 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Get(':id/reorder-sewa-truk')
+    async getTruckRentalReorderData(
+        @Param('id', ParseIntPipe) id: number,
+        @Req() req
+    ) {
+        return this.ordersService.getTruckRentalReorderData(id, req.user.id);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Get(':id/history')
     async getOrderHistory(@Param('id', ParseIntPipe) id: number) {
         return this.ordersService.getOrderHistoryByOrderId(id);
