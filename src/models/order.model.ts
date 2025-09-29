@@ -594,6 +594,12 @@ export class Order extends Model {
     metode_bayar_truck: number;
 
     @Column({
+        type: DataType.STRING(200),
+        allowNull: true,
+    })
+    truck_type: string;
+
+    @Column({
         type: DataType.INTEGER,
         allowNull: false,
         defaultValue: 0,
