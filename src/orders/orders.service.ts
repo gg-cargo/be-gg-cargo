@@ -57,6 +57,7 @@ import { ListOrdersDto } from './dto/list-orders.dto';
 import { CreateTruckRentalOrderDto } from './dto/create-truck-rental-order.dto';
 import { CreateTruckRentalOrderResponseDto } from './dto/create-truck-rental-order-response.dto';
 import { RatesService } from '../rates/rates.service';
+import { ListTruckRentalDto } from './dto/list-truck-rental.dto';
 
 @Injectable()
 export class OrdersService {
@@ -137,6 +138,99 @@ export class OrdersService {
         }
         // Note: FileService tidak menggunakan transaction, jadi kita tidak bisa rollback file upload
         // Jika ada error setelah file upload, file akan tetap tersimpan di storage
+    }
+
+    async listTruckRentalOrders(userId: number, q: ListTruckRentalDto) {
+        try {
+            const page = Math.max(1, Number(q.page) || 1);
+            const limit = Math.max(1, Math.min(100, Number(q.limit) || 20));
+            const offset = (page - 1) * limit;
+
+            const where: any = { layanan: 'Sewa truck' };
+
+            if (q.search) {
+                where[Op.or] = [
+                    { no_tracking: { [Op.like]: `%${q.search}%` } },
+                    { nama_pengirim: { [Op.like]: `%${q.search}%` } },
+                    { nama_penerima: { [Op.like]: `%${q.search}%` } },
+                ];
+            }
+            if (q.status_pengiriman) where.status = q.status_pengiriman;
+            if (q.status_pembayaran) where.invoiceStatus = q.status_pembayaran;
+            if (q.date_from && q.date_to) {
+                const from = new Date(q.date_from);
+                const to = new Date(q.date_to);
+                if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+                    where.created_at = { [Op.between]: [from, to] };
+                }
+            }
+
+            const include = [
+                { model: this.userModel, as: 'orderUser', attributes: [], required: false },
+                { model: this.orderShipmentModel, as: 'shipments', attributes: [], required: false },
+                { model: this.orderInvoiceModel, as: 'orderInvoice', attributes: [], required: false },
+                { model: this.orderKendalaModel, as: 'kendala', attributes: [], required: false },
+            ];
+
+            const sortField = q.sort_by || 'created_at';
+            const sortOrder = (q.order || 'desc').toUpperCase() as 'ASC' | 'DESC';
+
+            console.log('ini where:  ', where);
+
+            const { count, rows } = await this.orderModel.findAndCountAll({
+                where,
+                include,
+                attributes: [
+                    'id',
+                    'no_tracking',
+                    'nama_pengirim',
+                    'nama_penerima',
+                    'status',
+                    'invoiceStatus',
+                    'distance',
+                    'total_harga',
+                    'order_by',
+                    'created_at',
+                    [fn('MAX', col('orderUser.name')), 'order_user_name'],
+                    [fn('COUNT', col('kendala.id')), 'kendala_count'],
+                    [fn('SUM', col('shipments.qty')), 'total_koli'],
+                ],
+                group: ['Order.id'],
+                order: [[sortField, sortOrder]],
+                limit,
+                offset,
+                raw: true,
+                subQuery: false,
+            });
+
+            const data = rows.map((r: any) => ({
+                tracking: r.no_tracking,
+                pengirim: r.nama_pengirim,
+                penerima: r.nama_penerima,
+                transporter: r.transporter_name || null,
+                kilo_meter: r.distance ? Number(r.distance) : null,
+                total_harga: r.total_harga ?? 0,
+                pembayaran: r.invoiceStatus,
+                pengiriman: r.status,
+                kendala: Number(r.kendala_count || 0),
+                metode: r.payment_method || null,
+                order_by: r.order_user_name || null,
+                coo: r.coo || null,
+                created_at: r.created_at,
+            }));
+
+            const totalItems = Array.isArray(count) ? count.length : (count as unknown as number);
+            const totalPages = Math.ceil(totalItems / limit);
+
+            return {
+                message: 'Data sewa truk berhasil diambil',
+                pagination: { page, limit, total_items: totalItems, total_pages: totalPages },
+                data,
+            };
+        } catch (error) {
+            this.logger.error('Gagal mengambil data sewa truk', error.stack || error.message);
+            throw new InternalServerErrorException('Gagal mengambil data sewa truk');
+        }
     }
 
     /**

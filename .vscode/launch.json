@@ -11,6 +11,7 @@
         "--debug",
         "--watch"
       ],
+      "runtimeExecutable": "/Users/fikrihaikal/.nvm/versions/node/v22.20.0/bin/node",
       "env": {
         "NODE_ENV": "development"
       },
@@ -32,6 +33,9 @@
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "npm",
+      "env": {
+        "PATH": "/Users/fikrihaikal/.nvm/versions/node/v22.20.0/bin:${env:PATH}"
+      },
       "runtimeArgs": [
         "run",
         "start:debug"

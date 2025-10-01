@@ -36,6 +36,7 @@ import { ListOrdersDto } from './dto/list-orders.dto';
 import { UpdateOrderFieldsDto } from './dto/update-order-fields.dto';
 import { CreateTruckRentalOrderDto } from './dto/create-truck-rental-order.dto';
 import { CreateTruckRentalOrderResponseDto } from './dto/create-truck-rental-order-response.dto';
+import { ListTruckRentalDto } from './dto/list-truck-rental.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -301,6 +302,17 @@ export class OrdersController {
     async listOrders(@Req() req, @Query() query: ListOrdersDto) {
         // Asumsi user login ada di req.user.id
         return this.ordersService.listOrders(req.user.id, query);
+    }
+
+    // PENTING: Tempatkan route spesifik sebelum dynamic route ':no_resi'
+    @UseGuards(JwtAuthGuard)
+    @Get('sewa-truk')
+    async listTruckRentalOrders(
+        @Req() req,
+        @Query() query: ListTruckRentalDto,
+    ) {
+        console.log('ini query:  ', query);
+        return this.ordersService.listTruckRentalOrders(req.user.id, query);
     }
 
     @UseGuards(JwtAuthGuard)
