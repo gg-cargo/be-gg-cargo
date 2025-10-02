@@ -311,7 +311,6 @@ export class OrdersController {
         @Req() req,
         @Query() query: ListTruckRentalDto,
     ) {
-        console.log('ini query:  ', query);
         return this.ordersService.listTruckRentalOrders(req.user.id, query);
     }
 

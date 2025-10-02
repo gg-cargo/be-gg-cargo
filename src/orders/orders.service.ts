@@ -175,8 +175,6 @@ export class OrdersService {
             const sortField = q.sort_by || 'created_at';
             const sortOrder = (q.order || 'desc').toUpperCase() as 'ASC' | 'DESC';
 
-            console.log('ini where:  ', where);
-
             const { count, rows } = await this.orderModel.findAndCountAll({
                 where,
                 include,
