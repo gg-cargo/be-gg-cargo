@@ -37,6 +37,8 @@ import { UpdateOrderFieldsDto } from './dto/update-order-fields.dto';
 import { CreateTruckRentalOrderDto } from './dto/create-truck-rental-order.dto';
 import { CreateTruckRentalOrderResponseDto } from './dto/create-truck-rental-order-response.dto';
 import { ListTruckRentalDto } from './dto/list-truck-rental.dto';
+import { AssignTruckRentalDto } from './dto/assign-truck-rental.dto';
+import { AssignTruckRentalResponseDto } from './dto/assign-truck-rental-response.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -594,5 +596,15 @@ export class OrdersController {
     ): Promise<CreateTruckRentalOrderResponseDto> {
         const userId = req.user.id;
         return this.ordersService.createTruckRentalOrder(createTruckRentalDto, userId);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('sewa-truk/:no_tracking/assign')
+    @HttpCode(HttpStatus.OK)
+    async assignTruckRental(
+        @Param('no_tracking') noTracking: string,
+        @Body() assignTruckRentalDto: AssignTruckRentalDto,
+    ): Promise<AssignTruckRentalResponseDto> {
+        return this.ordersService.assignTruckRental(noTracking, assignTruckRentalDto);
     }
 }

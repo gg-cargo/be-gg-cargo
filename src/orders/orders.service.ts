@@ -58,6 +58,10 @@ import { CreateTruckRentalOrderDto } from './dto/create-truck-rental-order.dto';
 import { CreateTruckRentalOrderResponseDto } from './dto/create-truck-rental-order-response.dto';
 import { RatesService } from '../rates/rates.service';
 import { ListTruckRentalDto } from './dto/list-truck-rental.dto';
+import { AssignTruckRentalDto } from './dto/assign-truck-rental.dto';
+import { AssignTruckRentalResponseDto } from './dto/assign-truck-rental-response.dto';
+import { JobAssign } from '../models/job-assign.model';
+import { TruckList } from '../models/truck-list.model';
 
 @Injectable()
 export class OrdersService {
@@ -98,6 +102,10 @@ export class OrdersService {
         private readonly orderDeliveryNoteModel: typeof OrderDeliveryNote,
         @InjectModel(Hub)
         private readonly hubModel: typeof Hub,
+        @InjectModel(JobAssign)
+        private readonly jobAssignModel: typeof JobAssign,
+        @InjectModel(TruckList)
+        private readonly truckListModel: typeof TruckList,
         private readonly fileService: FileService,
         private readonly driversService: DriversService,
         private readonly notificationBadgesService: NotificationBadgesService,
@@ -228,6 +236,117 @@ export class OrdersService {
         } catch (error) {
             this.logger.error('Gagal mengambil data sewa truk', error.stack || error.message);
             throw new InternalServerErrorException('Gagal mengambil data sewa truk');
+        }
+    }
+
+    async assignTruckRental(noTracking: string, assignTruckRentalDto: AssignTruckRentalDto): Promise<AssignTruckRentalResponseDto> {
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const { transporter_user_id, truck_id, estimated_departure_time, assigned_by_user_id } = assignTruckRentalDto;
+
+            // 1. Validasi Order
+            const order = await this.orderModel.findOne({
+                where: {
+                    no_tracking: noTracking,
+                    layanan: 'Sewa truck'
+                },
+                transaction
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order sewa truk tidak ditemukan');
+            }
+
+            // 2. Validasi Transporter (level 4)
+            const transporter = await this.userModel.findOne({
+                where: {
+                    id: transporter_user_id,
+                    level: 4
+                },
+                transaction
+            });
+
+            if (!transporter) {
+                throw new BadRequestException('Transporter tidak valid atau tidak memiliki level 4');
+            }
+
+            // 3. Validasi Ketersediaan Truck
+            const truck = await this.truckListModel.findOne({
+                where: {
+                    id: truck_id,
+                    status: 0 // tidak digunakan
+                },
+                transaction
+            });
+
+            if (!truck) {
+                throw new BadRequestException('Truck tidak tersedia atau sedang digunakan');
+            }
+
+            // 4. Update Order Status dan Assignment
+            await order.update({
+                status: ORDER_STATUS.PICKED_UP,
+                transporter_id: transporter_user_id.toString(),
+                truck_id: truck_id.toString(),
+                assign_driver: assigned_by_user_id,
+                updated_at: new Date()
+            }, { transaction });
+
+            // 5. Update Truck Status
+            await truck.update({
+                status: 1, // sedang digunakan
+            }, { transaction });
+
+            // 6. Create Job Assignment Record
+            await this.jobAssignModel.create({
+                number: noTracking,
+                expeditor_name: transporter.name,
+                expeditor_by: transporter_user_id.toString(),
+                no_polisi: truck.no_polisi,
+                status: 0, // Process
+                distance: order.distance || '0',
+                created_at: new Date()
+            } as any, { transaction });
+
+            // Buat order history dengan format tanggal dan waktu yang benar
+            const { date, time } = getOrderHistoryDateTime();
+            await this.orderHistoryModel.create({
+                order_id: order.id,
+                status: 'Driver Assigned for Pickup truk',
+                remark: `Order ditugaskan kepada ${transporter.name} untuk sewa truk`,
+                date: date,
+                time: time,
+                created_by: assigned_by_user_id,
+                created_at: new Date(),
+                provinsi: '', // default empty string untuk field wajib
+                kota: ''     // default empty string untuk field wajib
+            }, { transaction });
+
+            await transaction.commit();
+
+            return {
+                message: 'Transporter dan truck berhasil ditugaskan untuk sewa truk',
+                data: {
+                    no_tracking: noTracking,
+                    transporter_user_id,
+                    truck_id,
+                    estimated_departure_time,
+                    assigned_by_user_id,
+                    status: 'In Transit',
+                    updated_at: new Date()
+                }
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error('Error assigning truck rental:', error);
+
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Gagal menugaskan transporter dan truck');
         }
     }
 
