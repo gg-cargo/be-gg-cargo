@@ -4043,6 +4043,67 @@ export class OrdersService {
                 updatedFields.push('kodepos_penerima');
             }
 
+            // Check and update additional fields from UI
+            if (updateOrderDto.titik_kordinat_asal !== undefined) {
+                orderUpdateData.latlngAsal = updateOrderDto.titik_kordinat_asal;
+                updatedFields.push('latlngAsal');
+            }
+
+            if (updateOrderDto.tanggal_muat !== undefined) {
+                orderUpdateData.pickup_time = updateOrderDto.tanggal_muat;
+                updatedFields.push('pickup_time');
+            }
+
+            if (updateOrderDto.total_jam !== undefined) {
+                orderUpdateData.total_jam = updateOrderDto.total_jam;
+                updatedFields.push('total_jam');
+            }
+
+            if (updateOrderDto.total_koli !== undefined) {
+                orderUpdateData.countUpdateKoli = updateOrderDto.total_koli;
+                updatedFields.push('total_koli');
+            }
+
+            if (updateOrderDto.total_berat !== undefined) {
+                orderUpdateData.total_berat = updateOrderDto.total_berat.toString();
+                updatedFields.push('total_berat');
+            }
+
+            if (updateOrderDto.asuransi !== undefined) {
+                orderUpdateData.asuransi = updateOrderDto.asuransi;
+                updatedFields.push('asuransi');
+            }
+
+            if (updateOrderDto.packing !== undefined) {
+                orderUpdateData.packing = updateOrderDto.packing;
+                updatedFields.push('packing');
+            }
+
+            if (updateOrderDto.surat_jalan_balik !== undefined) {
+                orderUpdateData.surat_jalan_balik = updateOrderDto.surat_jalan_balik;
+                updatedFields.push('surat_jalan_balik');
+            }
+
+            if (updateOrderDto.titik_kordinat_tujuan !== undefined) {
+                orderUpdateData.latlngTujuan = updateOrderDto.titik_kordinat_tujuan;
+                updatedFields.push('latlngTujuan');
+            }
+
+            if (updateOrderDto.jenis_truck !== undefined) {
+                orderUpdateData.truck_type = updateOrderDto.jenis_truck;
+                updatedFields.push('truck_type');
+            }
+
+            if (updateOrderDto.jenis_pembayaran !== undefined) {
+                orderUpdateData.metode_bayar_truck = updateOrderDto.jenis_pembayaran;
+                updatedFields.push('metode_bayar_truck');
+            }
+
+            if (updateOrderDto.transporter !== undefined) {
+                orderUpdateData.transporter_id = updateOrderDto.transporter;
+                updatedFields.push('transporter_id');
+            }
+
             // Update order if there are changes
             if (Object.keys(orderUpdateData).length > 1) { // More than just updated_at
                 await this.orderModel.update(orderUpdateData, {

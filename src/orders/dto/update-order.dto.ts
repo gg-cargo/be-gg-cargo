@@ -96,6 +96,60 @@ export class UpdateOrderDto {
     @IsString()
     kodepos_penerima?: string;
 
+    // Additional fields from UI
+    @IsOptional()
+    @IsString()
+    titik_kordinat_asal?: string; // latlngAsal
+
+    @IsOptional()
+    @Type(() => Date)
+    tanggal_muat?: Date; // pickup_time
+
+    @IsOptional()
+    @IsNumber()
+    @Type(() => Number)
+    total_jam?: number; // jam_muat -> total_jam
+
+    @IsOptional()
+    @IsNumber()
+    @Type(() => Number)
+    total_koli?: number;
+
+    @IsOptional()
+    @IsString()
+    total_berat?: string; // total_berat is string in model
+
+    @IsOptional()
+    @IsNumber()
+    @Type(() => Number)
+    asuransi?: number;
+
+    @IsOptional()
+    @IsNumber()
+    @Type(() => Number)
+    packing?: number; // packing is number in model
+
+    @IsOptional()
+    @IsString()
+    surat_jalan_balik?: string;
+
+    @IsOptional()
+    @IsString()
+    titik_kordinat_tujuan?: string; // latlngTujuan
+
+    @IsOptional()
+    @IsString()
+    jenis_truck?: string; // truck_type
+
+    @IsOptional()
+    @IsNumber()
+    @Type(() => Number)
+    jenis_pembayaran?: number; // metode_bayar_truck
+
+    @IsOptional()
+    @IsString()
+    transporter?: string; // transporter_id
+
     // Required field for audit trail
     @IsNumber()
     @Type(() => Number)
