@@ -1,5 +1,6 @@
 import { Controller, Get, Query, HttpException, HttpStatus } from '@nestjs/common';
 import { RatesService } from './rates.service';
+import { CostBreakdownDto } from './dto/cost-breakdown.dto';
 
 @Controller('rates')
 export class RatesController {
@@ -79,6 +80,20 @@ export class RatesController {
         } catch (error) {
             throw new HttpException(
                 error.message || 'Terjadi kesalahan saat menghitung estimasi harga',
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @Get('sewa-truk/cost-breakdown')
+    async getCostBreakdown(
+        @Query() query: CostBreakdownDto,
+    ) {
+        try {
+            return await this.ratesService.getCostBreakdown(query);
+        } catch (error) {
+            throw new HttpException(
+                error.message || 'Terjadi kesalahan saat mengambil rincian biaya',
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
         }
