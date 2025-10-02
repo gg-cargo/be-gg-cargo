@@ -39,6 +39,8 @@ import { CreateTruckRentalOrderResponseDto } from './dto/create-truck-rental-ord
 import { ListTruckRentalDto } from './dto/list-truck-rental.dto';
 import { AssignTruckRentalDto } from './dto/assign-truck-rental.dto';
 import { AssignTruckRentalResponseDto } from './dto/assign-truck-rental-response.dto';
+import { UpdateItemDetailsDto } from './dto/update-item-details.dto';
+import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -606,5 +608,17 @@ export class OrdersController {
         @Body() assignTruckRentalDto: AssignTruckRentalDto,
     ): Promise<AssignTruckRentalResponseDto> {
         return this.ordersService.assignTruckRental(noTracking, assignTruckRentalDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_tracking/item-details')
+    @HttpCode(HttpStatus.OK)
+    async updateItemDetails(
+        @Param('no_tracking') noTracking: string,
+        @Body() updateItemDetailsDto: UpdateItemDetailsDto,
+        @Request() req: any,
+    ): Promise<UpdateItemDetailsResponseDto> {
+        const userId = req.user.id;
+        return this.ordersService.updateItemDetails(noTracking, updateItemDetailsDto, userId);
     }
 }

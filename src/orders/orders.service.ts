@@ -60,6 +60,8 @@ import { RatesService } from '../rates/rates.service';
 import { ListTruckRentalDto } from './dto/list-truck-rental.dto';
 import { AssignTruckRentalDto } from './dto/assign-truck-rental.dto';
 import { AssignTruckRentalResponseDto } from './dto/assign-truck-rental-response.dto';
+import { UpdateItemDetailsDto } from './dto/update-item-details.dto';
+import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response.dto';
 import { JobAssign } from '../models/job-assign.model';
 import { TruckList } from '../models/truck-list.model';
 
@@ -347,6 +349,88 @@ export class OrdersService {
             }
 
             throw new InternalServerErrorException('Gagal menugaskan transporter dan truck');
+        }
+    }
+
+    async updateItemDetails(noTracking: string, updateItemDetailsDto: UpdateItemDetailsDto, userId: number): Promise<UpdateItemDetailsResponseDto> {
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const { total_koli, total_berat, total_kubikasi } = updateItemDetailsDto;
+
+            // 1. Validasi Order
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noTracking },
+                transaction,
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            // 2. Simpan nilai lama untuk audit trail
+            const oldValues = {
+                total_koli: order.getDataValue('total_koli'),
+                total_berat: order.getDataValue('total_berat'),
+                sewaTruckKoli: order.sewaTruckKoli,
+                sewaTruckBerat: order.getDataValue('sewaTruckBerat'),
+                countUpdateKoli: order.getDataValue('countUpdateKoli'),
+            };
+
+            // 3. Siapkan data untuk update berdasarkan layanan
+            const updateData: any = {
+                updated_at: new Date()
+            };
+
+            if (order.getDataValue('layanan') === "Sewa truck") {
+                // Untuk layanan Sewa truck, update sewaTruckKoli dan sewaTruckBerat
+                if (total_koli !== undefined) updateData.sewaTruckKoli = total_koli.toString();
+                if (total_berat !== undefined) updateData.sewaTruckBerat = total_berat.toString();
+            } else {
+                // Untuk layanan lain, update countUpdateKoli dan total_berat
+                if (total_koli !== undefined) updateData.countUpdateKoli = total_koli;
+                if (total_berat !== undefined) updateData.total_berat = total_berat.toString();
+            }
+
+            // total_kubikasi tidak ada di model Order, skip untuk sekarang
+
+            // 4. Update Order
+            await order.update(updateData, { transaction });
+
+            await transaction.commit();
+
+            // 7. Response berdasarkan layanan
+            const responseData: any = {
+                no_tracking: noTracking,
+                updated_at: new Date()
+            };
+
+            if (order.getDataValue('layanan') == 'Sewa truck') {
+                responseData.jumlah_koli = total_koli !== undefined ? total_koli : parseInt(order.sewaTruckKoli || '0');
+                responseData.total_berat = total_berat !== undefined ? total_berat : parseFloat(order.sewaTruckBerat || '0');
+            } else {
+                responseData.jumlah_koli = total_koli !== undefined ? total_koli : order.countUpdateKoli;
+                responseData.total_berat = total_berat !== undefined ? total_berat : parseFloat(order.total_berat || '0');
+            }
+
+            if (total_kubikasi !== undefined) {
+                responseData.total_kubikasi = total_kubikasi;
+            }
+
+            return {
+                message: 'Detail barang master berhasil diperbarui',
+                order: responseData
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error('Error updating item details:', error);
+
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Gagal memperbarui detail barang');
         }
     }
 
