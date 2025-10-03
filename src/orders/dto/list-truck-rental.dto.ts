@@ -1,11 +1,14 @@
 import { IsInt, IsOptional, IsString, IsIn } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ListTruckRentalDto {
     @IsOptional()
+    @Type(() => Number)
     @IsInt()
     page?: number = 1;
 
     @IsOptional()
+    @Type(() => Number)
     @IsInt()
     limit?: number = 20;
 
