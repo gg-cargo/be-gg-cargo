@@ -21,7 +21,7 @@ export class CreateTruckRentalOrderDto {
 
     @IsString()
     @IsNotEmpty()
-    @MaxLength(35, { message: 'alamat_pengirim maksimal 35 karakter' })
+    @MaxLength(100, { message: 'alamat_pengirim maksimal 100 karakter' })
     alamat_pengirim: string;
 
     @IsString()
@@ -55,7 +55,7 @@ export class CreateTruckRentalOrderDto {
 
     @IsString()
     @IsNotEmpty()
-    @MaxLength(35, { message: 'alamat_penerima maksimal 35 karakter' })
+    @MaxLength(100, { message: 'alamat_penerima maksimal 100 karakter' })
     alamat_penerima: string;
 
     @IsString()

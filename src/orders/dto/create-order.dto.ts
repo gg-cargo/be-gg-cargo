@@ -38,7 +38,7 @@ export class CreateOrderPieceDto {
 export class CreateOrderDto {
     // Data pengirim
     @IsString() @IsNotEmpty() nama_pengirim: string;
-    @IsString() @IsNotEmpty() @MaxLength(35, { message: 'alamat_pengirim maksimal 35 karakter' }) alamat_pengirim: string;
+    @IsString() @IsNotEmpty() @MaxLength(100, { message: 'alamat_pengirim maksimal 100 karakter' }) alamat_pengirim: string;
     @IsString() @IsNotEmpty() provinsi_pengirim: string;
     @IsString() @IsNotEmpty() kota_pengirim: string;
     @IsString() @IsNotEmpty() kecamatan_pengirim: string;
@@ -49,7 +49,7 @@ export class CreateOrderDto {
 
     // Data penerima
     @IsString() @IsNotEmpty() nama_penerima: string;
-    @IsString() @IsNotEmpty() @MaxLength(35, { message: 'alamat_penerima maksimal 35 karakter' }) alamat_penerima: string;
+    @IsString() @IsNotEmpty() @MaxLength(100, { message: 'alamat_penerima maksimal 100 karakter' }) alamat_penerima: string;
     @IsString() @IsNotEmpty() provinsi_penerima: string;
     @IsString() @IsNotEmpty() kota_penerima: string;
     @IsString() @IsNotEmpty() kecamatan_penerima: string;
