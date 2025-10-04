@@ -212,6 +212,7 @@ export class OrdersService {
             });
 
             const data = rows.map((r: any) => ({
+                id: r.id,
                 tracking: r.no_tracking,
                 pengirim: r.nama_pengirim,
                 penerima: r.nama_penerima,
