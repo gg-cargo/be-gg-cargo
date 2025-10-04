@@ -2344,7 +2344,6 @@ export class OrdersService {
         const order = await this.orderModel.findOne({
             where: {
                 id: orderId,
-                order_by: userId, // Pastikan user hanya bisa reorder order miliknya
                 layanan: 'Sewa truck' // Pastikan ini adalah order sewa truk
             },
         });
