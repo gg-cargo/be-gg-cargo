@@ -320,8 +320,8 @@ export class OrdersController {
 
     @UseGuards(JwtAuthGuard)
     @Get('statistics')
-    async getDashboardStatistics(@Req() req, @Query('tahun') tahun?: string) {
-        return this.ordersService.getDashboardStats(tahun);
+    async getDashboardStatistics(@Req() req) {
+        return this.ordersService.getDashboardStatistics(req.user.id);
     }
 
     @UseGuards(JwtAuthGuard)
