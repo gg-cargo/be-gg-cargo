@@ -6081,6 +6081,28 @@ export class OrdersService {
     }
 
     /**
+     * Calculate invoice amounts for truck rental
+     */
+    private calculateTruckRentalInvoiceAmounts(totalHarga: number, asuransi: number): {
+        subtotal: number;
+        asuransi: number;
+        ppn: number;
+        total: number;
+    } {
+        const subtotal = totalHarga;
+        const asuransiAmount = asuransi || 0;
+        const ppn = Math.round(subtotal * 0.11); // 11% PPN
+        const total = subtotal + asuransiAmount + ppn;
+
+        return {
+            subtotal,
+            asuransi: asuransiAmount,
+            ppn,
+            total
+        };
+    }
+
+    /**
      * Mengkonfirmasi bahwa seluruh proses order telah selesai
      */
     async completeOrder(noTracking: string, completedByUserId: number): Promise<{ message: string; success: boolean; data: any }> {
@@ -6571,6 +6593,78 @@ export class OrdersService {
                 status: ORDER_STATUS.DRAFT,
                 total_harga: totalHargaFinal
             } as any, { transaction });
+
+            // 6. Buat invoice untuk sewa truk
+            const invoiceAmounts = this.calculateTruckRentalInvoiceAmounts(totalHargaFinal, createTruckRentalDto.asuransi || 0);
+            const invoiceDate = new Date();
+
+            const invoice = await this.orderInvoiceModel.create({
+                order_id: newOrder.id,
+                invoice_no: noTracking,
+                invoice_date: invoiceDate,
+                payment_terms: 'Net 30',
+                vat: 0,
+                discount: 0,
+                packing: 0, // Tidak ada packing untuk sewa truk
+                asuransi: invoiceAmounts.asuransi,
+                ppn: invoiceAmounts.ppn,
+                pph: 0,
+                kode_unik: 0,
+                konfirmasi_bayar: 0,
+                notes: `Invoice untuk sewa truk ${noTracking}`,
+                beneficiary_name: createTruckRentalDto.nama_pengirim,
+                acc_no: '',
+                bank_name: '',
+                bank_address: '',
+                swift_code: '',
+                paid_attachment: '',
+                payment_info: 0,
+                fm: 0,
+                lm: 0,
+                bill_to_name: createTruckRentalDto.nama_pengirim,
+                bill_to_phone: createTruckRentalDto.no_telepon_pengirim,
+                bill_to_address: createTruckRentalDto.alamat_pengirim,
+                create_date: invoiceDate,
+                created_at: invoiceDate,
+                updated_at: invoiceDate,
+                isGrossUp: 0,
+                isUnreweight: 0,
+                noFaktur: '',
+            }, { transaction });
+
+            // 7. Buat invoice details untuk sewa truk
+            const invoiceDetails: any[] = [];
+
+            // Tambahkan item sewa truk
+            invoiceDetails.push({
+                invoice_id: invoice.id,
+                description: `Sewa Truk ${createTruckRentalDto.truck_type}`,
+                qty: 1,
+                uom: 'TRIP',
+                unit_price: totalHargaFinal,
+                remark: `Jarak: ${selectedRoute.jarak_km} km, Route: ${createTruckRentalDto.isUseToll ? 'Tol' : 'Non-Tol'}, Tipe: ${createTruckRentalDto.truck_type}`,
+                created_at: invoiceDate,
+                updated_at: invoiceDate,
+            });
+
+            // Tambahkan asuransi sebagai item terpisah jika ada
+            if (invoiceAmounts.asuransi > 0) {
+                invoiceDetails.push({
+                    invoice_id: invoice.id,
+                    description: 'Asuransi',
+                    qty: 1,
+                    uom: 'PCS',
+                    unit_price: invoiceAmounts.asuransi,
+                    remark: 'Biaya asuransi sewa truk',
+                    created_at: invoiceDate,
+                    updated_at: invoiceDate,
+                });
+            }
+
+            // Simpan invoice details
+            if (invoiceDetails.length > 0) {
+                await this.orderInvoiceDetailModel.bulkCreate(invoiceDetails, { transaction });
+            }
 
             await transaction.commit();
 
