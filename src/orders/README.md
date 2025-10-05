@@ -318,7 +318,7 @@ Get complete order details including general information, summary metrics, and p
 }
 ```
 
-#### cURL Example
+#### cURL Examp
 ```bash
 curl -X GET \
   http://localhost:3000/orders/GGK-2024-001234 \
