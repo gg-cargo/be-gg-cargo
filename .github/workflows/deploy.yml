@@ -30,9 +30,3 @@ jobs:
             docker compose build enggine &&
             docker compose up -d enggine
           '
-
-      - name: Verify deployment
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
-            docker compose ps enggine
-          '
