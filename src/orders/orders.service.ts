@@ -393,7 +393,10 @@ export class OrdersService {
                 if (total_berat !== undefined) updateData.total_berat = total_berat.toString();
             }
 
-            // total_kubikasi tidak ada di model Order, skip untuk sekarang
+            // Update total_kubikasi untuk semua layanan
+            if (total_kubikasi !== undefined) {
+                updateData.total_kubikasi = total_kubikasi;
+            }
 
             // 4. Update Order
             await order.update(updateData, { transaction });
@@ -414,9 +417,8 @@ export class OrdersService {
                 responseData.total_berat = total_berat !== undefined ? total_berat : parseFloat(order.total_berat || '0');
             }
 
-            if (total_kubikasi !== undefined) {
-                responseData.total_kubikasi = total_kubikasi;
-            }
+            // Ambil total_kubikasi dari database (baik yang baru diupdate atau yang sudah ada)
+            responseData.total_kubikasi = total_kubikasi !== undefined ? total_kubikasi : parseFloat(order.total_kubikasi?.toString() || '0');
 
             return {
                 message: 'Detail barang master berhasil diperbarui',
