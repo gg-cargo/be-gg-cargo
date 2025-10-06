@@ -1074,6 +1074,12 @@ export class Order extends Model {
     })
     typeFTL: number;
 
+    @Column({
+        type: DataType.DECIMAL(10, 2),
+        allowNull: true,
+    })
+    total_kubikasi: number;
+
     // Relations
     @BelongsTo(() => User, { foreignKey: 'order_by', as: 'orderUser' })
     orderUser: User;
