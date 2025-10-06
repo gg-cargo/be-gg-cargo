@@ -325,6 +325,12 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Get('dashboard/master-stats')
+    async getMasterDashboardStats(@Query('tahun') tahun?: string) {
+        return this.ordersService.getMasterDashboardStats(tahun);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Get('export/excel')
     async exportToExcel(@Req() req) {
         return this.ordersService.exportToExcel(req.user.id);
