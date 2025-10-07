@@ -203,6 +203,9 @@ export class OrdersService {
                     'total_harga',
                     'order_by',
                     'created_at',
+                    'truck_type',
+                    'hub_source_id',
+                    'hub_dest_id',
                     [fn('MAX', col('orderUser.name')), 'order_user_name'],
                     [fn('COUNT', col('kendala.id')), 'kendala_count'],
                     [fn('SUM', col('shipments.qty')), 'total_koli'],
@@ -214,6 +217,39 @@ export class OrdersService {
                 raw: true,
                 subQuery: false,
             });
+
+            // Get hub codes for all orders using raw SQL approach
+            const orderIds = rows.map((r: any) => r.id);
+            const hubCodes: any = {};
+
+            if (orderIds.length > 0) {
+                // Get unique hub IDs from orders
+                const hubSourceIds = [...new Set(rows.map((r: any) => r.hub_source_id).filter(Boolean))];
+                const hubDestIds = [...new Set(rows.map((r: any) => r.hub_dest_id).filter(Boolean))];
+                const allHubIds = [...new Set([...hubSourceIds, ...hubDestIds])];
+
+                if (allHubIds.length > 0) {
+                    const hubData = await this.hubModel.findAll({
+                        where: { id: { [Op.in]: allHubIds } },
+                        attributes: ['id', 'kode'],
+                        raw: true,
+                    });
+
+                    // Create mapping from hub ID to code
+                    const hubIdToCode: any = {};
+                    hubData.forEach((hub: any) => {
+                        hubIdToCode[hub.id] = hub.kode;
+                    });
+
+                    // Map hub codes to order IDs
+                    rows.forEach((order: any) => {
+                        hubCodes[order.id] = {
+                            origin_hub_code: order.hub_source_id ? hubIdToCode[order.hub_source_id] || null : null,
+                            dest_hub_code: order.hub_dest_id ? hubIdToCode[order.hub_dest_id] || null : null,
+                        };
+                    });
+                }
+            }
 
             const data = rows.map((r: any) => ({
                 id: r.id,
@@ -230,6 +266,9 @@ export class OrdersService {
                 order_by: r.order_user_name || null,
                 coo: r.coo || null,
                 created_at: r.created_at,
+                origin_hub_code: hubCodes[r.id]?.origin_hub_code || null,
+                dest_hub_code: hubCodes[r.id]?.dest_hub_code || null,
+                truck_type: r.truck_type || null,
             }));
 
             const totalItems = Array.isArray(count) ? count.length : (count as unknown as number);
