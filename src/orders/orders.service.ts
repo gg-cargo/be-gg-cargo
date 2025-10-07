@@ -167,6 +167,10 @@ export class OrdersService {
             }
             if (q.status_pengiriman) where.status = q.status_pengiriman;
             if (q.status_pembayaran) where.invoiceStatus = q.status_pembayaran;
+            // Filter hub
+            if (q.hub_source_id) where.hub_source_id = q.hub_source_id;
+            if (q.hub_dest_id) where.hub_dest_id = q.hub_dest_id;
+            if (q.current_hub) where.current_hub = q.current_hub;
             if (q.date_from && q.date_to) {
                 const from = new Date(q.date_from);
                 const to = new Date(q.date_to);

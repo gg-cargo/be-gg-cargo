@@ -39,6 +39,22 @@ export class ListTruckRentalDto {
     @IsOptional()
     @IsIn(['asc', 'desc'])
     order?: 'asc' | 'desc' = 'desc';
+
+    // Filter hub
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    hub_source_id?: number;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    hub_dest_id?: number;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    current_hub?: number;
 }
 
 
