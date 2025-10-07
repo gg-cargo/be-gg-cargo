@@ -34,6 +34,7 @@ export class TransportersService {
         if (query.hub_id) whereUser.hub_id = query.hub_id;
         if (query.svc_id) whereUser.service_center_id = query.svc_id;
 
+        // First get users without trucks to avoid join issues
         const users = await this.userModel.findAll({
             where: whereUser,
             attributes: ['id', 'name', 'phone', 'email', 'hub_id', 'service_center_id', 'latlng', 'last_update_gps'],
@@ -58,19 +59,52 @@ export class TransportersService {
         busyPickups.forEach((p: any) => busySet.add(Number(p.driver_id)));
         busyDelivers.forEach((d: any) => busySet.add(Number(d.driver_id)));
 
+        // Get available trucks for filtered users
+        const availableUserIds = users
+            .filter((u: any) => !busySet.has(Number(u.id)))
+            .map((u: any) => Number(u.id));
+
+        const availableTrucks = await this.truckModel.findAll({
+            where: {
+                driver_id: { [Op.in]: availableUserIds },
+                status: 0 // 0 = tidak digunakan
+            },
+            attributes: ['id', 'driver_id', 'no_polisi', 'jenis_mobil', 'type'],
+            raw: true,
+        });
+
+        // Group trucks by driver_id
+        const trucksByDriver: any = {};
+        availableTrucks.forEach((truck: any) => {
+            const driverId = Number(truck.driver_id);
+            if (!trucksByDriver[driverId]) {
+                trucksByDriver[driverId] = [];
+            }
+            trucksByDriver[driverId].push({
+                truck_id: truck.id,
+                no_polisi: truck.no_polisi,
+                jenis_mobil: truck.jenis_mobil,
+                type: truck.type,
+            });
+        });
+
         const transporters = users
             .filter((u: any) => !busySet.has(Number(u.id)))
-            .map((u: any) => ({
-                id: Number(u.id),
-                name: u.name,
-                phone: u.phone || null,
-                email: u.email || null,
-                hub_id: u.hub_id ?? null,
-                service_center_id: u.service_center_id ?? null,
-                status_ketersediaan: 'Siap Menerima Tugas',
-                lokasi_saat_ini: u.latlng || null,
-                terakhir_update_gps: u.last_update_gps || null,
-            }));
+            .map((u: any) => {
+
+                return {
+                    id: Number(u.id),
+                    name: u.name || null,
+                    phone: u.phone || null,
+                    email: u.email || null,
+                    hub_id: u.hub_id ?? null,
+                    service_center_id: u.service_center_id ?? null,
+                    status_ketersediaan: 'Siap Menerima Tugas',
+                    lokasi_saat_ini: u.latlng || null,
+                    terakhir_update_gps: u.last_update_gps || null,
+                    available_trucks: trucksByDriver[Number(u.id)] || [],
+                };
+            });
 
         return { transporters };
     }
