@@ -9,7 +9,7 @@
     "debug.openDebug": "openOnDebugBreak",
     "debug.showBreakpointsInOverviewRuler": true,
     "debug.showInlineBreakpointCandidates": true,
-    "files.autoSave": "onFocusChange",
+    "files.autoSave": "afterDelay",
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
         "source.fixAll.eslint": "explicit"
