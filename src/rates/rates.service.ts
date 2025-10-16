@@ -96,7 +96,7 @@ export class RatesService {
                         estimasi_waktu: this.formatDuration(nonTollDuration),
                         harga_dasar: this.formatRupiah(nonTollEstimate.basePrice),
                         total: this.formatRupiah(nonTollEstimate.totalPrice),
-                        is_toll: false
+                        is_toll: false,
                     }
                 };
             } else {
@@ -247,28 +247,49 @@ export class RatesService {
         tollFee: number;
         totalPrice: number;
     } {
-        // Jarak efektif dengan minimum 55 km
-        const effectiveDistance = Math.max(distanceKm, 55);
+        // Gunakan rumus sederhana sesuai pseudocode yang diberikan
+        const actualKm = distanceKm;
+        const minKm = 55;
+        const globalMinCharge = 550000; // "di luar tol"
+        const dooringFee = 150000;
+        const serviceFee = 100000;
 
-        // Hitung harga dasar berdasarkan jarak
-        let basePrice: number;
-        if (effectiveDistance < 500) {
-            basePrice = effectiveDistance * 2800;
-        } else {
-            basePrice = effectiveDistance * 2500;
-        }
+        // Hitung tarif per km
+        const ratePerKm = actualKm <= 500 ? 2800 : 2500;
 
-        // Tidak menghitung biaya tol lagi, total = harga dasar
-        const tollFee = 0;
-        const totalPrice = basePrice;
+        // Jarak efektif dengan minimum km
+        const effectiveKm = Math.max(actualKm, minKm);
 
-        this.logger.log(`Price calculation - Distance: ${effectiveDistance}km, Base: ${basePrice}, Total: ${totalPrice}`);
+        // Linear fare berdasarkan jarak
+        const linearFare = effectiveKm * ratePerKm;
+
+        // Base fare = linear fare + dooring + service
+        const baseFare = linearFare + dooringFee + serviceFee;
+
+        // Base price = max(base fare, global minimum charge)
+        const basePrice = Math.max(baseFare, globalMinCharge);
+
+        // Biaya tol (estimasi sederhana)
+        const tollFee = includeToll ? this.estimateSimpleTollFee(distanceKm) : 0;
+
+        // Total = base price + toll fee
+        const totalPrice = basePrice + tollFee;
+
+        this.logger.log(`Simple FTL CDDL Price calculation - Distance: ${actualKm}km, Effective: ${effectiveKm}km, Rate/km: ${ratePerKm}, LinearFare: ${linearFare}, BaseFare: ${baseFare}, BasePrice: ${basePrice}, Toll: ${tollFee}, Total: ${totalPrice}`);
 
         return {
             basePrice,
             tollFee,
             totalPrice
         };
+    }
+
+    /**
+     * Estimasi biaya tol sederhana
+     */
+    private estimateSimpleTollFee(distanceKm: number): number {
+        // Estimasi sederhana: Rp 500 per km untuk rute tol
+        return Math.round(distanceKm * 500);
     }
 
     private calculateFallbackDistance(originLatLng: string, destinationLatLng: string): {
