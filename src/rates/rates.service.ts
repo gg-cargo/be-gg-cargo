@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import axios from 'axios';
 import { CostBreakdownDto } from './dto/cost-breakdown.dto';
 import { CostBreakdownResponseDto } from './dto/cost-breakdown-response.dto';
+const pricingRules = require('../../config/pricing_rules.json');
 
 @Injectable()
 export class RatesService {
@@ -66,9 +67,9 @@ export class RatesService {
                 tollDuration = this.estimateDurationFromDistance(tollDistance);
             }
 
-            // Hitung estimasi harga
-            const nonTollEstimate = needNonToll ? this.calculatePrice(nonTollDistance, false) : null;
-            const tollEstimate = needToll ? this.calculatePrice(tollDistance, true) : null;
+            // Hitung estimasi harga dengan parameter baru
+            const nonTollEstimate = needNonToll ? this.calculatePrice(nonTollDistance, false, 'Jakarta', 'Default', false) : null;
+            const tollEstimate = needToll ? this.calculatePrice(tollDistance, true, 'Jakarta', 'Default', false) : null;
 
             // Buat response berdasarkan filter
             if (tollFilter === true && tollEstimate) {
@@ -242,46 +243,140 @@ export class RatesService {
         }
     }
 
-    private calculatePrice(distanceKm: number, includeToll: boolean): {
+    private calculatePrice(distanceKm: number, includeToll: boolean, origin: string = 'Jakarta', destination: string = 'Default', isPromo: boolean = false): {
         basePrice: number;
         tollFee: number;
         totalPrice: number;
+        category: 'FTL Lokal' | 'FTL Antar Kota' | 'Promo';
     } {
-        // Gunakan rumus sederhana sesuai pseudocode yang diberikan
-        const actualKm = distanceKm;
-        const minKm = 55;
-        const globalMinCharge = 550000; // "di luar tol"
-        const dooringFee = 150000;
-        const serviceFee = 100000;
+        // 1. Cek promo terlebih dahulu jika isPromo === true
+        if (isPromo) {
+            const promoResult = this.calculatePromoPrice(origin, destination);
+            if (promoResult) {
+                this.logger.log(`Promo calculation - Origin: ${origin}, Destination: ${destination}, Price: ${promoResult.totalPrice}, Category: ${promoResult.category}`);
+                return promoResult;
+            }
+        }
 
-        // Hitung tarif per km
-        const ratePerKm = actualKm <= 500 ? 2800 : 2500;
+        // 2. Pilih rule berdasarkan jarak
+        if (distanceKm <= 100) {
+            // Gunakan FTL_Lokal untuk jarak <= 100 km
+            return this.calculateLocalFTL(distanceKm, includeToll);
+        } else {
+            // Gunakan FTL_AntarKota untuk jarak > 100 km
+            return this.calculateInterCityFTL(origin, destination, distanceKm, includeToll);
+        }
+    }
 
-        // Jarak efektif dengan minimum km
-        const effectiveKm = Math.max(actualKm, minKm);
+    /**
+     * Hitung harga promo
+     */
+    private calculatePromoPrice(origin: string, destination: string): { basePrice: number; tollFee: number; totalPrice: number; category: 'Promo' } | null {
+        const promo = pricingRules.FTL_Promo.routes.find(
+            (r: any) => r.origin === origin && r.destination === destination
+        );
 
-        // Linear fare berdasarkan jarak
-        const linearFare = effectiveKm * ratePerKm;
+        if (promo) {
+            return {
+                basePrice: promo.price,
+                tollFee: 0,
+                totalPrice: promo.price,
+                category: 'Promo'
+            };
+        }
 
-        // Base fare = linear fare + dooring + service
-        const baseFare = linearFare + dooringFee + serviceFee;
+        return null;
+    }
 
-        // Base price = max(base fare, global minimum charge)
-        const basePrice = Math.max(baseFare, globalMinCharge);
+    /**
+     * Hitung harga FTL lokal berdasarkan area
+     */
+    private calculateLocalFTL(distanceKm: number, includeToll: boolean): { basePrice: number; tollFee: number; totalPrice: number; category: 'FTL Lokal' } {
+        const rule = pricingRules.FTL_Lokal;
+        let areaPrice = rule.min_charge;
+        let selectedArea: any = null;
 
-        // Biaya tol (estimasi sederhana)
+        // Cari area yang sesuai dengan jarak
+        for (const area of rule.areas) {
+            const distanceRange = area.distance_km;
+            if (this.isDistanceInRange(distanceKm, distanceRange)) {
+                areaPrice = area.price;
+                selectedArea = area;
+                break;
+            }
+        }
+
+        // Hitung toll fee jika diperlukan
         const tollFee = includeToll ? this.estimateSimpleTollFee(distanceKm) : 0;
+        const totalPrice = areaPrice + tollFee;
 
-        // Total = base price + toll fee
-        const totalPrice = basePrice + tollFee;
-
-        this.logger.log(`Simple FTL CDDL Price calculation - Distance: ${actualKm}km, Effective: ${effectiveKm}km, Rate/km: ${ratePerKm}, LinearFare: ${linearFare}, BaseFare: ${baseFare}, BasePrice: ${basePrice}, Toll: ${tollFee}, Total: ${totalPrice}`);
+        this.logger.log(`FTL Lokal calculation - Distance: ${distanceKm}km, Area: ${selectedArea ? selectedArea.name : 'Default'}, AreaPrice: ${areaPrice}, TollFee: ${tollFee}, Total: ${totalPrice}`);
 
         return {
-            basePrice,
+            basePrice: areaPrice,
             tollFee,
-            totalPrice
+            totalPrice,
+            category: 'FTL Lokal'
         };
+    }
+
+    /**
+     * Hitung harga FTL antar kota
+     */
+    private calculateInterCityFTL(origin: string, destination: string, distanceKm: number, includeToll: boolean): { basePrice: number; tollFee: number; totalPrice: number; category: 'FTL Antar Kota' } {
+        const rule = pricingRules.FTL_AntarKota;
+
+        // Hitung komponen harga sesuai rumus
+        const baseFee = rule.base_fee;
+        const linearFare = rule.rate_per_km * distanceKm;
+
+        // Cari toll fee berdasarkan rute
+        const tollKey = `${origin}-${destination}`;
+        const ruleTollFee = rule.toll_fee[tollKey] || 0;
+
+        // Gunakan toll fee dari rule jika ada, atau estimasi sederhana jika includeToll = true
+        let tollFee = 0;
+        if (ruleTollFee > 0) {
+            tollFee = ruleTollFee;
+        } else if (includeToll) {
+            tollFee = this.estimateSimpleTollFee(distanceKm);
+        }
+
+        // Estimasi hari berdasarkan jarak (600km/hari)
+        const estDays = Math.ceil(distanceKm / 600);
+        const allowanceFee = rule.allowance_per_day * estDays;
+
+        // Hitung subtotal sebelum diskon
+        const subtotal = baseFee + linearFare + tollFee + allowanceFee;
+
+        // Hitung diskon
+        const discount = subtotal * rule.discount;
+
+        // Total akhir setelah diskon
+        const totalPrice = subtotal - discount;
+
+        this.logger.log(`FTL Antar Kota calculation - Origin: ${origin}, Destination: ${destination}, Distance: ${distanceKm}km, BaseFee: ${baseFee}, LinearFare: ${linearFare}, TollFee: ${tollFee}, AllowanceFee: ${allowanceFee} (${estDays} days), Subtotal: ${subtotal}, Discount: ${discount}, Total: ${totalPrice}`);
+
+        return {
+            basePrice: subtotal,
+            tollFee,
+            totalPrice,
+            category: 'FTL Antar Kota'
+        };
+    }
+
+    /**
+     * Cek apakah jarak masuk dalam range
+     */
+    private isDistanceInRange(distance: number, range: string): boolean {
+        if (range.includes('<=')) {
+            const maxDistance = parseInt(range.replace('<=', ''));
+            return distance <= maxDistance;
+        } else if (range.includes('-')) {
+            const [min, max] = range.split('-').map(n => parseInt(n));
+            return distance >= min && distance <= max;
+        }
+        return false;
     }
 
     /**
@@ -480,6 +575,30 @@ export class RatesService {
             cost_driver_2: Math.round(baseUangJalan * 0.15), // ~15% dari uang jalan
             hub_asal: hubNames[originHubCode] || originHubCode,
             hub_tujuan: hubNames[destHubCode] || destHubCode
+        };
+    }
+
+    /**
+     * Method public untuk test calculatePrice
+     */
+    async testCalculatePrice(distanceKm: number, includeToll: boolean, origin: string, destination: string, isPromo: boolean): Promise<any> {
+        const result = this.calculatePrice(distanceKm, includeToll, origin, destination, isPromo);
+
+        return {
+            origin,
+            destination,
+            distance_km: distanceKm,
+            include_toll: includeToll,
+            is_promo: isPromo,
+            category: result.category,
+            base_price: this.formatRupiah(result.basePrice),
+            toll_fee: this.formatRupiah(result.tollFee),
+            total_price: this.formatRupiah(result.totalPrice),
+            breakdown: {
+                base_price_numeric: result.basePrice,
+                toll_fee_numeric: result.tollFee,
+                total_price_numeric: result.totalPrice
+            }
         };
     }
 }

@@ -1,0 +1,111 @@
+{
+    "FTL_Lokal": {
+        "description": "Full Truck Load dalam area Jabodetabek (CDDL)",
+        "rule_type": "flat_area_based",
+        "currency": "IDR",
+        "min_charge": 550000,
+        "areas": [
+            {
+                "name": "Jakbar, Jakut, Jakpus, Tangerang",
+                "price": 550000,
+                "distance_km": "<=30"
+            },
+            {
+                "name": "Jaksel, Jaktim",
+                "price": 600000,
+                "distance_km": "31-40"
+            },
+            {
+                "name": "Bekasi, Serang",
+                "price": 650000,
+                "distance_km": "41-60"
+            },
+            {
+                "name": "Bogor, Cilegon, Merak",
+                "price": 700000,
+                "distance_km": "61-90"
+            },
+            {
+                "name": "Karawang, Purwakarta, Ciawi, Puncak, Pandeglang",
+                "price": 950000,
+                "distance_km": "91-120"
+            }
+        ],
+        "notes": [
+            "Harga berlaku per trip FTL (CDDL)",
+            "Bongkar muat manual max 30kg per box",
+            "Biaya tambahan bongkar muat Rp180.000–Rp500.000 jika >99 unit"
+        ],
+        "formula": "total = area_price"
+    },
+    "FTL_AntarKota": {
+        "description": "Full Truck Load antar kota / antar pulau",
+        "rule_type": "distance_based",
+        "currency": "IDR",
+        "base_fee": 500000,
+        "rate_per_km": 8000,
+        "allowance_per_day": 300000,
+        "toll_fee": {
+            "Jakarta-Surabaya": 1850000,
+            "Jakarta-Medan": 3200000,
+            "Jakarta-Pekanbaru": 2500000
+        },
+        "discount": 0.1,
+        "formula": "total = base_fee + (rate_per_km * distance_km) + toll_fee + (allowance_per_day * est_days) - (discount * subtotal)"
+    },
+    "FTL_Promo": {
+        "description": "Special October Promo",
+        "routes": [
+            {
+                "origin": "Pekanbaru",
+                "destination": "Jakarta/Tangerang",
+                "price": 7500000
+            },
+            {
+                "origin": "Pekanbaru",
+                "destination": "Surabaya",
+                "price": 13500000
+            },
+            {
+                "origin": "Pekanbaru",
+                "destination": "Medan",
+                "price": 5500000
+            },
+            {
+                "origin": "Pekanbaru",
+                "destination": "Jambi",
+                "price": 4000000
+            },
+            {
+                "origin": "Pekanbaru",
+                "destination": "Palembang",
+                "price": 4500000
+            },
+            {
+                "origin": "Jakarta/Tangerang",
+                "destination": "Medan",
+                "price": 14000000
+            },
+            {
+                "origin": "Jakarta/Tangerang",
+                "destination": "Surabaya",
+                "price": 7500000
+            },
+            {
+                "origin": "Jakarta/Tangerang",
+                "destination": "Pekanbaru",
+                "price": 13000000
+            },
+            {
+                "origin": "Jakarta/Tangerang",
+                "destination": "Jambi",
+                "price": 9500000
+            },
+            {
+                "origin": "Jakarta/Tangerang",
+                "destination": "Palembang",
+                "price": 9000000
+            }
+        ]
+    }
+}

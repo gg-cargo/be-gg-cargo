@@ -1,9 +1,11 @@
-import { Controller, Get, Query, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Query, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { RatesService } from './rates.service';
 import { CostBreakdownDto } from './dto/cost-breakdown.dto';
 
 @Controller('rates')
 export class RatesController {
+    private readonly logger = new Logger(RatesController.name);
+
     constructor(private readonly ratesService: RatesService) { }
 
     @Get('sewa-truk')
@@ -94,6 +96,53 @@ export class RatesController {
         } catch (error) {
             throw new HttpException(
                 error.message || 'Terjadi kesalahan saat mengambil rincian biaya',
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @Get('test-pricing')
+    async testPricing(
+        @Query('origin') origin: string = 'Jakarta',
+        @Query('destination') destination: string = 'Default',
+        @Query('distance_km') distanceKm: string = '25',
+        @Query('is_toll') isToll: string = 'false',
+        @Query('is_promo') isPromo: string = 'false',
+    ) {
+        try {
+            // Validasi dan konversi parameter
+            const distanceKmNumber = parseFloat(distanceKm);
+            if (isNaN(distanceKmNumber) || distanceKmNumber < 0) {
+                throw new HttpException(
+                    'Parameter distance_km harus berupa angka positif',
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+
+            const includeToll = isToll.toLowerCase() === 'true';
+            const promo = isPromo.toLowerCase() === 'true';
+
+            // Panggil method private calculatePrice melalui method public
+            const result = await this.ratesService.testCalculatePrice(
+                distanceKmNumber,
+                includeToll,
+                origin,
+                destination,
+                promo
+            );
+
+            return {
+                message: 'Test pricing berhasil',
+                data: result
+            };
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+
+            this.logger.error('Error testing pricing:', error);
+            throw new HttpException(
+                'Gagal test pricing',
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
         }
