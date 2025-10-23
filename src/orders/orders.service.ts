@@ -6795,7 +6795,7 @@ export class OrdersService {
     /**
      * Buat order internasional baru
      */
-    async createInternationalOrder(createInternationalDto: any): Promise<any> {
+    async createInternationalOrder(createInternationalDto: any, userId?: number): Promise<any> {
         const transaction = await this.orderModel.sequelize!.transaction();
 
         try {
@@ -6845,7 +6845,7 @@ export class OrdersService {
                 kodepos_internasional: createInternationalDto.kodepos_internasional,
 
                 nama_barang: createInternationalDto.nama_barang,
-                layanan: 'Reguler', // Gunakan layanan reguler
+                layanan: 'International', // Gunakan layanan internasional
                 asuransi: createInternationalDto.asuransi,
                 packing: createInternationalDto.packing,
                 harga_barang: createInternationalDto.harga_barang,
@@ -6869,7 +6869,7 @@ export class OrdersService {
                 status: 'Draft',
                 tipe_pengiriman: createInternationalDto.tipe_pengiriman,
                 order_type: 'International',
-                order_by: 1, // Default user ID untuk testing
+                order_by: userId,
                 created_at: new Date(),
                 updated_at: new Date()
             };

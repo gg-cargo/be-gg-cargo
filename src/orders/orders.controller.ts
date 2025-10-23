@@ -638,17 +638,6 @@ export class OrdersController {
         @Request() req: any,
     ): Promise<InternationalOrderResponseDto> {
         const userId = req.user.id;
-        return this.ordersService.createInternationalOrder(createInternationalDto);
-    }
-
-    @UseGuards(JwtAuthGuard)
-    @Post('internationalMetode')
-    @HttpCode(HttpStatus.CREATED)
-    async createInternationalOrderMetode(
-        @Body() createInternationalDto: CreateInternationalOrderDto,
-        @Request() req: any,
-    ): Promise<InternationalOrderResponseDto> {
-        const userId = req.user.id;
-        return this.ordersService.createInternationalOrder(createInternationalDto);
+        return this.ordersService.createInternationalOrder(createInternationalDto, userId);
     }
 }

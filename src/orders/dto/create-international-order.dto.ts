@@ -12,7 +12,7 @@ export enum JenisPengirimPenerima {
 }
 
 export enum LayananInternasional {
-    REGULER = 'Reguler'
+    INTERNATIONAL = 'International'
 }
 
 export enum MataUang {
