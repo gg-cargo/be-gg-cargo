@@ -1,6 +1,6 @@
-import { Injectable, BadRequestException, NotFoundException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, InternalServerErrorException, Logger, Inject } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { Transaction } from 'sequelize';
+import { Transaction, Sequelize } from 'sequelize';
 import { Order } from '../models/order.model';
 import { OrderShipment } from '../models/order-shipment.model';
 import { OrderPiece } from '../models/order-piece.model';
@@ -112,6 +112,7 @@ export class OrdersService {
         private readonly driversService: DriversService,
         private readonly notificationBadgesService: NotificationBadgesService,
         private readonly ratesService: RatesService,
+        @Inject('SEQUELIZE') private readonly sequelize: Sequelize,
     ) { }
 
     /**
@@ -6789,6 +6790,290 @@ export class OrdersService {
 
     private formatRupiah(value: number): string {
         return 'Rp ' + value.toLocaleString('id-ID');
+    }
+
+    /**
+     * Buat order internasional baru
+     */
+    async createInternationalOrder(createInternationalDto: any): Promise<any> {
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            // a. Validasi Awal dan Bersyarat
+            this.validateInternationalOrder(createInternationalDto);
+
+            // b. Perhitungan dan Konversi
+            const chargeableWeightData = this.calculateChargeableWeight(createInternationalDto.pieces);
+            const pricingData = await this.calculateInternationalPricing(
+                chargeableWeightData.totalChargeableWeight,
+                createInternationalDto.negara_penerima,
+                createInternationalDto.layanan,
+                createInternationalDto.total_item_value_usd,
+                createInternationalDto.asuransi
+            );
+
+            // Generate tracking number
+            const noTracking = await this.generateInternationalTrackingNumber();
+
+            // c. Penyimpanan Data Kritis
+            const orderData = {
+                no_tracking: noTracking,
+                nama_pengirim: createInternationalDto.nama_pengirim,
+                alamat_pengirim: createInternationalDto.alamat_pengirim,
+                provinsi_pengirim: createInternationalDto.provinsi_pengirim,
+                kota_pengirim: createInternationalDto.kota_pengirim,
+                kecamatan_pengirim: createInternationalDto.kecamatan_pengirim,
+                kelurahan_pengirim: createInternationalDto.kelurahan_pengirim,
+                kodepos_pengirim: createInternationalDto.kodepos_pengirim,
+                no_telepon_pengirim: createInternationalDto.no_telepon_pengirim,
+                email_pengirim: createInternationalDto.email_pengirim,
+                jenis_pengirim: createInternationalDto.jenis_pengirim,
+                negara_pengirim: createInternationalDto.negara_pengirim,
+                peb_number: createInternationalDto.peb_number,
+
+                nama_penerima: createInternationalDto.nama_penerima,
+                alamat_penerima: createInternationalDto.alamat_penerima,
+                provinsi_penerima: createInternationalDto.provinsi_penerima,
+                kota_penerima: createInternationalDto.kota_penerima,
+                kecamatan_penerima: createInternationalDto.kecamatan_penerima,
+                kelurahan_penerima: createInternationalDto.kelurahan_penerima,
+                kodepos_penerima: createInternationalDto.kodepos_penerima,
+                no_telepon_penerima: createInternationalDto.no_telepon_penerima,
+                email_penerima: createInternationalDto.email_penerima,
+                jenis_penerima: createInternationalDto.jenis_penerima,
+                negara_penerima: createInternationalDto.negara_penerima,
+                kodepos_internasional: createInternationalDto.kodepos_internasional,
+
+                nama_barang: createInternationalDto.nama_barang,
+                layanan: 'Reguler', // Gunakan layanan reguler
+                asuransi: createInternationalDto.asuransi,
+                packing: createInternationalDto.packing,
+                harga_barang: createInternationalDto.harga_barang,
+                mata_uang: createInternationalDto.mata_uang,
+                hs_code: createInternationalDto.hs_code,
+                country_of_origin: createInternationalDto.country_of_origin,
+                no_referensi: createInternationalDto.no_referensi,
+                total_item_value_usd: createInternationalDto.total_item_value_usd,
+                customs_notes: createInternationalDto.customs_notes,
+                commercial_invoice: createInternationalDto.commercial_invoice,
+                packing_list: createInternationalDto.packing_list,
+                certificate_of_origin: createInternationalDto.certificate_of_origin,
+                notes: createInternationalDto.notes,
+
+                // Data perhitungan
+                total_harga: pricingData.totalPrice,
+                chargeable_weight_total: chargeableWeightData.totalChargeableWeight,
+                total_kubikasi: chargeableWeightData.totalVolume,
+
+                // Status dan metadata
+                status: 'Draft',
+                tipe_pengiriman: createInternationalDto.tipe_pengiriman,
+                order_type: 'International',
+                order_by: 1, // Default user ID untuk testing
+                created_at: new Date(),
+                updated_at: new Date()
+            };
+
+            const newOrder = await this.orderModel.create(orderData, { transaction });
+
+            // Buat OrderShipment terlebih dahulu
+            const orderShipment = await this.orderShipmentModel.create({
+                order_id: newOrder.id,
+                nama_barang: createInternationalDto.nama_barang,
+                qty: createInternationalDto.pieces.reduce((sum: number, piece: any) => sum + piece.qty, 0),
+                berat: createInternationalDto.pieces.reduce((sum: number, piece: any) => sum + (piece.berat * piece.qty), 0),
+                panjang: createInternationalDto.pieces.reduce((sum: number, piece: any) => sum + piece.panjang, 0),
+                lebar: createInternationalDto.pieces.reduce((sum: number, piece: any) => sum + piece.lebar, 0),
+                tinggi: createInternationalDto.pieces.reduce((sum: number, piece: any) => sum + piece.tinggi, 0),
+                harga: createInternationalDto.total_item_value_usd,
+                created_at: new Date(),
+                updated_at: new Date()
+            }, { transaction });
+
+            // Simpan pieces
+            for (const piece of createInternationalDto.pieces) {
+                const pieceData = {
+                    order_id: newOrder.id,
+                    order_shipment_id: orderShipment.id, // Gunakan ID shipment yang baru dibuat
+                    piece_id: `PIECE-${newOrder.id}-${Date.now()}`, // Generate unique piece ID
+                    qty: piece.qty,
+                    berat: piece.berat,
+                    panjang: piece.panjang,
+                    lebar: piece.lebar,
+                    tinggi: piece.tinggi,
+                    volume: (piece.panjang * piece.lebar * piece.tinggi) / 1000000, // Convert to m³
+                    chargeable_weight: Math.max(piece.berat, (piece.panjang * piece.lebar * piece.tinggi) / 6000), // Volume weight factor 6000
+                    created_at: new Date(),
+                    updated_at: new Date()
+                };
+
+                await this.orderPieceModel.create(pieceData, { transaction });
+            }
+
+            // d. Finalisasi dan Histori
+            await this.orderHistoryModel.create({
+                order_id: newOrder.id,
+                status: 'Order Internasional Dibuat',
+                notes: 'Order internasional berhasil dibuat dan siap untuk proses first mile',
+                remark: 'Order internasional berhasil dibuat',
+                created_at: new Date(),
+                updated_at: new Date()
+            }, { transaction });
+
+            await transaction.commit();
+
+            // Response
+            return {
+                status: 'success',
+                message: 'Order Internasional berhasil dibuat dan siap untuk penjemputan.',
+                order: {
+                    no_tracking: noTracking,
+                    total_amount: pricingData.totalPrice,
+                    currency: createInternationalDto.mata_uang,
+                    chargeable_weight_total: chargeableWeightData.totalChargeableWeight
+                },
+                next_step: 'Order dialihkan ke Hub Internasional untuk proses first mile.'
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error creating international order: ${error.message}`);
+            throw new InternalServerErrorException(`Gagal membuat order internasional: ${error.message}`);
+        }
+    }
+
+    /**
+     * Validasi order internasional
+     */
+    private validateInternationalOrder(dto: any): void {
+        // Validasi Wajib: Data dasar
+        if (!dto.nama_pengirim || !dto.alamat_pengirim || !dto.no_telepon_pengirim) {
+            throw new BadRequestException('Data pengirim (nama, alamat, telepon) wajib diisi');
+        }
+
+        if (!dto.nama_penerima || !dto.alamat_penerima || !dto.no_telepon_penerima) {
+            throw new BadRequestException('Data penerima (nama, alamat, telepon) wajib diisi');
+        }
+
+        // Validasi Bersyarat (Barang)
+        if (dto.tipe_pengiriman === 'Barang') {
+            if (!dto.hs_code) {
+                throw new BadRequestException('HS Code wajib diisi untuk pengiriman barang');
+            }
+            if (!dto.total_item_value_usd || dto.total_item_value_usd <= 0) {
+                throw new BadRequestException('Total item value USD harus lebih dari 0 untuk pengiriman barang');
+            }
+            if (!dto.country_of_origin) {
+                throw new BadRequestException('Country of origin wajib diisi untuk pengiriman barang');
+            }
+            if (!dto.commercial_invoice) {
+                throw new BadRequestException('Commercial invoice wajib diisi untuk pengiriman barang');
+            }
+        }
+
+        // Validasi Bersyarat (Dokumen)
+        if (dto.tipe_pengiriman === 'Dokumen') {
+            if (dto.total_item_value_usd > 100) {
+                throw new BadRequestException('Total item value USD untuk dokumen harus rendah (≤ $100)');
+            }
+
+            // Hitung total berat
+            const totalWeight = dto.pieces.reduce((sum: number, piece: any) => sum + (piece.berat * piece.qty), 0);
+            if (totalWeight > 2.5) {
+                throw new BadRequestException('Berat total dokumen tidak boleh melebihi 2.5 kg');
+            }
+        }
+    }
+
+    /**
+     * Hitung chargeable weight
+     */
+    private calculateChargeableWeight(pieces: any[]): { totalChargeableWeight: number; totalVolume: number } {
+        let totalChargeableWeight = 0;
+        let totalVolume = 0;
+
+        for (const piece of pieces) {
+            const volume = (piece.panjang * piece.lebar * piece.tinggi) / 1000000; // Convert to m³
+            const volumeWeight = volume * 200; // Volume weight factor 200 kg/m³
+            const chargeableWeight = Math.max(piece.berat, volumeWeight);
+
+            totalChargeableWeight += chargeableWeight * piece.qty;
+            totalVolume += volume * piece.qty;
+        }
+
+        return { totalChargeableWeight, totalVolume };
+    }
+
+    /**
+     * Hitung pricing internasional
+     */
+    private async calculateInternationalPricing(
+        chargeableWeight: number,
+        destinationCountry: string,
+        service: string,
+        itemValue: number,
+        insurance: boolean
+    ): Promise<{ totalPrice: number }> {
+        // Pricing zones berdasarkan negara
+        const pricingZones: { [key: string]: { express: number; economy: number } } = {
+            'US': { express: 25, economy: 15 },
+            'SG': { express: 20, economy: 12 },
+            'MY': { express: 18, economy: 10 },
+            'TH': { express: 16, economy: 9 },
+            'AU': { express: 30, economy: 18 },
+            'JP': { express: 22, economy: 13 },
+            'KR': { express: 20, economy: 12 },
+            'CN': { express: 15, economy: 8 },
+            'HK': { express: 18, economy: 10 },
+            'TW': { express: 19, economy: 11 }
+        };
+
+        const zone = pricingZones[destinationCountry] || { express: 25, economy: 15 };
+        const ratePerKg = zone.express; // Gunakan rate express untuk layanan reguler
+
+        let basePrice = chargeableWeight * ratePerKg;
+
+        // Tambahkan biaya asuransi jika diperlukan
+        if (insurance && itemValue > 0) {
+            const insuranceRate = 0.01; // 1% dari nilai barang
+            basePrice += itemValue * insuranceRate;
+        }
+
+        // Tambahkan biaya handling
+        const handlingFee = 15; // USD
+        basePrice += handlingFee;
+
+        return { totalPrice: Math.round(basePrice * 100) / 100 };
+    }
+
+    /**
+     * Generate tracking number untuk internasional
+     */
+    private async generateInternationalTrackingNumber(): Promise<string> {
+        const today = new Date();
+        const year = today.getFullYear().toString().slice(-2);
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+
+        const prefix = `INTLGG${year}${month}${day}`;
+
+        // Cari nomor urut terakhir untuk hari ini
+        const lastOrder = await this.orderModel.findOne({
+            where: {
+                no_tracking: {
+                    [Op.like]: `${prefix}%`
+                }
+            },
+            order: [['created_at', 'DESC']]
+        });
+
+        let nextNumber = 1;
+        if (lastOrder && lastOrder.no_tracking) {
+            const lastNumber = parseInt(lastOrder.no_tracking.slice(-3));
+            nextNumber = lastNumber + 1;
+        }
+
+        return `${prefix}${String(nextNumber).padStart(3, '0')}`;
     }
 
 } 

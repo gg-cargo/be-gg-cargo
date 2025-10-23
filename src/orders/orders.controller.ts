@@ -41,6 +41,8 @@ import { AssignTruckRentalDto } from './dto/assign-truck-rental.dto';
 import { AssignTruckRentalResponseDto } from './dto/assign-truck-rental-response.dto';
 import { UpdateItemDetailsDto } from './dto/update-item-details.dto';
 import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response.dto';
+import { CreateInternationalOrderDto } from './dto/create-international-order.dto';
+import { InternationalOrderResponseDto } from './dto/international-order-response.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -626,5 +628,16 @@ export class OrdersController {
     ): Promise<UpdateItemDetailsResponseDto> {
         const userId = req.user.id;
         return this.ordersService.updateItemDetails(noTracking, updateItemDetailsDto, userId);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('international')
+    @HttpCode(HttpStatus.CREATED)
+    async createInternationalOrder(
+        @Body() createInternationalDto: CreateInternationalOrderDto,
+        @Request() req: any,
+    ): Promise<InternationalOrderResponseDto> {
+        const userId = req.user.id;
+        return this.ordersService.createInternationalOrder(createInternationalDto);
     }
 }

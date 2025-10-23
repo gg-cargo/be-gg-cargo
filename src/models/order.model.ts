@@ -1080,6 +1080,103 @@ export class Order extends Model {
     })
     total_kubikasi: number;
 
+    // International Order Fields
+    @Column({
+        type: DataType.STRING(50),
+        allowNull: true,
+    })
+    tipe_pengiriman: string;
+
+    @Column({
+        type: DataType.STRING(50),
+        allowNull: true,
+    })
+    jenis_pengirim: string;
+
+    @Column({
+        type: DataType.STRING(50),
+        allowNull: true,
+    })
+    negara_pengirim: string;
+
+    @Column({
+        type: DataType.STRING(50),
+        allowNull: true,
+    })
+    peb_number: string;
+
+    @Column({
+        type: DataType.STRING(50),
+        allowNull: true,
+    })
+    jenis_penerima: string;
+
+    @Column({
+        type: DataType.STRING(10),
+        allowNull: true,
+    })
+    negara_penerima: string;
+
+    @Column({
+        type: DataType.STRING(10),
+        allowNull: true,
+    })
+    kodepos_internasional: string;
+
+    @Column({
+        type: DataType.STRING(20),
+        allowNull: true,
+    })
+    hs_code: string;
+
+    @Column({
+        type: DataType.STRING(50),
+        allowNull: true,
+    })
+    country_of_origin: string;
+
+    @Column({
+        type: DataType.DECIMAL(10, 2),
+        allowNull: true,
+    })
+    total_item_value_usd: number;
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true,
+    })
+    customs_notes: string;
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true,
+    })
+    commercial_invoice: string;
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true,
+    })
+    packing_list: string;
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true,
+    })
+    certificate_of_origin: string;
+
+    @Column({
+        type: DataType.DECIMAL(10, 2),
+        allowNull: true,
+    })
+    chargeable_weight_total: number;
+
+    @Column({
+        type: DataType.STRING(50),
+        allowNull: true,
+    })
+    order_type: string;
+
     // Relations
     @BelongsTo(() => User, { foreignKey: 'order_by', as: 'orderUser' })
     orderUser: User;

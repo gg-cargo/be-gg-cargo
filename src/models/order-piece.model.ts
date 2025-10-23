@@ -245,6 +245,12 @@ export class OrderPiece extends Model {
     })
     updated_at: Date;
 
+    @Column({
+        type: DataType.DECIMAL(10, 2),
+        allowNull: true,
+    })
+    chargeable_weight: number;
+
     @BelongsTo(() => Order, { foreignKey: 'order_id', as: 'order' })
     order: Order;
 

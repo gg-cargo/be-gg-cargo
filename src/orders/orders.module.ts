@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
+import { Sequelize } from 'sequelize';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { Order } from '../models/order.model';
@@ -63,7 +64,10 @@ import { RatesModule } from '../rates/rates.module';
         ])
     ],
     controllers: [OrdersController],
-    providers: [OrdersService, FileService, DriversService],
+    providers: [OrdersService, FileService, DriversService, {
+        provide: 'SEQUELIZE',
+        useValue: Sequelize
+    }],
     exports: [OrdersService]
 })
 export class OrdersModule { } 
