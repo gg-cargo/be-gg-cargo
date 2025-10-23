@@ -117,10 +117,37 @@ module.exports = {
         });
 
         // Add indexes
-        await queryInterface.addIndex('truck_list', ['no_polisi']);
-        await queryInterface.addIndex('truck_list', ['driver_id']);
-        await queryInterface.addIndex('truck_list', ['status']);
-        await queryInterface.addIndex('truck_list', ['type']);
+        try {
+            await queryInterface.addIndex('truck_list', ['no_polisi'], {
+                name: 'truck_list_no_polisi'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
+
+        try {
+            await queryInterface.addIndex('truck_list', ['driver_id'], {
+                name: 'truck_list_driver_id'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
+
+        try {
+            await queryInterface.addIndex('truck_list', ['status'], {
+                name: 'truck_list_status'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
+
+        try {
+            await queryInterface.addIndex('truck_list', ['type'], {
+                name: 'truck_list_type'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
     },
 
     async down(queryInterface, Sequelize) {

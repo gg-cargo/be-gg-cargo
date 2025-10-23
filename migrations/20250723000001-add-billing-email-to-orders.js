@@ -3,11 +3,15 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
     async up(queryInterface, Sequelize) {
-        await queryInterface.addColumn('orders', 'billing_email', {
-            type: Sequelize.STRING(255),
-            allowNull: true,
-            after: 'billing_phone'
-        });
+        try {
+            await queryInterface.addColumn('orders', 'billing_email', {
+                type: Sequelize.STRING(255),
+                allowNull: true,
+                after: 'billing_phone'
+            });
+        } catch (error) {
+            // Column already exists, skip
+        }
     },
 
     async down(queryInterface, Sequelize) {

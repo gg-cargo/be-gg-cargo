@@ -78,7 +78,13 @@ module.exports = {
             allowNull: true,
         });
 
-        await queryInterface.addIndex('job_assigns', ['no_polisi']);
+        try {
+            await queryInterface.addIndex('job_assigns', ['no_polisi'], {
+                name: 'job_assigns_no_polisi'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
     },
 
     async down(queryInterface, Sequelize) {

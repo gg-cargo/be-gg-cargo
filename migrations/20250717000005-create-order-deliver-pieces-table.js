@@ -52,12 +52,38 @@ module.exports = {
         });
 
         // Tambahkan index untuk performa query
-        await queryInterface.addIndex('order_deliver_pieces', ['order_deliver_id']);
-        await queryInterface.addIndex('order_deliver_pieces', ['order_id']);
-        await queryInterface.addIndex('order_deliver_pieces', ['order_piece_id']);
+        try {
+            await queryInterface.addIndex('order_deliver_pieces', ['order_deliver_id'], {
+                name: 'order_deliver_pieces_order_deliver_id'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
+
+        try {
+            await queryInterface.addIndex('order_deliver_pieces', ['order_id'], {
+                name: 'order_deliver_pieces_order_id'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
+
+        try {
+            await queryInterface.addIndex('order_deliver_pieces', ['order_piece_id'], {
+                name: 'order_deliver_pieces_order_piece_id'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
 
         // Composite index untuk query yang sering digunakan
-        await queryInterface.addIndex('order_deliver_pieces', ['order_deliver_id', 'order_piece_id']);
+        try {
+            await queryInterface.addIndex('order_deliver_pieces', ['order_deliver_id', 'order_piece_id'], {
+                name: 'order_deliver_pieces_composite'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
     },
 
     async down(queryInterface, Sequelize) {

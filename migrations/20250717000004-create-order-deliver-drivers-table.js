@@ -78,10 +78,37 @@ module.exports = {
         });
 
         // Tambahkan index untuk performa query
-        await queryInterface.addIndex('order_deliver_drivers', ['order_id']);
-        await queryInterface.addIndex('order_deliver_drivers', ['driver_id']);
-        await queryInterface.addIndex('order_deliver_drivers', ['status']);
-        await queryInterface.addIndex('order_deliver_drivers', ['assign_date']);
+        try {
+            await queryInterface.addIndex('order_deliver_drivers', ['order_id'], {
+                name: 'order_deliver_drivers_order_id'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
+
+        try {
+            await queryInterface.addIndex('order_deliver_drivers', ['driver_id'], {
+                name: 'order_deliver_drivers_driver_id'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
+
+        try {
+            await queryInterface.addIndex('order_deliver_drivers', ['status'], {
+                name: 'order_deliver_drivers_status'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
+
+        try {
+            await queryInterface.addIndex('order_deliver_drivers', ['assign_date'], {
+                name: 'order_deliver_drivers_assign_date'
+            });
+        } catch (error) {
+            // Index already exists, skip
+        }
     },
 
     async down(queryInterface, Sequelize) {

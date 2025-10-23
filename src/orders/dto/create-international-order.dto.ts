@@ -186,7 +186,7 @@ export class CreateInternationalOrderDto {
     harga_barang: number;
 
     @IsEnum(MataUang)
-    @IsNotEmpty()
+    @IsOptional()
     mata_uang: MataUang;
 
     @IsOptional()
