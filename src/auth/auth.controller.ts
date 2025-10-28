@@ -101,13 +101,13 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async getProfile(@Request() req) {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
       this.logger.log(`Get profile request received for user: ${userId}`);
       const result = await this.authService.getProfile(userId);
       this.logger.log(`Get profile successful for user: ${userId}`);
       return result;
     } catch (error) {
-      this.logger.error(`Get profile failed for user: ${req.user?.user?.id}`, error.stack);
+      this.logger.error(`Get profile failed for user: ${req.user?.id}`, error.stack);
       throw error;
     }
   }

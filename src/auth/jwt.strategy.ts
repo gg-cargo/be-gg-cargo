@@ -14,10 +14,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const user = await this.authService.getProfile(payload.sub);
-    if (!user) {
+    // Hindari query DB di setiap request; gunakan data minimal dari payload
+    if (!payload || !payload.sub) {
       throw new UnauthorizedException();
     }
-    return user.user; // return hanya user object
+    return {
+      id: payload.sub,
+      email: payload.email,
+      phone: payload.phone,
+      level: payload.level,
+    };
   }
 } 
