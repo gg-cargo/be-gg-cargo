@@ -13,6 +13,9 @@ export class RatesController {
         @Query('origin_latlng') originLatLng: string,
         @Query('destination_latlng') destinationLatLng: string,
         @Query('is_toll') isToll?: string,
+        @Query('truck_type') truckType?: string,
+        @Query('need_jasa_bongkar') needJasaBongkar?: string,
+        @Query('num_helpers') numHelpers?: string,
     ) {
         // Validasi parameter yang diperlukan
         if (!originLatLng || !destinationLatLng) {
@@ -77,8 +80,12 @@ export class RatesController {
             }
         }
 
+        // Parse jasa bongkar parameters
+        const needJasaBongkarBool = needJasaBongkar === 'true';
+        const numHelpersInt = numHelpers ? parseInt(numHelpers, 10) : undefined;
+
         try {
-            return await this.ratesService.calculateTruckRentalRate(originLatLng, destinationLatLng, tollFilter);
+            return await this.ratesService.calculateTruckRentalRate(originLatLng, destinationLatLng, tollFilter, truckType, needJasaBongkarBool, numHelpersInt);
         } catch (error) {
             throw new HttpException(
                 error.message || 'Terjadi kesalahan saat menghitung estimasi harga',
@@ -103,11 +110,8 @@ export class RatesController {
 
     @Get('test-pricing')
     async testPricing(
-        @Query('origin') origin: string = 'Jakarta',
-        @Query('destination') destination: string = 'Default',
         @Query('distance_km') distanceKm: string = '25',
-        @Query('is_toll') isToll: string = 'false',
-        @Query('is_promo') isPromo: string = 'false',
+        @Query('truck_type') truckType?: string,
     ) {
         try {
             // Validasi dan konversi parameter
@@ -119,17 +123,8 @@ export class RatesController {
                 );
             }
 
-            const includeToll = isToll.toLowerCase() === 'true';
-            const promo = isPromo.toLowerCase() === 'true';
-
-            // Panggil method private calculatePrice melalui method public
-            const result = await this.ratesService.testCalculatePrice(
-                distanceKmNumber,
-                includeToll,
-                origin,
-                destination,
-                promo
-            );
+            // Panggil method public untuk test
+            const result = await this.ratesService.testCalculatePrice(distanceKmNumber, truckType);
 
             return {
                 message: 'Test pricing berhasil',

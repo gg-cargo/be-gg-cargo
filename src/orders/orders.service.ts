@@ -6518,7 +6518,11 @@ export class OrdersService {
             // Hitung estimasi harga menggunakan rates service
             const priceEstimate = await this.ratesService.calculateTruckRentalRate(
                 createTruckRentalDto.origin_latlng,
-                createTruckRentalDto.destination_latlng
+                createTruckRentalDto.destination_latlng,
+                undefined,
+                createTruckRentalDto.truck_type,
+                createTruckRentalDto.need_jasa_bongkar,
+                createTruckRentalDto.num_helpers
             );
 
             // Tentukan jarak berdasarkan isUseToll

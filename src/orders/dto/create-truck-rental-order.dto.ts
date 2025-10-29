@@ -123,4 +123,12 @@ export class CreateTruckRentalOrderDto {
     @IsNumber()
     @IsOptional()
     asuransi?: number;
+
+    @IsBoolean()
+    @IsOptional()
+    need_jasa_bongkar?: boolean;
+
+    @IsNumber()
+    @IsOptional()
+    num_helpers?: number; // 0 = driver only, 1-3 = helpers
 }

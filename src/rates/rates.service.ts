@@ -9,7 +9,7 @@ export class RatesService {
     private readonly logger = new Logger(RatesService.name);
     private readonly mapboxAccessToken = process.env.MAPBOX_ACCESS_TOKEN;
 
-    async calculateTruckRentalRate(originLatLng: string, destinationLatLng: string, tollFilter?: boolean) {
+    async calculateTruckRentalRate(originLatLng: string, destinationLatLng: string, tollFilter?: boolean, truckType?: string, needJasaBongkar?: boolean, numHelpers?: number) {
         try {
             let nonTollDistance: number = 0;
             let tollDistance: number = 0;
@@ -68,8 +68,8 @@ export class RatesService {
             }
 
             // Hitung estimasi harga dengan parameter baru
-            const nonTollEstimate = needNonToll ? this.calculatePrice(nonTollDistance, false, 'Jakarta', 'Default', false) : null;
-            const tollEstimate = needToll ? this.calculatePrice(tollDistance, true, 'Jakarta', 'Default', false) : null;
+            const nonTollEstimate = needNonToll ? this.calculatePrice(nonTollDistance, truckType, needJasaBongkar, numHelpers) : null;
+            const tollEstimate = needToll ? this.calculatePrice(tollDistance, truckType, needJasaBongkar, numHelpers) : null;
 
             // Buat response berdasarkan filter
             if (tollFilter === true && tollEstimate) {
@@ -83,7 +83,16 @@ export class RatesService {
                         estimasi_waktu: this.formatDuration(tollDuration),
                         harga_dasar: this.formatRupiah(tollEstimate.basePrice),
                         total: this.formatRupiah(tollEstimate.totalPrice),
-                        is_toll: true
+                        is_toll: true,
+                        rincian: {
+                            jarak_km: tollEstimate.breakdown.jarak_km,
+                            rate_per_km: tollEstimate.breakdown.rate_per_km,
+                            base_price: tollEstimate.breakdown.base_price,
+                            jasa_bongkar: tollEstimate.breakdown.jasa_bongkar,
+                            subtotal: tollEstimate.breakdown.subtotal,
+                            pajak_11_percent: tollEstimate.breakdown.pajak_11_percent,
+                            total: tollEstimate.breakdown.total
+                        }
                     }
                 };
             } else if (tollFilter === false && nonTollEstimate) {
@@ -98,6 +107,15 @@ export class RatesService {
                         harga_dasar: this.formatRupiah(nonTollEstimate.basePrice),
                         total: this.formatRupiah(nonTollEstimate.totalPrice),
                         is_toll: false,
+                        rincian: {
+                            jarak_km: nonTollEstimate.breakdown.jarak_km,
+                            rate_per_km: nonTollEstimate.breakdown.rate_per_km,
+                            base_price: nonTollEstimate.breakdown.base_price,
+                            jasa_bongkar: nonTollEstimate.breakdown.jasa_bongkar,
+                            subtotal: nonTollEstimate.breakdown.subtotal,
+                            pajak_11_percent: nonTollEstimate.breakdown.pajak_11_percent,
+                            total: nonTollEstimate.breakdown.total
+                        }
                     }
                 };
             } else {
@@ -118,7 +136,16 @@ export class RatesService {
                         estimasi_waktu: this.formatDuration(nonTollDuration),
                         harga_dasar: this.formatRupiah(nonTollEstimate.basePrice),
                         total: this.formatRupiah(nonTollEstimate.totalPrice),
-                        is_toll: false
+                        is_toll: false,
+                        rincian: {
+                            jarak_km: nonTollEstimate.breakdown.jarak_km,
+                            rate_per_km: nonTollEstimate.breakdown.rate_per_km,
+                            base_price: nonTollEstimate.breakdown.base_price,
+                            jasa_bongkar: nonTollEstimate.breakdown.jasa_bongkar,
+                            subtotal: nonTollEstimate.breakdown.subtotal,
+                            pajak_11_percent: nonTollEstimate.breakdown.pajak_11_percent,
+                            total: nonTollEstimate.breakdown.total
+                        }
                     };
                 }
 
@@ -129,7 +156,16 @@ export class RatesService {
                         estimasi_waktu: this.formatDuration(tollDuration),
                         harga_dasar: this.formatRupiah(tollEstimate.basePrice),
                         total: this.formatRupiah(tollEstimate.totalPrice),
-                        is_toll: true
+                        is_toll: true,
+                        rincian: {
+                            jarak_km: tollEstimate.breakdown.jarak_km,
+                            rate_per_km: tollEstimate.breakdown.rate_per_km,
+                            base_price: tollEstimate.breakdown.base_price,
+                            jasa_bongkar: tollEstimate.breakdown.jasa_bongkar,
+                            subtotal: tollEstimate.breakdown.subtotal,
+                            pajak_11_percent: tollEstimate.breakdown.pajak_11_percent,
+                            total: tollEstimate.breakdown.total
+                        }
                     };
                 }
 
@@ -243,29 +279,118 @@ export class RatesService {
         }
     }
 
-    private calculatePrice(distanceKm: number, includeToll: boolean, origin: string = 'Jakarta', destination: string = 'Default', isPromo: boolean = false): {
+    private calculatePrice(distanceKm: number, truckType?: string, needJasaBongkar?: boolean, numHelpers?: number): {
         basePrice: number;
         tollFee: number;
         totalPrice: number;
-        category: 'FTL Lokal' | 'FTL Antar Kota' | 'Promo';
+        category: 'FTL Sewa Truk';
+        breakdown: {
+            jarak_km: number;
+            rate_per_km: number;
+            base_price: number;
+            jasa_bongkar: number;
+            subtotal: number;
+            pajak_11_percent: number;
+            total: number;
+        };
     } {
-        // 1. Cek promo terlebih dahulu jika isPromo === true
-        if (isPromo) {
-            const promoResult = this.calculatePromoPrice(origin, destination);
-            if (promoResult) {
-                this.logger.log(`Promo calculation - Origin: ${origin}, Destination: ${destination}, Price: ${promoResult.totalPrice}, Category: ${promoResult.category}`);
-                return promoResult;
+        // Gunakan jarak aktual tanpa minimum charge
+        const chargedDistance = Math.round(distanceKm * 100) / 100;
+
+        // Rate per km berdasarkan tier
+        const ratePerKm = this.getTieredRatePerKm(distanceKm);
+
+        // Base price berdasarkan unit
+        const baseByUnit = this.getBasePriceForUnit(truckType);
+
+        // Rumus: ((Km x rate/km) + base_price) + 11%
+        const kmCost = Math.round(chargedDistance * ratePerKm);
+        const subtotal = kmCost + baseByUnit;
+
+        // Tambahkan jasa bongkar jika diperlukan
+        const jasaBongkar = (needJasaBongkar ? this.calculateJasaBongkar(truckType, numHelpers) : 0);
+        const subtotalWithBongkar = subtotal + jasaBongkar;
+
+        const pajak = Math.round(subtotalWithBongkar * 0.11);
+        const total = Math.round(subtotalWithBongkar * 1.11);
+
+        this.logger.log(`Sewa Truk calculation - Distance: ${distanceKm}km (charged: ${chargedDistance}km), Rate: ${ratePerKm}/km, Base: ${baseByUnit}, JasaBongkar: ${jasaBongkar}, Subtotal: ${subtotalWithBongkar}, Pajak(11%): ${pajak}, Total: ${total}, Unit: ${truckType || 'N/A'}`);
+
+        return {
+            basePrice: subtotalWithBongkar,
+            tollFee: 0,
+            totalPrice: total,
+            category: 'FTL Sewa Truk',
+            breakdown: {
+                jarak_km: chargedDistance,
+                rate_per_km: ratePerKm,
+                base_price: baseByUnit,
+                jasa_bongkar: jasaBongkar,
+                subtotal: subtotalWithBongkar,
+                pajak_11_percent: pajak,
+                total: total
+            }
+        };
+    }
+
+    private getTieredRatePerKm(distanceKm: number): number {
+        // Jika kurang dari 55km, gunakan minimum charge rule (rate 2800)
+        if (distanceKm < 55) return 2900;
+        if (distanceKm >= 55 && distanceKm <= 250) return 2700;
+        if (distanceKm >= 251 && distanceKm <= 500) return 2600;
+        if (distanceKm > 500) return 2500;
+        // Default untuk jarak antara 10-54 km jika suatu saat dipakai
+        if (distanceKm >= 10 && distanceKm <= 54) return 2900;
+        // Fallback
+        return 2900;
+    }
+
+    private getBasePriceForUnit(truckType?: string): number {
+        if (!truckType) return 265000; // default ke kelompok kecil
+        const normalized = truckType.toUpperCase().replace(/\s+/g, '');
+        // VAN, PICK UP, TRAGA => 265,000
+        if (normalized.includes('VAN') || normalized.includes('PICKUP') || normalized.includes('TRAGA')) {
+            return 265000;
+        }
+        // CDD, CDDL => 405,000
+        if (normalized.includes('CDD')) {
+            return 405000;
+        }
+        // Default
+        return 265000;
+    }
+
+    /**
+     * Hitung biaya jasa bongkar berdasarkan truck type dan jumlah helper
+     */
+    private calculateJasaBongkar(truckType?: string, numHelpers?: number): number {
+        if (!truckType || numHelpers === undefined || numHelpers < 0) return 0;
+
+        const normalized = truckType.toUpperCase().replace(/\s+/g, '');
+
+        // CDD/CDDL/FUSO
+        if (normalized.includes('CDD') || normalized.includes('FUSO')) {
+            switch (numHelpers) {
+                case 0: return 85000;   // Supir saja
+                case 1: return 180000;  // +1 helper
+                case 2: return 280000;  // +2 helpers
+                case 3: return 380000;  // +3 helpers
+                default: return 380000; // Max
             }
         }
 
-        // 2. Pilih rule berdasarkan jarak
-        if (distanceKm <= 100) {
-            // Gunakan FTL_Lokal untuk jarak <= 100 km
-            return this.calculateLocalFTL(distanceKm, includeToll);
-        } else {
-            // Gunakan FTL_AntarKota untuk jarak > 100 km
-            return this.calculateInterCityFTL(origin, destination, distanceKm, includeToll);
+        // VAN/TRAGA/CDE
+        if (normalized.includes('VAN') || normalized.includes('TRAGA') || normalized.includes('CDE') || normalized.includes('PICKUP')) {
+            switch (numHelpers) {
+                case 0: return 75000;   // Supir saja
+                case 1: return 150000;  // +1 helper
+                case 2: return 250000;  // +2 helpers
+                case 3: return 300000;  // +3 helpers
+                default: return 300000; // Max
+            }
         }
+
+        return 0;
     }
 
     /**
@@ -581,15 +706,12 @@ export class RatesService {
     /**
      * Method public untuk test calculatePrice
      */
-    async testCalculatePrice(distanceKm: number, includeToll: boolean, origin: string, destination: string, isPromo: boolean): Promise<any> {
-        const result = this.calculatePrice(distanceKm, includeToll, origin, destination, isPromo);
+    async testCalculatePrice(distanceKm: number, truckType?: string): Promise<any> {
+        const result = this.calculatePrice(distanceKm, truckType);
 
         return {
-            origin,
-            destination,
             distance_km: distanceKm,
-            include_toll: includeToll,
-            is_promo: isPromo,
+            truck_type: truckType || null,
             category: result.category,
             base_price: this.formatRupiah(result.basePrice),
             toll_fee: this.formatRupiah(result.tollFee),
