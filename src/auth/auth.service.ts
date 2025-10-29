@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/sequelize';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
+import * as FormData from 'form-data';
+import axios from 'axios';
 import { User } from '../models/user.model';
 import { DumpOtp } from '../models/dump-otp.model';
 import { PasswordReset } from '../models/password-reset.model';
@@ -44,6 +47,7 @@ export class AuthService {
     @InjectModel(ServiceCenter)
     private serviceCenterModel: typeof ServiceCenter,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) { }
 
   // Generate OTP
@@ -104,7 +108,19 @@ export class AuthService {
         created_at: new Date(),
       });
 
-      // TODO: Send OTP via SMS/Email
+      // Send OTP via Email
+      try {
+        await this.sendMailgunEmail({
+          to: [email],
+          subject: 'OTP Verifikasi - GG KARGO',
+          html: this.generateOTPEmailHtml(user.getDataValue('name'), otp),
+        });
+        this.logger.log(`OTP sent via email to ${email}`);
+      } catch (emailError) {
+        this.logger.error(`Failed to send OTP email to ${email}: ${emailError.message}`);
+        // Continue registration even if email fails
+      }
+
       this.logger.log(`OTP generated for ${phone}: ${otp}`);
 
       this.logger.log(`User registered successfully: ${user.getDataValue('id')}`);
@@ -325,7 +341,19 @@ export class AuthService {
         created_at: new Date(),
       });
 
-      // TODO: Send OTP via SMS/Email
+      // Send OTP via Email
+      try {
+        await this.sendMailgunEmail({
+          to: [user.getDataValue('email')],
+          subject: 'OTP Baru - GG KARGO',
+          html: this.generateOTPEmailHtml(user.getDataValue('name'), otp),
+        });
+        this.logger.log(`OTP resent via email to ${user.getDataValue('email')}`);
+      } catch (emailError) {
+        this.logger.error(`Failed to send OTP email to ${user.getDataValue('email')}: ${emailError.message}`);
+        // Continue even if email fails
+      }
+
       this.logger.log(`New OTP generated for ${phone}: ${otp}`);
 
       return {
@@ -529,5 +557,111 @@ export class AuthService {
       this.logger.error(`Remember token validation failed: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  /**
+   * Mengirim email melalui Mailgun API
+   */
+  private async sendMailgunEmail(emailData: {
+    to: string[];
+    cc?: string[];
+    subject: string;
+    html: string;
+    from?: string;
+  }): Promise<{ id: string }> {
+    const domain = this.configService.get('MAILGUN_DOMAIN');
+    const apiKey = this.configService.get('MAILGUN_API_KEY');
+
+    if (!domain || !apiKey) {
+      this.logger.warn('Konfigurasi Mailgun tidak lengkap, skip pengiriman email');
+      return { id: 'skipped' };
+    }
+
+    const formData = new FormData();
+    formData.append('from', emailData.from || 'GG KARGO <no-reply@99delivery.id>');
+    formData.append('to', emailData.to.join(','));
+    formData.append('h:Content-Type', 'text/html; charset=UTF-8');
+
+    if (emailData.cc && emailData.cc.length > 0) {
+      formData.append('cc', emailData.cc.join(','));
+    }
+
+    formData.append('subject', emailData.subject);
+    formData.append('html', emailData.html);
+
+    try {
+      const response = await axios.post(
+        `https://api.mailgun.net/v3/${domain}/messages`,
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+            'Authorization': `Basic ${Buffer.from(`api:${apiKey}`).toString('base64')}`
+          }
+        }
+      );
+
+      if (response.status === 200) {
+        this.logger.log(`Email sent successfully via Mailgun: ${response.data.id}`);
+        return { id: response.data.id };
+      } else {
+        throw new Error(`Mailgun API error: ${response.status} ${response.statusText}`);
+      }
+
+    } catch (error) {
+      this.logger.error(`Mailgun API error: ${error.message}`);
+      throw new Error(`Gagal mengirim email melalui Mailgun: ${error.message}`);
+    }
+  }
+
+  /**
+   * Generate HTML template untuk email OTP
+   */
+  private generateOTPEmailHtml(name: string, otp: string): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #1A723B; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f5f5f5; padding: 30px; }
+          .otp-box { background-color: #fff; border: 2px solid #1A723B; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0; }
+          .otp-code { font-size: 32px; font-weight: bold; color: #1A723B; letter-spacing: 5px; }
+          .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>GG KARGO</h1>
+            <p>Verifikasi Kode OTP</p>
+          </div>
+          <div class="content">
+            <p>Halo <strong>${name}</strong>,</p>
+            <p>Terima kasih telah melakukan registrasi di GG KARGO. Gunakan kode OTP berikut untuk verifikasi akun Anda:</p>
+            
+            <div class="otp-box">
+              <p style="margin: 0; color: #666;">Kode OTP Anda:</p>
+              <div class="otp-code">${otp}</div>
+            </div>
+            
+            <p><strong>Perhatian:</strong></p>
+            <ul>
+              <li>Kode OTP ini berlaku selama <strong>15 menit</strong></li>
+              <li>Jangan berikan kode ini kepada siapapun</li>
+              <li>Jika Anda tidak melakukan registrasi, abaikan email ini</li>
+            </ul>
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} GG KARGO. Hak Cipta Dilindungi.</p>
+            <p>Email ini dikirim secara otomatis, mohon tidak membalas email ini.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
   }
 } 

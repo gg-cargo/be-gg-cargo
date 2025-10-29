@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { PassportModule } from '@nestjs/passport';
+import { ConfigModule } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
@@ -14,6 +15,7 @@ import { ServiceCenter } from '../models/service-center.model';
 
 @Module({
   imports: [
+    ConfigModule,
     SequelizeModule.forFeature([User, DumpOtp, PasswordReset, Level, Hub, ServiceCenter]),
     PassportModule,
     JwtModule.register({
