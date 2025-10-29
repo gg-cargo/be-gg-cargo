@@ -298,7 +298,7 @@ export class RatesService {
         const chargedDistance = Math.round(distanceKm * 100) / 100;
 
         // Rate per km berdasarkan tier
-        const ratePerKm = this.getTieredRatePerKm(distanceKm);
+        const ratePerKm = this.getTieredRatePerKm(distanceKm, truckType);
 
         // Base price berdasarkan unit
         const baseByUnit = this.getBasePriceForUnit(truckType);
@@ -307,7 +307,8 @@ export class RatesService {
         const kmCost = Math.round(chargedDistance * ratePerKm);
         const subtotal = kmCost + baseByUnit;
 
-        const pajak = Math.round(subtotal * 0.11);
+        const taxPercent = this.getTaxPercentForUnit(truckType); // 0.11 or 0.15
+        const pajak = Math.round(subtotal * taxPercent);
         const totalWithPajak = subtotal + pajak;
 
         // Tambahkan jasa bongkar setelah pajak jika diperlukan
@@ -333,15 +334,37 @@ export class RatesService {
         };
     }
 
-    private getTieredRatePerKm(distanceKm: number): number {
-        // Jika kurang dari 55km, gunakan minimum charge rule (rate 2800)
-        if (distanceKm < 55) return 2900;
-        if (distanceKm >= 55 && distanceKm <= 250) return 2700;
-        if (distanceKm >= 251 && distanceKm <= 500) return 2600;
-        if (distanceKm > 500) return 2500;
-        // Default untuk jarak antara 10-54 km jika suatu saat dipakai
-        if (distanceKm >= 10 && distanceKm <= 54) return 2900;
-        // Fallback
+    private getTieredRatePerKm(distanceKm: number, truckType?: string): number {
+        const d = Math.max(0, Math.round(distanceKm * 100) / 100);
+        const normalized = (truckType || '').toUpperCase().replace(/\s+/g, '');
+
+        const isFuso = normalized.includes('FUSO') || normalized.includes('WING');
+        const isSmall = normalized.includes('VAN') || normalized.includes('TRAGA') || normalized.includes('PICKUP') || normalized.includes('CDE');
+        const isMedium = normalized.includes('CDD') || normalized.includes('3-WAY') || normalized.includes('3WAY') || normalized.includes('CDDL');
+
+        // FUSO / WING BOX
+        if (isFuso) {
+            if (d >= 10 && d <= 54) return 6000;
+            if (d >= 55 && d <= 250) return 5500;
+            if (d >= 251 && d <= 500) return 5000;
+            if (d >= 501 && d <= 1000) return 4500;
+            if (d > 1000) return 3900;
+            // <10 km fallback gunakan tier pertama
+            return 6000;
+        }
+
+        // VAN / TRAGA / PICKUP and CDD / CDDL / 3-WAY share same per-km rates
+        if (isSmall || isMedium || !truckType) {
+            if (d >= 10 && d <= 54) return 2900;
+            if (d >= 55 && d <= 250) return 2800;
+            if (d >= 251 && d <= 500) return 2600;
+            if (d >= 501 && d <= 1000) return 2500;
+            if (d > 1000) return 2400;
+            // <10 km fallback gunakan tier pertama
+            return 2900;
+        }
+
+        // Default
         return 2900;
     }
 
@@ -350,14 +373,26 @@ export class RatesService {
         const normalized = truckType.toUpperCase().replace(/\s+/g, '');
         // VAN, PICK UP, TRAGA => 265,000
         if (normalized.includes('VAN') || normalized.includes('PICKUP') || normalized.includes('TRAGA')) {
-            return 265000;
+            return 267000;
         }
         // CDD, CDDL => 405,000
         if (normalized.includes('CDD')) {
             return 405000;
         }
+        // FUSO / WING BOX => 1,000,000
+        if (normalized.includes('FUSO') || normalized.includes('WING')) {
+            return 1000000;
+        }
         // Default
         return 265000;
+    }
+
+    private getTaxPercentForUnit(truckType?: string): number {
+        const normalized = (truckType || '').toUpperCase().replace(/\s+/g, '');
+        if (normalized.includes('FUSO') || normalized.includes('WING')) {
+            return 0.15;
+        }
+        return 0.11;
     }
 
     /**
