@@ -303,21 +303,21 @@ export class RatesService {
         // Base price berdasarkan unit
         const baseByUnit = this.getBasePriceForUnit(truckType);
 
-        // Rumus: ((Km x rate/km) + base_price) + 11%
+        // Rumus: ((Km x rate/km) + base_price) + 11% + jasa_bongkar
         const kmCost = Math.round(chargedDistance * ratePerKm);
         const subtotal = kmCost + baseByUnit;
 
-        // Tambahkan jasa bongkar jika diperlukan
+        const pajak = Math.round(subtotal * 0.11);
+        const totalWithPajak = subtotal + pajak;
+
+        // Tambahkan jasa bongkar setelah pajak jika diperlukan
         const jasaBongkar = (needJasaBongkar ? this.calculateJasaBongkar(truckType, numHelpers) : 0);
-        const subtotalWithBongkar = subtotal + jasaBongkar;
+        const total = Math.round(totalWithPajak + jasaBongkar);
 
-        const pajak = Math.round(subtotalWithBongkar * 0.11);
-        const total = Math.round(subtotalWithBongkar * 1.11);
-
-        this.logger.log(`Sewa Truk calculation - Distance: ${distanceKm}km (charged: ${chargedDistance}km), Rate: ${ratePerKm}/km, Base: ${baseByUnit}, JasaBongkar: ${jasaBongkar}, Subtotal: ${subtotalWithBongkar}, Pajak(11%): ${pajak}, Total: ${total}, Unit: ${truckType || 'N/A'}`);
+        this.logger.log(`Sewa Truk calculation - Distance: ${distanceKm}km (charged: ${chargedDistance}km), Rate: ${ratePerKm}/km, Base: ${baseByUnit}, Subtotal: ${subtotal}, Pajak(11%): ${pajak}, TotalWithPajak: ${totalWithPajak}, JasaBongkar: ${jasaBongkar}, Total: ${total}, Unit: ${truckType || 'N/A'}`);
 
         return {
-            basePrice: subtotalWithBongkar,
+            basePrice: totalWithPajak,
             tollFee: 0,
             totalPrice: total,
             category: 'FTL Sewa Truk',
@@ -326,7 +326,7 @@ export class RatesService {
                 rate_per_km: ratePerKm,
                 base_price: baseByUnit,
                 jasa_bongkar: jasaBongkar,
-                subtotal: subtotalWithBongkar,
+                subtotal: subtotal,
                 pajak_11_percent: pajak,
                 total: total
             }
