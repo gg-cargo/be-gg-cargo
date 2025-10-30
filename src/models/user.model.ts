@@ -458,6 +458,25 @@ export class User extends Model {
   })
   show_price: number;
 
+  // === Penambahan field untuk transporters/kurir registration ===
+  @Column({ type: DataType.STRING(100), allowNull: true })
+  ktp_tempat_tanggal_lahir: string;
+  @Column({ type: DataType.STRING(25), allowNull: true })
+  ktp_jenis_kelamin: string;
+  @Column({ type: DataType.TEXT, allowNull: true })
+  ktp_alamat: string;
+  @Column({ type: DataType.STRING(25), allowNull: true })
+  ktp_agama: string;
+  @Column({ type: DataType.STRING(25), allowNull: true })
+  ktp_status_perkawinan: string;
+  @Column({ type: DataType.STRING(15), allowNull: true })
+  sim_jenis: string;
+  @Column({ type: DataType.STRING(100), allowNull: true })
+  sim_nama_pemegang: string;
+  @Column({ type: DataType.TEXT, allowNull: true })
+  url_foto_kurir_sim: string;
+  // === END Penambahan field registration ===
+
   // Relations
   @BelongsTo(() => Level, { foreignKey: 'level', targetKey: 'level' })
   levelData: Level;

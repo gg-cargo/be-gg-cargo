@@ -170,6 +170,11 @@ export class TruckList extends Model<TruckList> {
     })
     konsumsi_solar: number;
 
+    @Column({ type: DataType.TEXT, allowNull: true })
+    kir_url: string;
+    @Column({ type: DataType.TEXT, allowNull: true })
+    stnk_url: string;
+
     // Associations
     @BelongsTo(() => User, 'driver_id')
     driver: User;

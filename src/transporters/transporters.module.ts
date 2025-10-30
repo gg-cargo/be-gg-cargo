@@ -7,9 +7,12 @@ import { TruckList } from '../models/truck-list.model';
 import { JobAssign } from '../models/job-assign.model';
 import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
+import { UsersEmergencyContact } from '../models/users_emergency_contact.model';
 
 @Module({
-    imports: [SequelizeModule.forFeature([User, TruckList, JobAssign, OrderPickupDriver, OrderDeliverDriver])],
+    imports: [SequelizeModule.forFeature([
+        User, TruckList, JobAssign, OrderPickupDriver, OrderDeliverDriver, UsersEmergencyContact
+    ])],
     controllers: [TransportersController],
     providers: [TransportersService],
 })

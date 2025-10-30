@@ -7,6 +7,8 @@ import { JobAssign } from '../models/job-assign.model';
 import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
 import { AvailableTransportersQueryDto, AvailableTransportersResponseDto } from './dto/available-transporters.dto';
+import { Sequelize } from 'sequelize-typescript';
+import { UsersEmergencyContact } from '../models/users_emergency_contact.model';
 
 @Injectable()
 export class TransportersService {
@@ -16,6 +18,8 @@ export class TransportersService {
         @InjectModel(JobAssign) private readonly jobAssignModel: typeof JobAssign,
         @InjectModel(OrderPickupDriver) private readonly pickupModel: typeof OrderPickupDriver,
         @InjectModel(OrderDeliverDriver) private readonly deliverModel: typeof OrderDeliverDriver,
+        @InjectModel(UsersEmergencyContact) private readonly usersEmergencyContactModel: typeof UsersEmergencyContact,
+        private readonly sequelize: Sequelize
     ) { }
 
     async getAvailableTransporters(query: AvailableTransportersQueryDto): Promise<AvailableTransportersResponseDto> {
@@ -107,6 +111,103 @@ export class TransportersService {
             });
 
         return { transporters };
+    }
+
+    async registerTransporter(body: any) {
+        const { email, phone, ktp, sim, foto_kurir_sim, foto_kendaraan, kontak_emergency, alamat, kir, stnk, first_name, last_name, password, role } = body;
+        if (!email || !phone || !ktp?.nik) throw new BadRequestException('Data utama tidak lengkap');
+        if (!password) throw new BadRequestException('Password wajib diisi');
+        let userLevel = 4;
+        if (role !== undefined) {
+            if (![4, 8].includes(Number(role))) throw new BadRequestException('Role harus 4 (transporter) atau 8 (kurir)');
+            userLevel = Number(role);
+        }
+        const existing = await this.userModel.findOne({
+            where: { [Op.or]: [{ email }, { phone }, { nik: ktp.nik }] },
+        });
+        if (existing) throw new BadRequestException('Email, phone, atau NIK sudah terdaftar');
+        if (!/^[0-9]{16}$/.test(ktp.nik)) throw new BadRequestException('Format NIK tidak valid');
+        const name = [first_name, last_name].filter(Boolean).join(' ');
+        // Hash password before storing
+        const bcrypt = require('bcryptjs');
+        const hashedPassword = await bcrypt.hash(password, 10);
+        return await this.sequelize.transaction(async (t) => {
+            const user = await this.userModel.create({
+                name,
+                phone,
+                email,
+                password: hashedPassword,
+                nik: ktp.nik,
+                alamat,
+                sim: sim?.nomor,
+                isApprove: 0,
+                aktif: 0,
+                level: userLevel,
+                // Field KTP sesuai body
+                ktp_tempat_tanggal_lahir: ktp.tempat_tanggal_lahir,
+                ktp_jenis_kelamin: ktp.jenis_kelamin,
+                ktp_alamat: ktp.alamat,
+                ktp_agama: ktp.agama,
+                ktp_status_perkawinan: ktp.status_perkawinan,
+                // Field SIM detail
+                sim_jenis: sim?.jenis,
+                sim_nama_pemegang: sim?.nama_pemegang,
+                // Foto terkait dokumen
+                url_foto_kurir_sim: foto_kurir_sim,
+            }, { transaction: t });
+            // Simpan data truk (opsional)
+            let truck: any = null;
+            if (foto_kendaraan && Array.isArray(foto_kendaraan) && foto_kendaraan.length > 0) {
+                truck = await this.truckModel.create({
+                    driver_id: user.id,
+                    image: JSON.stringify(foto_kendaraan),
+                    jenis_mobil: sim?.jenis,
+                    kir_url: kir,
+                    stnk_url: stnk,
+                } as any, { transaction: t });
+            }
+            // Simpan kontak emergency (opsional)
+            if (kontak_emergency && Array.isArray(kontak_emergency)) {
+                for (const kc of kontak_emergency) {
+                    await this.usersEmergencyContactModel.create({
+                        user_id: user.id,
+                        nomor: kc.nomor,
+                        keterangan: kc.keterangan,
+                    }, { transaction: t });
+                }
+            }
+            return {
+                user_id: user.id,
+                name,
+                isApprove: user.isApprove,
+                aktif: user.aktif,
+                truck_id: truck ? truck.id : null,
+                role: user.level,
+            };
+        });
+    }
+
+    async listTransportersOrCouriers(role?: string, page = 1, limit = 10) {
+        const where: any = {};
+        if (role === '4') where.level = 4;
+        else if (role === '8') where.level = 8;
+        else where.level = [4, 8];
+
+        const offset = (page - 1) * limit;
+        const { count, rows } = await this.userModel.findAndCountAll({
+            where,
+            attributes: ['name', 'phone', 'isApprove'],
+            order: [['id', 'DESC']],
+            offset,
+            limit,
+        });
+
+        const result = rows.map(u => ({
+            name: u.getDataValue('name'),
+            phone: u.getDataValue('phone'),
+            status: u.getDataValue('isApprove') === 1 ? 'Approved' : (u.getDataValue('isApprove') === 0 ? 'Pending' : String(u.getDataValue('isApprove')))
+        }));
+        return { data: result, total: count };
     }
 }
 
