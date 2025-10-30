@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Post, Query, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { Body, Controller, HttpException, HttpStatus, Post, Query, Get, Patch, Param, ParseIntPipe } from '@nestjs/common';
 import { TransportersService } from './transporters.service';
 
 @Controller('transporters')
@@ -58,6 +58,19 @@ export class TransportersController {
             };
         } catch (e) {
             throw new HttpException(e.message || 'Transporter tidak ditemukan', HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Patch('update/:id')
+    async updateTransporter(@Param('id', ParseIntPipe) id: number, @Body() body: any) {
+        try {
+            const data = await this.transportersService.updateTransporter(id, body);
+            return {
+                message: 'Berhasil mengupdate data transporter',
+                data,
+            };
+        } catch (e) {
+            throw new HttpException(e.message || 'Gagal update transporter', HttpStatus.BAD_REQUEST);
         }
     }
 }

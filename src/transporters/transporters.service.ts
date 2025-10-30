@@ -265,6 +265,66 @@ export class TransportersService {
             })) || [],
         };
     }
+
+    async updateTransporter(id: number, body: any) {
+        if (!id || isNaN(id)) throw new BadRequestException('ID tidak valid');
+        const user = await this.userModel.findByPk(id);
+        if (!user) throw new BadRequestException('Transporter tidak ditemukan');
+        const {
+            first_name, last_name, email, phone, password, 
+            ktp, sim, foto_kurir_sim, foto_kendaraan, alamat, kir, stnk, role, kontak_emergency
+        } = body;
+        const name = [first_name, last_name].filter(Boolean).join(' ');
+        // Normalisasi update fields
+        const updateFields: any = {
+            email, phone, address: alamat, nik: ktp?.nik, name,
+            ktp_tempat_tanggal_lahir: ktp?.tempat_tanggal_lahir,
+            ktp_jenis_kelamin: ktp?.jenis_kelamin,
+            ktp_alamat: ktp?.alamat,
+            ktp_agama: ktp?.agama,
+            ktp_status_perkawinan: ktp?.status_perkawinan,
+            sim: sim?.nomor,
+            sim_jenis: sim?.jenis,
+            sim_nama_pemegang: sim?.nama_pemegang,
+            url_foto_kurir_sim: foto_kurir_sim,
+        };
+        if (role !== undefined && [4, 8].includes(Number(role))) updateFields.level = Number(role);
+        // Password
+        if (password) {
+            const bcrypt = require('bcryptjs');
+            updateFields.password = await bcrypt.hash(password, 10);
+        }
+        return await this.sequelize.transaction(async (t) => {
+            // Update user
+            await this.userModel.update(updateFields, { where: { id }, transaction: t });
+            // Truck update (hapus semua, buat baru jika ada array baru)
+            if (foto_kendaraan) {
+                await this.truckModel.destroy({ where: { driver_id: id }, transaction: t });
+                if (Array.isArray(foto_kendaraan) && foto_kendaraan.length > 0) {
+                    await this.truckModel.create({
+                        driver_id: id,
+                        image: JSON.stringify(foto_kendaraan),
+                        jenis_mobil: sim?.jenis,
+                        kir_url: kir,
+                        stnk_url: stnk,
+                    } as any, { transaction: t });
+                }
+            }
+            // Kontak emergency update (hapus semua, insert baru)
+            if (Array.isArray(kontak_emergency)) {
+                await this.usersEmergencyContactModel.destroy({ where: { user_id: id }, transaction: t });
+                for (const kc of kontak_emergency) {
+                    await this.usersEmergencyContactModel.create({
+                        user_id: id,
+                        nomor: kc.nomor,
+                        keterangan: kc.keterangan,
+                    }, { transaction: t });
+                }
+            }
+            // Ambil dan kembalikan detail
+            return await this.getTransporterDetail(id);
+        });
+    }
 }
 
 
