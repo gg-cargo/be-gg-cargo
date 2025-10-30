@@ -60,6 +60,7 @@ import { RatesService } from '../rates/rates.service';
 import { ListTruckRentalDto } from './dto/list-truck-rental.dto';
 import { AssignTruckRentalDto } from './dto/assign-truck-rental.dto';
 import { AssignTruckRentalResponseDto } from './dto/assign-truck-rental-response.dto';
+import type { Express } from 'express';
 import { UpdateItemDetailsDto } from './dto/update-item-details.dto';
 import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response.dto';
 import { JobAssign } from '../models/job-assign.model';
@@ -119,7 +120,7 @@ export class OrdersService {
      * Helper function untuk menyimpan foto bukti bypass reweight
      */
     private async saveProofImage(
-        proofImage: File,
+        proofImage: Express.Multer.File,
         orderId: number,
         userId: number,
         transaction?: Transaction,

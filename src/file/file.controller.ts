@@ -6,7 +6,6 @@ import { extname } from 'path';
 import { join } from 'path';
 import type { Express } from 'express';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import type { File } from 'multer';
 
 @UseGuards(JwtAuthGuard)
 @Controller('file')
@@ -23,7 +22,7 @@ export class FileController {
             },
         }),
     }))
-    async uploadFile(@UploadedFile() file: File, @Body('used_for') used_for: string, @Req() req: any) {
+    async uploadFile(@UploadedFile() file: Express.Multer.File, @Body('used_for') used_for: string, @Req() req: any) {
         if (!file) {
             throw new HttpException('No file uploaded', HttpStatus.BAD_REQUEST);
         }

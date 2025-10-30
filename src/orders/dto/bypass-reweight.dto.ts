@@ -1,6 +1,6 @@
 import { IsString, IsNotEmpty, IsOptional, IsIn, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
-import type { File } from 'multer';
+import type { Express } from 'express';
 
 export class BypassReweightDto {
     @IsString({ message: 'Status bypass reweight harus berupa string' })
@@ -17,5 +17,5 @@ export class BypassReweightDto {
     updated_by_user_id: number;
 
     @IsOptional()
-    proof_image?: File;
+    proof_image?: Express.Multer.File;
 } 

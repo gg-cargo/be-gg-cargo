@@ -1,7 +1,7 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { FileLog } from '../models/file-log.model';
-import type { File } from 'multer';
+import type { Express } from 'express';
 
 @Injectable()
 export class FileService {
@@ -10,7 +10,7 @@ export class FileService {
         private fileLogModel: typeof FileLog,
     ) { }
 
-    async createFileLog(file: File, user_id?: number, used_for?: string) {
+    async createFileLog(file: Express.Multer.File, user_id?: number, used_for?: string) {
         try {
             // @ts-ignore
             const created = await this.fileLogModel.create({

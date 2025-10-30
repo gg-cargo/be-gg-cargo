@@ -1,6 +1,6 @@
 import { IsArray, IsNotEmpty, IsNumber, IsOptional, ValidateNested, IsString, IsIn } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import type { File } from 'multer';
+import type { Express } from 'express';
 
 export class ReweightPieceItemDto {
     @IsNumber({}, { message: 'Piece ID harus berupa angka' })
@@ -61,5 +61,5 @@ export class ReweightBulkDto {
     reweight_by_user_id: number;
 
     @IsOptional()
-    images?: File[];
+    images?: Express.Multer.File[];
 }

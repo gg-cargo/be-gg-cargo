@@ -2,7 +2,7 @@ import { Controller, Post, Body, UseGuards, Request, HttpStatus, HttpCode, Param
 import { FileInterceptor, FilesInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-import type { File } from 'multer';
+import type { Express } from 'express';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
@@ -484,7 +484,7 @@ export class OrdersController {
         const reweightBulkDto: ReweightBulkDto = {
             actions,
             reweight_by_user_id,
-            images: images || []
+            images: (images as unknown as Express.Multer.File[]) || []
         };
 
         return this.ordersService.reweightBulk(reweightBulkDto);
@@ -504,7 +504,7 @@ export class OrdersController {
     async bypassReweight(
         @Param('order_id', ParseIntPipe) orderId: number,
         @Body() body: any,
-        @UploadedFile() proofImage: File,
+        @UploadedFile() proofImage: Express.Multer.File,
     ): Promise<BypassReweightResponseDto> {
         // Parse bypass_reweight_status dari body
         const bypass_reweight_status = body.bypass_reweight_status;

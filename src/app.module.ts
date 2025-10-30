@@ -26,6 +26,7 @@ import { TransportersModule } from './transporters/transporters.module';
 import { NotificationBadgesModule } from './notification-badges/notification-badges.module';
 import { RatesModule } from './rates/rates.module';
 import { GeocodingModule } from './geocoding/geocoding.module';
+import { OcrModule } from './ocr/ocr.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { GeocodingModule } from './geocoding/geocoding.module';
     NotificationBadgesModule,
     RatesModule,
     GeocodingModule,
+    OcrModule,
   ],
   controllers: [AppController],
   providers: [AppService],
