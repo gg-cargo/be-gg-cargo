@@ -1,5 +1,6 @@
 import { Column, DataType, Model, Table, BelongsTo, HasMany } from 'sequelize-typescript';
 import { Level, ServiceCenter, Hub, Saldo, TransactionPayment, TruckList } from './index';
+import { UsersEmergencyContact } from './users_emergency_contact.model';
 
 @Table({
   tableName: 'users',
@@ -495,4 +496,7 @@ export class User extends Model {
 
   @HasMany(() => TruckList, { foreignKey: 'driver_id', sourceKey: 'id', as: 'trucks' })
   trucks: TruckList[];
+
+  @HasMany(() => UsersEmergencyContact, { foreignKey: 'user_id', sourceKey: 'id', as: 'emergencyContacts' })
+  emergencyContacts: UsersEmergencyContact[];
 } 

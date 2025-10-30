@@ -138,7 +138,7 @@ export class TransportersService {
                 email,
                 password: hashedPassword,
                 nik: ktp.nik,
-                alamat,
+                address: alamat,
                 sim: sim?.nomor,
                 isApprove: 0,
                 aktif: 0,
@@ -196,18 +196,74 @@ export class TransportersService {
         const offset = (page - 1) * limit;
         const { count, rows } = await this.userModel.findAndCountAll({
             where,
-            attributes: ['name', 'phone', 'isApprove'],
+            attributes: ['id', 'name', 'phone', 'isApprove'],
             order: [['id', 'DESC']],
             offset,
             limit,
         });
 
-        const result = rows.map(u => ({
+        const result = rows.map((u: any) => ({
+            id: u.getDataValue('id'),
             name: u.getDataValue('name'),
             phone: u.getDataValue('phone'),
             status: u.getDataValue('isApprove') === 1 ? 'Approved' : (u.getDataValue('isApprove') === 0 ? 'Pending' : String(u.getDataValue('isApprove')))
         }));
         return { data: result, total: count };
+    }
+
+    async getTransporterDetail(id: number) {
+        if (!id || isNaN(id)) throw new BadRequestException('ID tidak valid');
+        const user = await this.userModel.findByPk(id, {
+            attributes: [
+                'id', 'name', 'phone', 'email', 'level', 'nik', 'address', 'aktif', 'isApprove',
+                'ktp_tempat_tanggal_lahir', 'ktp_jenis_kelamin', 'ktp_alamat', 'ktp_agama', 'ktp_status_perkawinan',
+                'sim', 'sim_jenis', 'sim_nama_pemegang', 'url_foto_kurir_sim'
+            ],
+            include: [
+                {
+                    model: this.truckModel,
+                    as: 'trucks', // relasi User.hasMany(TruckList, ... as: 'trucks')
+                },
+                {
+                    model: this.usersEmergencyContactModel,
+                    as: 'emergencyContacts',
+                },
+            ],
+        });
+        if (!user) throw new BadRequestException('Transporter tidak ditemukan');
+        // Mapping field untuk response
+        return {
+            id: user.getDataValue('id'),
+            name: user.getDataValue('name'),
+            phone: user.getDataValue('phone'),
+            email: user.getDataValue('email'),
+            role: user.getDataValue('level'),
+            nik: user.getDataValue('nik'),
+            alamat: user.getDataValue('address'),
+            aktif: user.getDataValue('aktif'),
+            status: user.getDataValue('isApprove') === 1 ? 'Approved' : (user.getDataValue('isApprove') === 0 ? 'Pending' : String(user.getDataValue('isApprove'))),
+            ktp_tempat_tanggal_lahir: user.getDataValue('ktp_tempat_tanggal_lahir'),
+            ktp_jenis_kelamin: user.getDataValue('ktp_jenis_kelamin'),
+            ktp_alamat: user.getDataValue('ktp_alamat'),
+            ktp_agama: user.getDataValue('ktp_agama'),
+            ktp_status_perkawinan: user.getDataValue('ktp_status_perkawinan'),
+            sim: user.getDataValue('sim'),
+            sim_jenis: user.getDataValue('sim_jenis'),
+            sim_nama_pemegang: user.getDataValue('sim_nama_pemegang'),
+            url_foto_kurir_sim: user.getDataValue('url_foto_kurir_sim'),
+            trucks: user.getDataValue('trucks')?.map((t: any) => ({
+                id: t.getDataValue('id'),
+                jenis_mobil: t.getDataValue('jenis_mobil'),
+                image: t.getDataValue('image'),
+                kir_url: t.getDataValue('kir_url'),
+                stnk_url: t.getDataValue('stnk_url'),
+                no_polisi: t.getDataValue('no_polisi'),
+            })) || [],
+            emergency_contacts: user.getDataValue('emergencyContacts')?.map((e: any) => ({
+                nomor: e.getDataValue('nomor'),
+                keterangan: e.getDataValue('keterangan')
+            })) || [],
+        };
     }
 }
 

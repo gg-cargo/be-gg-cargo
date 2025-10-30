@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Post, Query, Get } from '@nestjs/common';
+import { Body, Controller, HttpException, HttpStatus, Post, Query, Get, Param, ParseIntPipe } from '@nestjs/common';
 import { TransportersService } from './transporters.service';
 
 @Controller('transporters')
@@ -46,6 +46,19 @@ export class TransportersController {
             message: 'Berhasil mengambil daftar transporter tersedia',
             data,
         };
+    }
+
+    @Get('detail/:id')
+    async getTransporterDetail(@Param('id', ParseIntPipe) id: number) {
+        try {
+            const data = await this.transportersService.getTransporterDetail(id);
+            return {
+                message: 'Berhasil mengambil detail transporter',
+                data,
+            };
+        } catch (e) {
+            throw new HttpException(e.message || 'Transporter tidak ditemukan', HttpStatus.NOT_FOUND);
+        }
     }
 }
 
