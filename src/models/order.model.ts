@@ -40,7 +40,7 @@ export class Order extends Model {
 
     @Column({
         type: DataType.STRING(255),
-        allowNull: false,
+        allowNull: true,
     })
     provinsi_pengirim: string;
 
@@ -52,13 +52,13 @@ export class Order extends Model {
 
     @Column({
         type: DataType.STRING(255),
-        allowNull: false,
+        allowNull: true,
     })
     kecamatan_pengirim: string;
 
     @Column({
         type: DataType.STRING(255),
-        allowNull: false,
+        allowNull: true,
     })
     kelurahan_pengirim: string;
 
@@ -94,7 +94,7 @@ export class Order extends Model {
 
     @Column({
         type: DataType.STRING(255),
-        allowNull: false,
+        allowNull: true,
     })
     provinsi_penerima: string;
 
@@ -106,13 +106,13 @@ export class Order extends Model {
 
     @Column({
         type: DataType.STRING(255),
-        allowNull: false,
+        allowNull: true,
     })
     kecamatan_penerima: string;
 
     @Column({
         type: DataType.STRING(255),
-        allowNull: false,
+        allowNull: true,
     })
     kelurahan_penerima: string;
 
@@ -1116,6 +1116,48 @@ export class Order extends Model {
         allowNull: true,
     })
     negara_penerima: string;
+
+    @Column({
+        type: DataType.STRING(20),
+        allowNull: true,
+    })
+    incoterms: string;
+
+    @Column({
+        type: DataType.STRING(100),
+        allowNull: true,
+    })
+    penagih_email: string;
+
+    @Column({
+        type: DataType.STRING(20),
+        allowNull: true,
+    })
+    penagih_kodepos: string;
+
+    @Column({
+        type: DataType.STRING(100),
+        allowNull: true,
+    })
+    penagih_kota: string;
+
+    @Column({
+        type: DataType.STRING(150),
+        allowNull: true,
+    })
+    penagih_nama_pt: string;
+
+    @Column({
+        type: DataType.STRING(100),
+        allowNull: true,
+    })
+    penagih_negara: string;
+
+    @Column({
+        type: DataType.STRING(20),
+        allowNull: true,
+    })
+    penagih_phone: string;
 
     @Column({
         type: DataType.STRING(10),

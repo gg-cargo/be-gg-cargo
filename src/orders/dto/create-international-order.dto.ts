@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, IsArray, ValidateNested, IsBoolean, IsUrl, Min, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, IsArray, ValidateNested, IsBoolean, IsUrl, Min, MaxLength, IsEmail } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum TipePengiriman {
@@ -61,22 +61,7 @@ export class CreateInternationalOrderDto {
     @IsString()
     @IsNotEmpty()
     @MaxLength(50)
-    provinsi_pengirim: string;
-
-    @IsString()
-    @IsNotEmpty()
-    @MaxLength(50)
     kota_pengirim: string;
-
-    @IsString()
-    @IsNotEmpty()
-    @MaxLength(50)
-    kecamatan_pengirim: string;
-
-    @IsString()
-    @IsNotEmpty()
-    @MaxLength(50)
-    kelurahan_pengirim: string;
 
     @IsString()
     @IsNotEmpty()
@@ -120,22 +105,7 @@ export class CreateInternationalOrderDto {
     @IsString()
     @IsNotEmpty()
     @MaxLength(50)
-    provinsi_penerima: string;
-
-    @IsString()
-    @IsNotEmpty()
-    @MaxLength(50)
     kota_penerima: string;
-
-    @IsString()
-    @IsNotEmpty()
-    @MaxLength(50)
-    kecamatan_penerima: string;
-
-    @IsString()
-    @IsNotEmpty()
-    @MaxLength(50)
-    kelurahan_penerima: string;
 
     @IsString()
     @IsNotEmpty()
@@ -163,13 +133,13 @@ export class CreateInternationalOrderDto {
 
     @IsString()
     @IsNotEmpty()
-    @MaxLength(10)
-    kodepos_internasional: string;
+    @MaxLength(100)
+    nama_barang: string;
 
     @IsString()
     @IsNotEmpty()
-    @MaxLength(100)
-    nama_barang: string;
+    @MaxLength(20)
+    incoterms: string;
 
     @IsEnum(LayananInternasional)
     @IsNotEmpty()
@@ -224,6 +194,36 @@ export class CreateInternationalOrderDto {
     @IsOptional()
     @IsUrl()
     certificate_of_origin?: string;
+
+    @IsEmail()
+    @IsNotEmpty()
+    @MaxLength(100)
+    penagih_email: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(10)
+    penagih_kodepos: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(100)
+    penagih_kota: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(150)
+    penagih_nama_pt: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(100)
+    penagih_negara: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(20)
+    penagih_phone: string;
 
     @IsArray()
     @ValidateNested({ each: true })

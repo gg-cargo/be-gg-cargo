@@ -6825,10 +6825,7 @@ export class OrdersService {
                 no_tracking: noTracking,
                 nama_pengirim: createInternationalDto.nama_pengirim,
                 alamat_pengirim: createInternationalDto.alamat_pengirim,
-                provinsi_pengirim: createInternationalDto.provinsi_pengirim,
                 kota_pengirim: createInternationalDto.kota_pengirim,
-                kecamatan_pengirim: createInternationalDto.kecamatan_pengirim,
-                kelurahan_pengirim: createInternationalDto.kelurahan_pengirim,
                 kodepos_pengirim: createInternationalDto.kodepos_pengirim,
                 no_telepon_pengirim: createInternationalDto.no_telepon_pengirim,
                 email_pengirim: createInternationalDto.email_pengirim,
@@ -6838,16 +6835,19 @@ export class OrdersService {
 
                 nama_penerima: createInternationalDto.nama_penerima,
                 alamat_penerima: createInternationalDto.alamat_penerima,
-                provinsi_penerima: createInternationalDto.provinsi_penerima,
                 kota_penerima: createInternationalDto.kota_penerima,
-                kecamatan_penerima: createInternationalDto.kecamatan_penerima,
-                kelurahan_penerima: createInternationalDto.kelurahan_penerima,
                 kodepos_penerima: createInternationalDto.kodepos_penerima,
                 no_telepon_penerima: createInternationalDto.no_telepon_penerima,
                 email_penerima: createInternationalDto.email_penerima,
                 jenis_penerima: createInternationalDto.jenis_penerima,
                 negara_penerima: createInternationalDto.negara_penerima,
-                kodepos_internasional: createInternationalDto.kodepos_internasional,
+                incoterms: createInternationalDto.incoterms,
+                penagih_email: createInternationalDto.penagih_email,
+                penagih_kodepos: createInternationalDto.penagih_kodepos,
+                penagih_kota: createInternationalDto.penagih_kota,
+                penagih_nama_pt: createInternationalDto.penagih_nama_pt,
+                penagih_negara: createInternationalDto.penagih_negara,
+                penagih_phone: createInternationalDto.penagih_phone,
 
                 nama_barang: createInternationalDto.nama_barang,
                 layanan: 'International', // Gunakan layanan internasional
@@ -6958,6 +6958,25 @@ export class OrdersService {
 
         if (!dto.nama_penerima || !dto.alamat_penerima || !dto.no_telepon_penerima) {
             throw new BadRequestException('Data penerima (nama, alamat, telepon) wajib diisi');
+        }
+
+        if (!dto.incoterms) {
+            throw new BadRequestException('Incoterms wajib diisi untuk pengiriman internasional');
+        }
+
+        const billingFields = [
+            { key: 'penagih_email', label: 'Email penagih' },
+            { key: 'penagih_kodepos', label: 'Kode pos penagih' },
+            { key: 'penagih_kota', label: 'Kota penagih' },
+            { key: 'penagih_nama_pt', label: 'Nama perusahaan penagih' },
+            { key: 'penagih_negara', label: 'Negara penagih' },
+            { key: 'penagih_phone', label: 'Nomor telepon penagih' }
+        ];
+
+        for (const field of billingFields) {
+            if (!dto[field.key]) {
+                throw new BadRequestException(`${field.label} wajib diisi`);
+            }
         }
 
         // Validasi Bersyarat (Barang)
