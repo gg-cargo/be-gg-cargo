@@ -6990,9 +6990,6 @@ export class OrdersService {
             if (!dto.country_of_origin) {
                 throw new BadRequestException('Country of origin wajib diisi untuk pengiriman barang');
             }
-            if (!dto.commercial_invoice) {
-                throw new BadRequestException('Commercial invoice wajib diisi untuk pengiriman barang');
-            }
         }
 
         // Validasi Bersyarat (Dokumen)
