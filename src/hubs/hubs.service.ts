@@ -44,15 +44,20 @@ export class HubsService {
                     const userLevel = user.getDataValue('level');
                     const userHubId = user.getDataValue('hub_id');
 
-                    // Jika level = 9 (traffic controller)
-                    if (userLevel === 9) {
+                    if (user_id === 10) {
+                        Object.keys(whereCondition).forEach(key => delete whereCondition[key]);
+                        if (search) {
+                            whereCondition[Op.or] = [
+                                { nama: { [Op.like]: `%${search}%` } },
+                                { kode: { [Op.like]: `%${search}%` } },
+                            ];
+                        }
+                    } else if (userLevel === 9) {
                         let groupFilter = '';
 
                         if (userHubId === 1) {
-                            // Untuk hub_id = 1, filter group_id yang mengandung JW${number}
                             groupFilter = 'JW';
                         } else if (userHubId === 4) {
-                            // Untuk hub_id = 4, filter group_id yang mengandung SM${number}
                             groupFilter = 'SM';
                         }
 
