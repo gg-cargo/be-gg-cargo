@@ -35,6 +35,12 @@ export class OpsOrdersQueryDto {
     @Transform(({ value }) => parseInt(value, 10))
     @IsNumber({}, { message: 'Hub ID harus berupa angka' })
     hub_id?: number;
+
+    @IsOptional()
+    @IsIn(['barang', 'sewa_truk', 'international'], {
+        message: 'Tipe harus berupa: barang, sewa_truk, atau international'
+    })
+    tipe?: string;
 }
 
 export class CustomerDto {

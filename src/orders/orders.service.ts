@@ -4961,7 +4961,31 @@ export class OrdersService {
 
             // 5. Buat filter layanan
             let layananFilter = {};
-            if (query.layanan) {
+            // 5.1. Buat filter berdasarkan tipe (prioritas lebih tinggi dari layanan)
+            let tipeFilter = {};
+            if (query.tipe) {
+                switch (query.tipe) {
+                    case 'barang':
+                        // Exclude "Sewa truck" dan "International"
+                        tipeFilter = {
+                            layanan: { [Op.notIn]: ['Sewa truck', 'International'] }
+                        };
+                        break;
+                    case 'sewa_truk':
+                        // Hanya tampilkan "Sewa truck"
+                        tipeFilter = {
+                            layanan: 'Sewa truck'
+                        };
+                        break;
+                    case 'international':
+                        // Hanya tampilkan "International"
+                        tipeFilter = {
+                            layanan: 'International'
+                        };
+                        break;
+                }
+            } else if (query.layanan) {
+                // Hanya gunakan filter layanan jika tipe tidak diisi
                 layananFilter = {
                     layanan: { [Op.like]: `%${query.layanan}%` }
                 };
@@ -4982,6 +5006,7 @@ export class OrdersService {
                     statusFilter,
                     searchFilter,
                     layananFilter,
+                    tipeFilter,
                     nextHubFilter
                 ]
             };
