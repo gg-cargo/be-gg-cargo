@@ -4858,8 +4858,9 @@ export class OrdersService {
             let areaFilter = {};
             const requestedHubId = query.hub_id;
 
-            // Jika query.hub_id diberikan, gunakan itu sebagai prioritas filter area
-            if (requestedHubId) {
+            if (query.next_hub) {
+                areaFilter = { next_hub: query.next_hub };
+            } else if (requestedHubId) {
                 areaFilter = {
                     [Op.or]: [
                         { hub_source_id: requestedHubId },
@@ -4991,13 +4992,8 @@ export class OrdersService {
                 };
             }
 
-            // 6. Buat filter next_hub
+            // 6. Buat filter next_hub (dipindahkan ke penentuan areaFilter bila tidak ada hub_id)
             let nextHubFilter = {};
-            if (query.next_hub) {
-                nextHubFilter = {
-                    next_hub: query.next_hub
-                };
-            }
 
             // 7. Gabungkan semua filter
             const whereClause = {
