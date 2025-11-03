@@ -65,6 +65,7 @@ import { UpdateItemDetailsDto } from './dto/update-item-details.dto';
 import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response.dto';
 import { JobAssign } from '../models/job-assign.model';
 import { TruckList } from '../models/truck-list.model';
+import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
 
 @Injectable()
 export class OrdersService {
@@ -152,6 +153,79 @@ export class OrdersService {
         // Jika ada error setelah file upload, file akan tetap tersimpan di storage
     }
 
+    /**
+     * Ubah status dari 'In Transit' ke kondisi 'menunggu pengiriman' (reweight_status = 1)
+     */
+    async revertInTransitToWaiting(
+        noTracking: string,
+        dto: RevertInTransitDto,
+        updatedByUserId: number
+    ): Promise<RevertInTransitResponseDto> {
+        const transaction = await this.orderModel.sequelize!.transaction();
+        try {
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noTracking },
+                attributes: ['id', 'no_tracking', 'status', 'reweight_status', 'assign_driver', 'hub_dest_id'],
+                transaction,
+                lock: transaction.LOCK.UPDATE as any
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            const currentStatus = order.getDataValue('status');
+            if (currentStatus === 'Delivered' || currentStatus === 'Out for Delivery') {
+                throw new BadRequestException('Order tidak dapat diubah dari status saat ini');
+            }
+            if (currentStatus !== 'In Transit') {
+                if (order.getDataValue('reweight_status') === 1) {
+                    await transaction.commit();
+                    return {
+                        message: 'Order sudah dalam status menunggu pengiriman',
+                        data: {
+                            no_tracking: order.getDataValue('no_tracking'),
+                            status: order.getDataValue('status'),
+                            reweight_status: order.getDataValue('reweight_status'),
+                            hub_dest_id: order.getDataValue('hub_dest_id') ?? null,
+                        }
+                    };
+                }
+                throw new BadRequestException('Order bukan dalam status In Transit');
+            }
+
+            const updateData: any = {
+                reweight_status: 1,
+                status: 'Pending',
+                assign_driver: 0,
+                updated_at: new Date()
+            };
+            if (dto?.hub_id !== undefined) {
+                updateData.hub_dest_id = dto.hub_id;
+            }
+
+            await this.orderModel.update(updateData, { where: { id: order.getDataValue('id') }, transaction });
+
+            await transaction.commit();
+
+            return {
+                message: 'Status berhasil diubah ke menunggu pengiriman',
+                data: {
+                    no_tracking: order.getDataValue('no_tracking'),
+                    status: updateData.status,
+                    reweight_status: updateData.reweight_status,
+                    hub_dest_id: updateData.hub_dest_id ?? order.getDataValue('hub_dest_id') ?? null
+                }
+            };
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error revertInTransitToWaiting: ${error.message}`);
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Gagal mengubah status order');
+        }
+    }
     async listTruckRentalOrders(userId: number, q: ListTruckRentalDto) {
         try {
             const page = Math.max(1, Number(q.page) || 1);
@@ -4865,7 +4939,8 @@ export class OrdersService {
                     [Op.or]: [
                         { hub_source_id: requestedHubId },
                         { hub_dest_id: requestedHubId },
-                        { current_hub: requestedHubId }
+                        { current_hub: requestedHubId },
+                        { next_hub: requestedHubId }
                     ]
                 };
             } else if (userHubId) {
@@ -4873,7 +4948,8 @@ export class OrdersService {
                     [Op.or]: [
                         { hub_source_id: userHubId },      // Order Pickup (First Mile)
                         { hub_dest_id: userHubId },        // Order Delivery (Last Mile)
-                        { current_hub: userHubId }          // Transit (Mid Mile)
+                        { current_hub: userHubId },          // Transit (Mid Mile)
+                        { next_hub: userHubId }
                     ]
                 };
             } else if (userServiceCenterId) {
@@ -4881,7 +4957,8 @@ export class OrdersService {
                     [Op.or]: [
                         { hub_source_id: userServiceCenterId },
                         { hub_dest_id: userServiceCenterId },
-                        { current_hub: userServiceCenterId }
+                        { current_hub: userServiceCenterId },
+                        { next_hub: userServiceCenterId }
                     ]
                 };
             }

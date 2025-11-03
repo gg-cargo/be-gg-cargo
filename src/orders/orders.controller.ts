@@ -43,6 +43,7 @@ import { UpdateItemDetailsDto } from './dto/update-item-details.dto';
 import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response.dto';
 import { CreateInternationalOrderDto } from './dto/create-international-order.dto';
 import { InternationalOrderResponseDto } from './dto/international-order-response.dto';
+import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -639,5 +640,17 @@ export class OrdersController {
     ): Promise<InternationalOrderResponseDto> {
         const userId = req.user.id;
         return this.ordersService.createInternationalOrder(createInternationalDto, userId);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_tracking/revert-in-transit')
+    @HttpCode(HttpStatus.OK)
+    async revertInTransit(
+        @Param('no_tracking') noTracking: string,
+        @Body() dto: RevertInTransitDto,
+        @Request() req: any,
+    ): Promise<RevertInTransitResponseDto> {
+        const userId = req.user.id;
+        return this.ordersService.revertInTransitToWaiting(noTracking, dto, userId);
     }
 }
