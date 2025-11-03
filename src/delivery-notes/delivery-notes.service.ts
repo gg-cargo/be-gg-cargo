@@ -158,14 +158,11 @@ export class DeliveryNotesService {
 
         // Update setiap order dengan status yang sesuai
         for (const order of orders) {
-            const orderHubDestId = Number(order.hub_dest_id);
-            const isFinalDestination = orderHubDestId === nextHubId;
-
             const updateData = {
                 assign_sj: noDeliveryNote,
                 transporter_id: String(dto.transporter_id),
                 truck_id: dto.no_polisi,
-                status: isFinalDestination ? ORDER_STATUS.OUT_FOR_DELIVERY : ORDER_STATUS.IN_TRANSIT,
+                status: ORDER_STATUS.IN_TRANSIT,
                 current_hub: String(dto.hub_asal_id),
                 next_hub: String(nextHubId),
             };
@@ -173,21 +170,17 @@ export class DeliveryNotesService {
             await this.orderModel.update(updateData, { where: { id: order.id } });
 
             // Buat notification badge untuk delivery note baru (gunakan ID delivery note)
-            const menuName = isFinalDestination ? 'Order kirim' : 'Dalam pengiriman';
+            const menuName = 'Dalam pengiriman';
             await this.createNotificationBadge(createdDeliveryNote.id, menuName, 'delivery-note');
 
             // Mark as read berdasarkan menuName
-            if (menuName === 'Order kirim') {
-                // Jika Order kirim, mark "Dalam pengiriman" sebagai read
-                await this.markDalamPengirimanAsRead(order.id);
-            } else if (menuName === 'Dalam pengiriman') {
-                // Jika Dalam pengiriman, mark "Dalam pengiriman" sebelumnya sebagai read
+            if (menuName === 'Dalam pengiriman') {
                 await this.markDalamPengirimanPreviousAsRead(order.id);
             }
         }
 
         await this.orderPieceModel.update(
-            { delivery_note_id: 1 }, // placeholder linkage if needed elsewhere
+            { delivery_note_id: 1 },
             { where: { order_id: { [Op.in]: orderIds } } }
         );
 
