@@ -4901,7 +4901,7 @@ export class OrdersService {
                         statusFilter = {
                             [Op.and]: [
                                 { reweight_status: 0 },
-                                { status_pickup: 'Assigned' }
+                                { status_pickup: 'Picked Up' }
                             ]
                         };
                         break;

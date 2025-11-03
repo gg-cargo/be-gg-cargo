@@ -58,11 +58,8 @@ export class DriversService {
             freeze_gps: 0, // GPS tidak dibekukan
         };
 
-        // Filter berdasarkan level driver (sesuaikan dengan level yang Anda definisikan)
-        // Contoh: level 3 untuk driver
-        whereCondition.level = 3;
+        whereCondition.level = 8;
 
-        // Filter berdasarkan hub_id
         if (hub_id) {
             whereCondition.hub_id = hub_id;
         }
