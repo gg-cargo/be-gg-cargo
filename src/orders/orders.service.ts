@@ -66,6 +66,7 @@ import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response
 import { JobAssign } from '../models/job-assign.model';
 import { TruckList } from '../models/truck-list.model';
 import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
+import { StartDeliveryDto, StartDeliveryResponseDto } from './dto/start-delivery.dto';
 
 @Injectable()
 export class OrdersService {
@@ -220,6 +221,56 @@ export class OrdersService {
         } catch (error) {
             await transaction.rollback();
             this.logger.error(`Error revertInTransitToWaiting: ${error.message}`);
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Gagal mengubah status order');
+        }
+    }
+
+    /**
+     * Ubah status dari 'In Transit' ke 'Out for Delivery' (order kirim)
+     */
+    async startDeliveryFromInTransit(
+        noTracking: string,
+        dto: StartDeliveryDto,
+        updatedByUserId: number
+    ): Promise<StartDeliveryResponseDto> {
+        const transaction = await this.orderModel.sequelize!.transaction();
+        try {
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noTracking },
+                attributes: ['id', 'no_tracking', 'status'],
+                transaction,
+                lock: transaction.LOCK.UPDATE as any
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            const currentStatus = order.getDataValue('status');
+            if (currentStatus !== 'In Transit') {
+                throw new BadRequestException('Order bukan dalam status In Transit');
+            }
+
+            await this.orderModel.update({
+                status: 'Out for Delivery',
+                updated_at: new Date()
+            }, { where: { id: order.getDataValue('id') }, transaction });
+
+            await transaction.commit();
+
+            return {
+                message: 'Status berhasil diubah ke Order Kirim (Out for Delivery)',
+                data: {
+                    no_tracking: order.getDataValue('no_tracking'),
+                    status: 'Out for Delivery'
+                }
+            };
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error startDeliveryFromInTransit: ${error.message}`);
             if (error instanceof NotFoundException || error instanceof BadRequestException) {
                 throw error;
             }
