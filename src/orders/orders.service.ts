@@ -5106,7 +5106,7 @@ export class OrdersService {
 
                     if ((!statusPickup || statusPickup === 'siap pickup') && isGagalPickup === 0) {
                         statusOps = 'order jemput';
-                    } else if (reweightStatus === 0 && statusPickup === 'Assigned') {
+                    } else if (reweightStatus === 0 && statusPickup === 'Picked Up') {
                         statusOps = 'reweight';
                     } else if (reweightStatus === 1 && status !== 'In Transit' && status !== 'Delivered' && status !== 'Out for Delivery') {
                         statusOps = 'menunggu pengiriman';
