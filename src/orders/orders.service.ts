@@ -67,6 +67,7 @@ import { JobAssign } from '../models/job-assign.model';
 import { TruckList } from '../models/truck-list.model';
 import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
 import { StartDeliveryDto, StartDeliveryResponseDto } from './dto/start-delivery.dto';
+import { BypassInboundDto, BypassInboundResponseDto } from './dto/bypass-inbound.dto';
 
 @Injectable()
 export class OrdersService {
@@ -275,6 +276,88 @@ export class OrdersService {
                 throw error;
             }
             throw new InternalServerErrorException('Gagal mengubah status order');
+        }
+    }
+
+    /**
+     * Bypass inbound receive: terima barang di hub secara manual untuk kasus khusus.
+     * - Otorisasi: hanya level 3 (Admin) atau 7 (Ops) yang diizinkan.
+     * - Update: set current_hub ke hub_id, pertahankan status ke In Transit (ready for outbound secara operasional).
+     * - History: catat 'Tiba di Hub (Bypass Manual)' dengan remark berisi alasan dan nama petugas.
+     */
+    async bypassInboundReceive(dto: BypassInboundDto): Promise<BypassInboundResponseDto> {
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+        const transaction = await this.orderModel.sequelize.transaction();
+
+        try {
+            const { no_tracking, hub_id, action_by_user_id } = dto;
+
+            // 1) Validasi user dan otorisasi
+            const actor = await this.userModel.findByPk(action_by_user_id, { transaction });
+            if (!actor) {
+                throw new NotFoundException('User yang melakukan bypass tidak ditemukan');
+            }
+
+            // 2) Validasi hub
+            const hub = await this.hubModel.findByPk(hub_id, {
+                attributes: ['id', 'nama'],
+                transaction,
+            });
+            if (!hub) {
+                throw new NotFoundException('Hub tidak ditemukan');
+            }
+
+            // 3) Validasi order
+            const order = await this.orderModel.findOne({
+                where: { no_tracking },
+                attributes: ['id', 'no_tracking', 'status', 'current_hub'],
+                transaction,
+                lock: transaction.LOCK.UPDATE as any
+            });
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            const now = new Date();
+            await this.orderPieceModel.update({
+                inbound_status: 1,
+                hub_current_id: hub_id,
+                inbound_by: action_by_user_id,
+                updatedAt: now
+            }, {
+                where: { order_id: order.getDataValue('id') },
+                transaction
+            });
+
+            await this.orderModel.update({
+                current_hub: String(hub_id),
+                issetManifest_inbound: 1,
+                updatedAt: now
+            }, {
+                where: { id: order.getDataValue('id') },
+                transaction
+            });
+
+            await transaction.commit();
+
+            return {
+                status: 'success',
+                message: `Penerimaan barang ${no_tracking} berhasil diproses secara manual (Bypass). Data audit telah dicatat.`,
+                order: {
+                    no_tracking,
+                    current_status: 'READY FOR OUTBOUND',
+                    bypassed_by: actor.getDataValue('name')
+                }
+            };
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error bypassInboundReceive: ${error.message}`);
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Gagal memproses bypass inbound');
         }
     }
     async listTruckRentalOrders(userId: number, q: ListTruckRentalDto) {
@@ -5166,6 +5249,7 @@ export class OrdersService {
                     'reweight_status',
                     'is_gagal_pickup',
                     'next_hub',
+                    'issetManifest_inbound',
                     'hub_dest_id'
                 ],
                 include: [
@@ -5283,7 +5367,8 @@ export class OrdersService {
                         created_at: order.getDataValue('created_at'),
                         no_delivery_note: deliveryNote?.no_delivery_note || undefined,
                         hub_selanjutnya: hubSelanjutnyaNama || undefined,
-                        hub_tujuan: hubTujuanNama || undefined
+                        hub_tujuan: hubTujuanNama || undefined,
+                        issetManifest_inbound: order.getDataValue('issetManifest_inbound')
                     };
                 })
             );

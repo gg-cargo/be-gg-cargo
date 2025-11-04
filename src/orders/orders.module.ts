@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { Sequelize } from 'sequelize';
 import { OrdersController } from './orders.controller';
+import { InboundController } from './inbound.controller';
 import { OrdersService } from './orders.service';
 import { Order } from '../models/order.model';
 import { OrderShipment } from '../models/order-shipment.model';
@@ -63,7 +64,7 @@ import { RatesModule } from '../rates/rates.module';
             TruckList
         ])
     ],
-    controllers: [OrdersController],
+    controllers: [OrdersController, InboundController],
     providers: [OrdersService, FileService, DriversService, {
         provide: 'SEQUELIZE',
         useValue: Sequelize
