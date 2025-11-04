@@ -5363,6 +5363,7 @@ export class OrdersService {
                         tanggal_pickup: tanggalPickup,
                         jam: jam,
                         status: statusOps,
+                        status_pengiriman: order.getDataValue('status'),
                         layanan: order.getDataValue('layanan'),
                         created_at: order.getDataValue('created_at'),
                         no_delivery_note: deliveryNote?.no_delivery_note || undefined,

@@ -14,5 +14,3 @@ export class InboundController {
         return this.ordersService.bypassInboundReceive(dto);
     }
 }
-
-
