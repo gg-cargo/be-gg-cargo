@@ -819,6 +819,13 @@ export class Order extends Model {
 
     @Column({
         type: DataType.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+    })
+    issetManifest_outbound: number;
+
+    @Column({
+        type: DataType.INTEGER,
         allowNull: true,
     })
     manifest_in_id: number;

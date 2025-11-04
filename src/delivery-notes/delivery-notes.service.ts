@@ -164,6 +164,7 @@ export class DeliveryNotesService {
                 truck_id: dto.no_polisi,
                 status: ORDER_STATUS.IN_TRANSIT,
                 issetManifest_inbound: 0,
+                issetManifest_outbound: 1,
                 current_hub: String(dto.hub_asal_id),
                 next_hub: String(nextHubId),
             };
@@ -713,6 +714,7 @@ export class DeliveryNotesService {
                         {
                             current_hub: String(dto.destination_hub_id),
                             issetManifest_inbound: 1,
+                            issetManifest_outbound: 0,
                             updatedAt: now,
                         },
                         {
@@ -891,6 +893,7 @@ export class DeliveryNotesService {
                 {
                     current_hub: String(dto.destination_hub_id),
                     issetManifest_inbound: 1,
+                    issetManifest_outbound: 0,
                     updatedAt: now,
                 },
                 {

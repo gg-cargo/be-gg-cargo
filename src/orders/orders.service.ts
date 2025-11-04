@@ -5153,10 +5153,18 @@ export class OrdersService {
                             ]
                         };
                         break;
-                    case 'dalam pengiriman':
+                    case 'inbound':
                         statusFilter = {
                             [Op.and]: [
                                 { status: 'In Transit' }
+                            ]
+                        };
+                        break;
+                    case 'outbound':
+                        statusFilter = {
+                            [Op.and]: [
+                                { status: 'In Transit' },
+                                { issetManifest_outbound: 1 }
                             ]
                         };
                         break;
@@ -5175,13 +5183,24 @@ export class OrdersService {
                 }
             }
 
-            if (['order kirim', 'menunggu pengiriman', 'completed'].includes(query.status as string)) {
+            if (['order kirim', 'menunggu pengiriman', 'completed', 'outbound'].includes(query.status as string)) {
                 if (requestedHubId) {
                     areaFilter = { current_hub: requestedHubId };
                 } else if (userHubId) {
                     areaFilter = { current_hub: userHubId };
                 } else if (userServiceCenterId) {
                     areaFilter = { current_hub: userServiceCenterId };
+                }
+            }
+
+            // Jika status adalah 'inbound', batasi area filter hanya pada next_hub
+            if (query.status === 'inbound') {
+                if (requestedHubId) {
+                    areaFilter = { next_hub: requestedHubId };
+                } else if (userHubId) {
+                    areaFilter = { next_hub: userHubId };
+                } else if (userServiceCenterId) {
+                    areaFilter = { next_hub: userServiceCenterId };
                 }
             }
 
@@ -5292,11 +5311,13 @@ export class OrdersService {
                     'layanan',
                     'created_at',
                     'status',
+                    'current_hub',
                     'status_pickup',
                     'reweight_status',
                     'is_gagal_pickup',
                     'next_hub',
                     'issetManifest_inbound',
+                    'issetManifest_outbound',
                     'hub_dest_id'
                 ],
                 include: [
@@ -5366,7 +5387,13 @@ export class OrdersService {
                     } else if (reweightStatus === 1 && status !== 'In Transit' && status !== 'Delivered' && status !== 'Out for Delivery') {
                         statusOps = 'menunggu pengiriman';
                     } else if (status === 'In Transit') {
-                        statusOps = 'dalam pengiriman';
+                        // Bedakan inbound vs outbound
+                        const issetOutbound = order.getDataValue('issetManifest_outbound');
+                        if (issetOutbound === 1) {
+                            statusOps = 'outbound';
+                        } else {
+                            statusOps = 'inbound';
+                        }
                     } else if (status === 'Out for Delivery') {
                         statusOps = 'order kirim';
                     } else if (status === 'Delivered') {
