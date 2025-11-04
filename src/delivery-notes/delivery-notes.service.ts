@@ -163,6 +163,7 @@ export class DeliveryNotesService {
                 transporter_id: String(dto.transporter_id),
                 truck_id: dto.no_polisi,
                 status: ORDER_STATUS.IN_TRANSIT,
+                issetManifest_inbound: 0,
                 current_hub: String(dto.hub_asal_id),
                 next_hub: String(nextHubId),
             };
