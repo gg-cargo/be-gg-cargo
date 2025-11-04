@@ -17,9 +17,6 @@ export class OpsOrdersQueryDto {
     search?: string;
 
     @IsOptional()
-    @IsIn(['order jemput', 'reweight', 'menunggu pengiriman', 'dalam pengiriman', 'order kirim', 'completed'], {
-        message: 'Status tidak valid'
-    })
     status?: string;
 
     @IsOptional()
