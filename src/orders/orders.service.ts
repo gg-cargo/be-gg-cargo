@@ -5175,7 +5175,7 @@ export class OrdersService {
                 }
             }
 
-            if (['order kirim', 'dalam pengiriman', 'menunggu pengiriman', 'completed'].includes(query.status as string)) {
+            if (['order kirim', 'menunggu pengiriman', 'completed'].includes(query.status as string)) {
                 if (requestedHubId) {
                     areaFilter = { current_hub: requestedHubId };
                 } else if (userHubId) {
