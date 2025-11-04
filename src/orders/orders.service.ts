@@ -5184,6 +5184,17 @@ export class OrdersService {
                 }
             }
 
+            // Jika status adalah 'order jemput', batasi area filter hanya pada hub_source_id
+            if (query.status === 'order jemput') {
+                if (requestedHubId) {
+                    areaFilter = { hub_source_id: requestedHubId };
+                } else if (userHubId) {
+                    areaFilter = { hub_source_id: userHubId };
+                } else if (userServiceCenterId) {
+                    areaFilter = { hub_source_id: userServiceCenterId };
+                }
+            }
+
             // 4. Buat search filter
             let searchFilter = {};
             if (query.search) {
