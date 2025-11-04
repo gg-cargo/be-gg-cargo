@@ -334,6 +334,7 @@ export class OrdersService {
             await this.orderModel.update({
                 current_hub: String(hub_id),
                 issetManifest_inbound: 1,
+                issetManifest_outbound: 0,
                 updatedAt: now
             }, {
                 where: { id: order.getDataValue('id') },
