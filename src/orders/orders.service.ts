@@ -5175,19 +5175,27 @@ export class OrdersService {
                 }
             }
 
-            // Jika status adalah 'order kirim', batasi area filter hanya pada hub_dest_id
-            if (query.status === 'order kirim') {
+            if (['order kirim', 'dalam pengiriman', 'menunggu pengiriman', 'completed'].includes(query.status as string)) {
                 if (requestedHubId) {
-                    areaFilter = { hub_dest_id: requestedHubId };
+                    areaFilter = { current_hub: requestedHubId };
                 } else if (userHubId) {
-                    areaFilter = { hub_dest_id: userHubId };
+                    areaFilter = { current_hub: userHubId };
                 } else if (userServiceCenterId) {
-                    areaFilter = { hub_dest_id: userServiceCenterId };
+                    areaFilter = { current_hub: userServiceCenterId };
                 }
             }
 
-            // Jika status adalah 'order jemput', batasi area filter hanya pada hub_source_id
             if (query.status === 'order jemput') {
+                if (requestedHubId) {
+                    areaFilter = { hub_source_id: requestedHubId };
+                } else if (userHubId) {
+                    areaFilter = { hub_source_id: userHubId };
+                } else if (userServiceCenterId) {
+                    areaFilter = { hub_source_id: userServiceCenterId };
+                }
+            }
+
+            if (query.status === 'reweight') {
                 if (requestedHubId) {
                     areaFilter = { hub_source_id: requestedHubId };
                 } else if (userHubId) {
