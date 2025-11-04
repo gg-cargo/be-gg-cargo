@@ -2419,6 +2419,8 @@ export class OrdersService {
                     'no_tracking',
                     'nama_pengirim',
                     'nama_penerima',
+                    'alamat_pengirim',
+                    'alamat_penerima',
                     'layanan',
                     'invoiceStatus',
                     'status',
