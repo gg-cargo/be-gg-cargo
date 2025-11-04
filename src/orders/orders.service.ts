@@ -2311,8 +2311,23 @@ export class OrdersService {
     }
 
     async listOrders(userId: number, query?: ListOrdersDto) {
+        let tipeFilter: any = {};
+        if (query?.tipe) {
+            switch (query.tipe) {
+                case 'barang':
+                    tipeFilter = { layanan: { [Op.notIn]: ['Sewa truck', 'International'] } };
+                    break;
+                case 'sewa_truk':
+                    tipeFilter = { layanan: 'Sewa truck' };
+                    break;
+                case 'international':
+                    tipeFilter = { layanan: 'International' };
+                    break;
+            }
+        }
         if (query?.missing_items) {
             const missingItemsOrders = await this.orderModel.findAll({
+                where: tipeFilter,
                 include: [
                     {
                         model: this.orderShipmentModel,
@@ -2334,6 +2349,8 @@ export class OrdersService {
                     'no_tracking',
                     'nama_pengirim',
                     'nama_penerima',
+                    'alamat_pengirim',
+                    'alamat_penerima',
                     'layanan',
                     'invoiceStatus',
                     'status',
@@ -2368,9 +2385,14 @@ export class OrdersService {
         if (query?.missing_hub) {
             const missingHubOrders = await this.orderModel.findAll({
                 where: {
-                    [Op.or]: [
-                        { hub_dest_id: 0 },
-                        { hub_source_id: 0 }
+                    [Op.and]: [
+                        {
+                            [Op.or]: [
+                                { hub_dest_id: 0 },
+                                { hub_source_id: 0 }
+                            ]
+                        },
+                        tipeFilter
                     ]
                 },
                 include: [
@@ -2418,6 +2440,8 @@ export class OrdersService {
                     no_tracking: order.getDataValue('no_tracking'),
                     nama_pengirim: order.getDataValue('nama_pengirim'),
                     nama_penerima: order.getDataValue('nama_penerima'),
+                    alamat_pengirim: order.getDataValue('alamat_pengirim'),
+                    alamat_penerima: order.getDataValue('alamat_penerima'),
                     layanan: order.getDataValue('layanan'),
                     status_tagihan: order.getDataValue('invoiceStatus'),
                     status_pengiriman: order.getDataValue('status'),
@@ -2434,7 +2458,7 @@ export class OrdersService {
 
         // Ambil orders milik user, join ke order_shipments, hitung total koli, hanya field tertentu
         const orders = await this.orderModel.findAll({
-            where: { order_by: userId },
+            where: { [Op.and]: [{ order_by: userId }, tipeFilter] },
             include: [
                 {
                     model: this.orderShipmentModel,

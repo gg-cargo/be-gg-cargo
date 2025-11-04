@@ -1,4 +1,4 @@
-import { IsOptional, IsBoolean } from 'class-validator';
+import { IsOptional, IsBoolean, IsString, IsIn } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class ListOrdersDto {
@@ -19,4 +19,9 @@ export class ListOrdersDto {
         return value;
     })
     missing_hub?: boolean;
+
+    @IsOptional()
+    @IsString()
+    @IsIn(['barang', 'sewa_truk', 'international'])
+    tipe?: string;
 }
