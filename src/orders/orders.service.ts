@@ -5130,8 +5130,9 @@ export class OrdersService {
                     case 'order jemput':
                         statusFilter = {
                             [Op.and]: [
-                                { [Op.or]: [{ status_pickup: null }, { status_pickup: 'siap pickup' }] },
-                                { is_gagal_pickup: 0 }
+                                { [Op.or]: [{ status_pickup: null }, { status_pickup: 'siap pickup' }, { status_pickup: 'Picked Up' }] },
+                                { is_gagal_pickup: 0 },
+                                { issetManifest_inbound: 0 }
                             ]
                         };
                         break;
@@ -5139,6 +5140,7 @@ export class OrdersService {
                         statusFilter = {
                             [Op.and]: [
                                 { reweight_status: 0 },
+                                { issetManifest_inbound: 1 },
                                 { status_pickup: 'Picked Up' }
                             ]
                         };
