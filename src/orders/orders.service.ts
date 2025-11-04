@@ -344,7 +344,7 @@ export class OrdersService {
 
             return {
                 status: 'success',
-                message: `Penerimaan barang ${no_tracking} berhasil diproses secara manual (Bypass). Data audit telah dicatat.`,
+                message: `Penerimaan barang ${no_tracking} berhasil diproses secara manual (Bypass)`,
                 order: {
                     no_tracking,
                     current_status: 'READY FOR OUTBOUND',
