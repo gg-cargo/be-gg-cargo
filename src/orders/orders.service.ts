@@ -229,9 +229,7 @@ export class OrdersService {
         }
     }
 
-    /**
-     * Ubah status dari 'In Transit' ke 'Out for Delivery' (order kirim)
-     */
+
     async startDeliveryFromInTransit(
         noTracking: string,
         dto: StartDeliveryDto,
@@ -251,8 +249,19 @@ export class OrdersService {
             }
 
             const currentStatus = order.getDataValue('status');
-            if (currentStatus !== 'In Transit') {
-                throw new BadRequestException('Order bukan dalam status In Transit');
+
+            if (currentStatus === 'Delivered' || currentStatus === 'Cancelled') {
+                throw new BadRequestException(`Order tidak dapat diubah dari status ${currentStatus}`);
+            }
+
+            if (currentStatus === 'Out for Delivery') {
+                return {
+                    message: 'Order sudah dalam status Order Kirim (Out for Delivery)',
+                    data: {
+                        no_tracking: order.getDataValue('no_tracking'),
+                        status: 'Out for Delivery'
+                    }
+                };
             }
 
             await this.orderModel.update({
