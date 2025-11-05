@@ -34,6 +34,16 @@ export class OpsOrdersQueryDto {
     hub_id?: number;
 
     @IsOptional()
+    @Transform(({ value }) => parseInt(value, 10))
+    @IsNumber({}, { message: 'Hub Asal harus berupa angka' })
+    hub_source_id?: number;
+
+    @IsOptional()
+    @Transform(({ value }) => parseInt(value, 10))
+    @IsNumber({}, { message: 'Hub Tujuan harus berupa angka' })
+    hub_dest_id?: number;
+
+    @IsOptional()
     @IsIn(['barang', 'sewa_truk', 'international'], {
         message: 'Tipe harus berupa: barang, sewa_truk, atau international'
     })

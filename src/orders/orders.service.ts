@@ -5282,7 +5282,16 @@ export class OrdersService {
             // 6. Buat filter next_hub (dipindahkan ke penentuan areaFilter bila tidak ada hub_id)
             let nextHubFilter = {};
 
-            // 7. Gabungkan semua filter
+            // 7. Filter eksplisit hub asal/tujuan jika dikirim di query
+            const explicitHubFilter: any = {};
+            if (query.hub_source_id) {
+                explicitHubFilter.hub_source_id = query.hub_source_id;
+            }
+            if (query.hub_dest_id) {
+                explicitHubFilter.hub_dest_id = query.hub_dest_id;
+            }
+
+            // 8. Gabungkan semua filter
             const whereClause = {
                 [Op.and]: [
                     areaFilter,
@@ -5290,14 +5299,15 @@ export class OrdersService {
                     searchFilter,
                     layananFilter,
                     tipeFilter,
-                    nextHubFilter
+                    nextHubFilter,
+                    explicitHubFilter
                 ]
             };
 
-            // 7.1. Hitung summary statistics
+            // 8.1. Hitung summary statistics
             const summary = await this.calculateSummaryStatistics(areaFilter);
 
-            // 8. Hitung total items untuk pagination
+            // 9. Hitung total items untuk pagination
             const totalItems = await this.orderModel.count({
                 where: whereClause
             });
@@ -5323,6 +5333,7 @@ export class OrdersService {
                     'deliver_by',
                     'status',
                     'current_hub',
+                    'hub_source_id',
                     'status_pickup',
                     'reweight_status',
                     'is_gagal_pickup',
@@ -5336,6 +5347,12 @@ export class OrdersService {
                         model: this.orderPieceModel,
                         as: 'pieces',
                         attributes: ['berat', 'panjang', 'lebar', 'tinggi'],
+                        required: false
+                    },
+                    {
+                        model: this.hubModel,
+                        as: 'hubSource',
+                        attributes: ['id', 'nama'],
                         required: false
                     },
                     {
@@ -5428,6 +5445,10 @@ export class OrdersService {
                     const hubDestination = order.getDataValue('hubDestination');
                     const hubTujuanNama = hubDestination ? hubDestination.getDataValue('nama') : undefined;
 
+                    // Ambil nama hub asal
+                    const hubSource = order.getDataValue('hubSource');
+                    const hubAsalNama = hubSource ? hubSource.getDataValue('nama') : undefined;
+
                     // Ambil nama hub selanjutnya
                     const hubNext = order.getDataValue('hubNext');
                     const hubSelanjutnyaNama = hubNext ? hubNext.getDataValue('nama') : undefined;
@@ -5454,6 +5475,7 @@ export class OrdersService {
                         created_at: order.getDataValue('created_at'),
                         no_delivery_note: deliveryNote?.no_delivery_note || undefined,
                         hub_selanjutnya: hubSelanjutnyaNama || undefined,
+                        hub_asal: hubAsalNama || undefined,
                         hub_tujuan: hubTujuanNama || undefined,
                         issetManifest_inbound: order.getDataValue('issetManifest_inbound')
                     };
