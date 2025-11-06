@@ -831,6 +831,13 @@ export class Order extends Model {
     vendor_id: number;
 
     @Column({
+        type: DataType.STRING(255),
+        allowNull: true,
+        comment: 'Nomor resi/A-Waybill dari vendor (JNE/TIKI/FTL, dll)'
+    })
+    vendor_tracking_number: string;
+
+    @Column({
         type: DataType.INTEGER,
         allowNull: true,
     })

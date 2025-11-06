@@ -5186,7 +5186,10 @@ export class OrdersService {
                             [Op.and]: [
                                 { status: 'In Transit' },
                                 { vendor_id: { [Op.not]: null } },
-                                { current_hub: { [Op.not]: null } }
+                                { current_hub: { [Op.not]: null } },
+                                // vendor_tracking_number tidak boleh kosong/null
+                                { vendor_tracking_number: { [Op.not]: null } },
+                                { vendor_tracking_number: { [Op.ne]: '' } }
                             ]
                         };
                         break;
