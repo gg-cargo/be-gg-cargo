@@ -5181,6 +5181,15 @@ export class OrdersService {
                             ]
                         };
                         break;
+                    case 'vendor':
+                        statusFilter = {
+                            [Op.and]: [
+                                { status: 'In Transit' },
+                                { vendor_id: { [Op.not]: null } },
+                                { current_hub: { [Op.not]: null } }
+                            ]
+                        };
+                        break;
                     case 'order kirim':
                         statusFilter = {
                             [Op.and]: [
@@ -5196,7 +5205,7 @@ export class OrdersService {
                 }
             }
 
-            if (['order kirim', 'menunggu pengiriman', 'completed', 'outbound'].includes(query.status as string)) {
+            if (['order kirim', 'menunggu pengiriman', 'completed', 'outbound', 'vendor'].includes(query.status as string)) {
                 if (requestedHubId) {
                     areaFilter = { current_hub: requestedHubId };
                 } else if (userHubId) {
@@ -5419,12 +5428,18 @@ export class OrdersService {
                     } else if (reweightStatus === 1 && status !== 'In Transit' && status !== 'Delivered' && status !== 'Out for Delivery') {
                         statusOps = 'menunggu pengiriman';
                     } else if (status === 'In Transit') {
-                        // Bedakan inbound vs outbound
-                        const issetOutbound = order.getDataValue('issetManifest_outbound');
-                        if (issetOutbound === 1) {
-                            statusOps = 'outbound';
+                        // Prioritaskan status vendor jika vendor_id ada
+                        const vendorIdVal = order.getDataValue('vendor_id');
+                        if (vendorIdVal) {
+                            statusOps = 'vendor';
                         } else {
-                            statusOps = 'inbound';
+                            // Bedakan inbound vs outbound
+                            const issetOutbound = order.getDataValue('issetManifest_outbound');
+                            if (issetOutbound === 1) {
+                                statusOps = 'outbound';
+                            } else {
+                                statusOps = 'inbound';
+                            }
                         }
                     } else if (status === 'Out for Delivery') {
                         statusOps = 'order kirim';
