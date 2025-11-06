@@ -36,3 +36,4 @@ export * from './reweight-correction-request.model';
 export * from './job-assign.model';
 export * from './order-manifest-inbound.model';
 export * from './order-kendala.model';
+export * from './vendor.model';
