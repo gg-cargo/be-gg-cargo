@@ -205,8 +205,8 @@ export class VendorsService {
         });
 
         // 7. Transform data ke format response
-        const vendorsList: VendorListItemDto[] = vendors.map((vendor, index) => ({
-            no: offset + index + 1,
+        const vendorsList: VendorListItemDto[] = vendors.map((vendor) => ({
+            no: vendor.getDataValue('id'),
             kode: vendor.getDataValue('kode_vendor') || '-',
             nama: vendor.getDataValue('nama_vendor'),
             pic: vendor.getDataValue('pic_nama'),
