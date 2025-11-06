@@ -44,6 +44,7 @@ import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response
 import { CreateInternationalOrderDto } from './dto/create-international-order.dto';
 import { InternationalOrderResponseDto } from './dto/international-order-response.dto';
 import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
+import { AssignVendorTrackingDto, AssignVendorTrackingResponseDto } from './dto/assign-vendor-tracking.dto';
 import { StartDeliveryDto, StartDeliveryResponseDto } from './dto/start-delivery.dto';
 
 @Controller('orders')
@@ -665,5 +666,15 @@ export class OrdersController {
     ): Promise<StartDeliveryResponseDto> {
         const userId = req.user.id;
         return this.ordersService.startDeliveryFromInTransit(noTracking, dto, userId);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_tracking/vendor-tracking')
+    @HttpCode(HttpStatus.OK)
+    async assignVendorTracking(
+        @Param('no_tracking') noTracking: string,
+        @Body() dto: AssignVendorTrackingDto,
+    ): Promise<AssignVendorTrackingResponseDto> {
+        return this.ordersService.assignVendorTracking(noTracking, dto);
     }
 }

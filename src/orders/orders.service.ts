@@ -68,6 +68,7 @@ import { TruckList } from '../models/truck-list.model';
 import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
 import { StartDeliveryDto, StartDeliveryResponseDto } from './dto/start-delivery.dto';
 import { BypassInboundDto, BypassInboundResponseDto } from './dto/bypass-inbound.dto';
+import { AssignVendorTrackingDto, AssignVendorTrackingResponseDto } from './dto/assign-vendor-tracking.dto';
 import { Vendor } from '../models/vendor.model';
 
 @Injectable()
@@ -5525,6 +5526,49 @@ export class OrdersService {
         } catch (error) {
             this.logger.error(`Error in getOpsOrders: ${error.message}`, error.stack);
             throw error;
+        }
+    }
+
+    async assignVendorTracking(
+        noTracking: string,
+        dto: AssignVendorTrackingDto,
+    ): Promise<AssignVendorTrackingResponseDto> {
+        try {
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noTracking },
+                attributes: ['id', 'no_tracking', 'vendor_id', 'vendor_tracking_number']
+            });
+
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            // Opsional: pastikan sudah ada vendor yang ditugaskan
+            const vendorId = order.getDataValue('vendor_id');
+            if (!vendorId) {
+                throw new BadRequestException('Order belum ditugaskan ke vendor');
+            }
+
+            await this.orderModel.update({
+                vendor_tracking_number: dto.vendor_tracking_number,
+                updated_at: new Date()
+            }, {
+                where: { id: order.getDataValue('id') }
+            });
+
+            return {
+                message: 'Nomor resi vendor berhasil di-assign ke order',
+                data: {
+                    no_tracking: order.getDataValue('no_tracking'),
+                    vendor_tracking_number: dto.vendor_tracking_number
+                }
+            };
+        } catch (error) {
+            this.logger.error(`Error assignVendorTracking: ${error.message}`);
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Gagal meng-assign nomor resi vendor');
         }
     }
 
