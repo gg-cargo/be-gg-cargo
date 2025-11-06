@@ -5355,6 +5355,7 @@ export class OrdersService {
                     'is_gagal_pickup',
                     'next_hub',
                     'vendor_id',
+                    'vendor_tracking_number',
                     'issetManifest_inbound',
                     'issetManifest_outbound',
                     'hub_dest_id'
@@ -5501,7 +5502,8 @@ export class OrdersService {
                         hub_asal: hubAsalNama || undefined,
                         hub_tujuan: hubTujuanNama || undefined,
                         issetManifest_inbound: order.getDataValue('issetManifest_inbound'),
-                        vendor_id: order.getDataValue('vendor_id')
+                        vendor_id: order.getDataValue('vendor_id'),
+                        vendor_tracking_number: order.getDataValue('vendor_tracking_number')
                     };
                 })
             );
