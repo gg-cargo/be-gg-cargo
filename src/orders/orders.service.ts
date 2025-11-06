@@ -5341,6 +5341,7 @@ export class OrdersService {
                     'reweight_status',
                     'is_gagal_pickup',
                     'next_hub',
+                    'vendor_id',
                     'issetManifest_inbound',
                     'issetManifest_outbound',
                     'hub_dest_id'
@@ -5480,7 +5481,8 @@ export class OrdersService {
                         hub_selanjutnya: hubSelanjutnyaNama || undefined,
                         hub_asal: hubAsalNama || undefined,
                         hub_tujuan: hubTujuanNama || undefined,
-                        issetManifest_inbound: order.getDataValue('issetManifest_inbound')
+                        issetManifest_inbound: order.getDataValue('issetManifest_inbound'),
+                        vendor_id: order.getDataValue('vendor_id')
                     };
                 })
             );
