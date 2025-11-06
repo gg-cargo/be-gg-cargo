@@ -825,6 +825,12 @@ export class Order extends Model {
     issetManifest_outbound: number;
 
     @Column({
+        type: DataType.BIGINT.UNSIGNED,
+        allowNull: true,
+    })
+    vendor_id: number;
+
+    @Column({
         type: DataType.INTEGER,
         allowNull: true,
     })

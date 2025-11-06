@@ -4,6 +4,8 @@ import {
     Get,
     Body,
     Query,
+    Param,
+    ParseIntPipe,
     HttpCode,
     HttpStatus,
     UseGuards,
@@ -33,6 +35,14 @@ export class VendorsController {
         @Query() query: ListVendorsQueryDto,
     ): Promise<ListVendorsResponseDto> {
         return this.vendorsService.listVendors(query);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get(':id')
+    async getVendorById(
+        @Param('id', ParseIntPipe) id: number,
+    ) {
+        return this.vendorsService.getVendorById(id);
     }
 }
 

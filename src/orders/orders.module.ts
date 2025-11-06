@@ -32,6 +32,7 @@ import { DriversService } from '../drivers/drivers.service';
 import { DriversModule } from '../drivers/drivers.module';
 import { NotificationBadgesModule } from '../notification-badges/notification-badges.module';
 import { RatesModule } from '../rates/rates.module';
+import { Vendor } from '../models/vendor.model';
 
 @Module({
     imports: [
@@ -61,7 +62,8 @@ import { RatesModule } from '../rates/rates.module';
             Hub,
             OrderKendala,
             JobAssign,
-            TruckList
+            TruckList,
+            Vendor
         ])
     ],
     controllers: [OrdersController, InboundController],

@@ -75,6 +75,55 @@ export class VendorsService {
         };
     }
 
+    async getVendorById(id: number) {
+        if (!id || isNaN(Number(id))) {
+            throw new BadRequestException('ID vendor tidak valid');
+        }
+
+        const vendor = await this.vendorModel.findByPk(id, {
+            attributes: [
+                'id',
+                'nama_vendor',
+                'kode_vendor',
+                'alamat_vendor',
+                'pic_nama',
+                'pic_telepon',
+                'pic_email',
+                'jenis_layanan',
+                'status_vendor',
+                'area_coverage',
+                'catatan',
+                'aktif',
+                'created_at',
+                'updated_at',
+            ],
+        });
+
+        if (!vendor) {
+            throw new BadRequestException('Vendor tidak ditemukan');
+        }
+
+        return {
+            message: 'Detail vendor berhasil diambil',
+            data: {
+                id: vendor.getDataValue('id'),
+                nama_vendor: vendor.getDataValue('nama_vendor'),
+                kode_vendor: vendor.getDataValue('kode_vendor') || undefined,
+                alamat_vendor: vendor.getDataValue('alamat_vendor') || undefined,
+                pic_nama: vendor.getDataValue('pic_nama'),
+                pic_telepon: vendor.getDataValue('pic_telepon'),
+                pic_email: vendor.getDataValue('pic_email'),
+                jenis_layanan: vendor.getDataValue('jenis_layanan') || [],
+                status_vendor: vendor.getDataValue('status_vendor'),
+                area_coverage: vendor.getDataValue('area_coverage') || [],
+                catatan: vendor.getDataValue('catatan') || undefined,
+                aktif: vendor.getDataValue('aktif'),
+                created_at: vendor.getDataValue('created_at'),
+                updated_at: vendor.getDataValue('updated_at'),
+            }
+        };
+    }
+
     /**
      * Generate kode vendor otomatis (contoh: VND-001, VND-002)
      */

@@ -68,6 +68,7 @@ import { TruckList } from '../models/truck-list.model';
 import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
 import { StartDeliveryDto, StartDeliveryResponseDto } from './dto/start-delivery.dto';
 import { BypassInboundDto, BypassInboundResponseDto } from './dto/bypass-inbound.dto';
+import { Vendor } from '../models/vendor.model';
 
 @Injectable()
 export class OrdersService {
@@ -112,6 +113,8 @@ export class OrdersService {
         private readonly jobAssignModel: typeof JobAssign,
         @InjectModel(TruckList)
         private readonly truckListModel: typeof TruckList,
+        @InjectModel(Vendor)
+        private readonly vendorModel: typeof Vendor,
         private readonly fileService: FileService,
         private readonly driversService: DriversService,
         private readonly notificationBadgesService: NotificationBadgesService,
@@ -6600,102 +6603,58 @@ export class OrdersService {
      */
     async forwardToVendor(noResi: string, dto: ForwardToVendorDto): Promise<ForwardToVendorResponseDto> {
         try {
-            // 1. Validasi user yang melakukan forwarding
-            const forwardedByUser = await this.userModel.findByPk(dto.forwarded_by_user_id, {
-                attributes: ['id', 'name', 'level', 'hub_id']
+            // a) Validasi Order & Otorisasi & Vendor
+            const assignedByUser = await this.userModel.findByPk(dto.assigned_by_user_id, {
+                attributes: ['id', 'name', 'level']
             });
-
-            if (!forwardedByUser) {
-                throw new NotFoundException('User yang meneruskan tidak ditemukan');
+            if (!assignedByUser) {
+                throw new NotFoundException('User penugas tidak ditemukan');
             }
 
-            // // Validasi level user (checker atau admin)
-            // const userLevel = forwardedByUser.getDataValue('level');
-            // if (userLevel !== 2 && userLevel !== 1) { // Assuming level 2 = checker, level 1 = admin
-            //     throw new BadRequestException('User tidak memiliki hak akses untuk meneruskan order');
-            // }
+            // NOTE: Sesuaikan rule akses jika diperlukan
+            // contoh: if (![1,2,7].includes(assignedByUser.getDataValue('level'))) throw new BadRequestException('Tidak berhak menugaskan ke vendor');
 
-            // 2. Validasi order
+            // Validasi order
             const order = await this.orderModel.findOne({
                 where: { no_tracking: noResi },
-                include: [
-                    {
-                        model: this.hubModel,
-                        as: 'hubDestination',
-                        attributes: ['id', 'nama', 'kode']
-                    }
-                ]
+                attributes: ['id', 'no_tracking', 'status']
             });
 
             if (!order) {
                 throw new NotFoundException(`Order dengan nomor resi ${noResi} tidak ditemukan`);
             }
 
-            // 3. Validasi status order
             const currentStatus = order.getDataValue('status');
-            const validStatuses = [ORDER_STATUS.IN_TRANSIT, ORDER_STATUS.OUT_FOR_DELIVERY];
-
-            if (!validStatuses.includes(currentStatus)) {
-                throw new BadRequestException(`Order tidak dapat diteruskan. Status saat ini: ${currentStatus}`);
+            if (currentStatus === ORDER_STATUS.DELIVERED || currentStatus === ORDER_STATUS.CANCELLED) {
+                throw new BadRequestException('Order tidak dapat ditugaskan karena sudah selesai/dibatalkan');
             }
 
-            // 4. Ambil data hub tujuan
-            const hubDestination = order.getDataValue('hubDestination');
-            if (!hubDestination) {
-                throw new BadRequestException('Data hub tujuan tidak ditemukan');
-            }
-
-            const destinationHubName = hubDestination.getDataValue('nama');
-            const destinationHubCode = hubDestination.getDataValue('kode');
-
-            // 5. Buat remark traffic dengan detail vendor
-            const remarkTraffic = `Vendor: ${dto.vendor_name} | PIC: ${dto.pic_vendor} | Phone: ${dto.vendor_phone}${dto.forwarding_note ? ` | Note: ${dto.forwarding_note}` : ''}`;
-
-            // 6. Update order
-            const updatedOrder = await this.orderModel.update({
-                transporter_id: null, // Vendor tidak terdaftar sebagai user
-                status: ORDER_STATUS.IN_TRANSIT,
-                remark_traffic: remarkTraffic,
-                next_hub: hubDestination.getDataValue('id')
-            }, {
-                where: { no_tracking: noResi },
-                returning: true
+            // Validasi vendor
+            const vendor = await this.vendorModel.findByPk(dto.vendor_id, {
+                attributes: ['id', 'nama_vendor', 'status_vendor']
             });
-
-            if (updatedOrder[0] === 0) {
-                throw new InternalServerErrorException('Gagal memperbarui status order');
+            if (!vendor) {
+                throw new NotFoundException('Vendor tidak ditemukan');
+            }
+            if (vendor.getDataValue('status_vendor') !== 'Aktif') {
+                throw new BadRequestException('Vendor tidak aktif');
             }
 
-            // 7. Ambil order yang sudah diupdate
-            const updatedOrderData = await this.orderModel.findOne({
+            await this.orderModel.update({
+                vendor_id: vendor.getDataValue('id'),
+                status: ORDER_STATUS.IN_TRANSIT,
+                updated_at: new Date(),
+            }, {
                 where: { no_tracking: noResi }
             });
 
             return {
-                message: 'Order berhasil diteruskan ke vendor',
+                status: 'success' as const,
+                message: `Order ${noResi} berhasil ditugaskan kepada ${vendor.getDataValue('nama_vendor')}.`,
                 data: {
-                    no_resi: noResi,
-                    vendor_name: dto.vendor_name,
-                    pic_vendor: dto.pic_vendor,
-                    vendor_phone: dto.vendor_phone,
-                    forwarding_note: dto.forwarding_note,
-                    forwarded_by_user_id: dto.forwarded_by_user_id,
-                    status: ORDER_STATUS.IN_TRANSIT,
-                    remark_traffic: remarkTraffic,
-                    next_hub: hubDestination.getDataValue('id'),
-                    vendor_details: {
-                        name: dto.vendor_name,
-                        pic: dto.pic_vendor,
-                        phone: dto.vendor_phone,
-                        note: dto.forwarding_note || '',
-                        forwarded_at: new Date().toISOString(),
-                        forwarded_by: forwardedByUser.getDataValue('name'),
-                        destination_hub: {
-                            id: hubDestination.getDataValue('id'),
-                            name: destinationHubName,
-                            code: destinationHubCode
-                        }
-                    }
+                    no_tracking: noResi,
+                    vendor_id: vendor.getDataValue('id'),
+                    vendor_name: vendor.getDataValue('nama_vendor'),
                 }
             };
 
