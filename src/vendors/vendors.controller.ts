@@ -2,6 +2,7 @@ import {
     Controller,
     Post,
     Get,
+    Patch,
     Body,
     Query,
     Param,
@@ -43,6 +44,14 @@ export class VendorsController {
         @Param('id', ParseIntPipe) id: number,
     ) {
         return this.vendorsService.getVendorById(id);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id/approve')
+    async approveVendor(
+        @Param('id', ParseIntPipe) id: number,
+    ) {
+        return this.vendorsService.approveVendor(id);
     }
 }
 

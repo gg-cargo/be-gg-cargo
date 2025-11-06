@@ -124,6 +124,47 @@ export class VendorsService {
         };
     }
 
+    async approveVendor(id: number) {
+        if (!id || isNaN(Number(id))) {
+            throw new BadRequestException('ID vendor tidak valid');
+        }
+
+        const vendor = await this.vendorModel.findByPk(id, {
+            attributes: ['id', 'nama_vendor', 'status_vendor']
+        });
+        if (!vendor) {
+            throw new BadRequestException('Vendor tidak ditemukan');
+        }
+
+        const currentStatus = vendor.getDataValue('status_vendor');
+        if (currentStatus === 'Aktif') {
+            return {
+                message: `Vendor ${vendor.getDataValue('nama_vendor')} sudah berstatus Aktif`,
+                data: {
+                    id: vendor.getDataValue('id'),
+                    nama_vendor: vendor.getDataValue('nama_vendor'),
+                    status_vendor: currentStatus
+                }
+            };
+        }
+
+        await this.vendorModel.update({
+            status_vendor: 'Aktif',
+            updated_at: new Date(),
+        }, {
+            where: { id }
+        });
+
+        return {
+            message: `Vendor ${vendor.getDataValue('nama_vendor')} berhasil diubah menjadi Aktif`,
+            data: {
+                id: vendor.getDataValue('id'),
+                nama_vendor: vendor.getDataValue('nama_vendor'),
+                status_vendor: 'Aktif'
+            }
+        };
+    }
+
     /**
      * Generate kode vendor otomatis (contoh: VND-001, VND-002)
      */
