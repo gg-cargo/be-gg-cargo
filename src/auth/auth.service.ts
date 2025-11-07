@@ -262,9 +262,13 @@ export class AuthService {
 
       // Find OTP
       // find the latest otp record
-      const otpRecord = await this.dumpOtpModel.findOne({});
+      const otpRecord = await this.dumpOtpModel.findOne({
+        where: { phone },
+        order: [['created_at', 'DESC']],
+        limit: 1,
+      });
 
-      if (!otpRecord) {
+      if (!otpRecord || otpRecord.getDataValue('otp') !== otp) {
         throw new InvalidOtpException();
       }
 
