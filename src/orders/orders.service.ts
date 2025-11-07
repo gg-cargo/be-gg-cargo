@@ -5170,7 +5170,13 @@ export class OrdersService {
                     case 'inbound':
                         statusFilter = {
                             [Op.and]: [
-                                { status: 'In Transit' }
+                                { status: 'In Transit' },
+                                {
+                                    [Op.or]: [
+                                        { vendor_tracking_number: null },
+                                        { vendor_tracking_number: '' }
+                                    ]
+                                }
                             ]
                         };
                         break;
