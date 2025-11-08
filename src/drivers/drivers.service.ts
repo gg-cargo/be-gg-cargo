@@ -1736,7 +1736,7 @@ export class DriversService {
      * Driver menerima tugas (pickup atau delivery)
      * Mengubah status task dari 0 (Pending) ke 1 (In Progress)
      */
-    async acceptTask(taskId: number, driverId: number): Promise<AcceptTaskResponseDto> {
+    async acceptTask(taskId: number, driverId: number, taskType: 'pickup' | 'delivery'): Promise<AcceptTaskResponseDto> {
         if (!this.orderModel.sequelize) {
             throw new InternalServerErrorException('Database connection tidak tersedia');
         }
@@ -1744,16 +1744,20 @@ export class DriversService {
         const transaction = await this.orderModel.sequelize.transaction();
 
         try {
-            // 1. Cek apakah task adalah pickup task
-            let pickupTask = await this.orderPickupDriverModel.findOne({
-                where: {
-                    id: taskId,
-                    driver_id: driverId,
-                },
-                transaction,
-            });
+            if (taskType === 'pickup') {
+                // 1. Cek apakah task adalah pickup task
+                const pickupTask = await this.orderPickupDriverModel.findOne({
+                    where: {
+                        id: taskId,
+                        driver_id: driverId,
+                    },
+                    transaction,
+                });
 
-            if (pickupTask) {
+                if (!pickupTask) {
+                    throw new NotFoundException('Pickup task tidak ditemukan atau tidak memiliki akses untuk task ini');
+                }
+
                 // Validasi status task masih Pending (0)
                 const currentStatus = pickupTask.getDataValue('status');
                 if (currentStatus !== 0) {
@@ -1797,18 +1801,20 @@ export class DriversService {
                         accepted_at: new Date(),
                     },
                 };
-            }
+            } else if (taskType === 'delivery') {
+                // 2. Cek apakah task adalah delivery task
+                const deliveryTask = await this.orderDeliverDriverModel.findOne({
+                    where: {
+                        id: taskId,
+                        driver_id: driverId,
+                    },
+                    transaction,
+                });
 
-            // 2. Cek apakah task adalah delivery task
-            let deliveryTask = await this.orderDeliverDriverModel.findOne({
-                where: {
-                    id: taskId,
-                    driver_id: driverId,
-                },
-                transaction,
-            });
+                if (!deliveryTask) {
+                    throw new NotFoundException('Delivery task tidak ditemukan atau tidak memiliki akses untuk task ini');
+                }
 
-            if (deliveryTask) {
                 // Validasi status task masih Pending (0)
                 const currentStatus = deliveryTask.getDataValue('status');
                 if (currentStatus !== 0) {
@@ -1837,20 +1843,6 @@ export class DriversService {
                     throw new NotFoundException('Order tidak ditemukan');
                 }
 
-                // Buat order history
-                const { date, time } = getOrderHistoryDateTime();
-                await this.orderHistoryModel.create({
-                    order_id: orderId,
-                    status: 'Task Accepted by Driver',
-                    remark: 'Kurir menerima tugas delivery',
-                    date: date,
-                    time: time,
-                    created_by: driverId,
-                    created_at: new Date(),
-                    provinsi: '',
-                    kota: '',
-                }, { transaction });
-
                 await transaction.commit();
 
                 return {
@@ -1866,10 +1858,9 @@ export class DriversService {
                         accepted_at: new Date(),
                     },
                 };
+            } else {
+                throw new BadRequestException('task_type tidak valid. Harus salah satu dari: pickup, delivery');
             }
-
-            // 3. Task tidak ditemukan
-            throw new NotFoundException('Task tidak ditemukan atau tidak memiliki akses untuk task ini');
 
         } catch (error) {
             await transaction.rollback();

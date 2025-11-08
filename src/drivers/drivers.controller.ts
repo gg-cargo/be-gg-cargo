@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Post, Body, Patch, Param, UseGuards, Request, UnauthorizedException, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Query, Post, Body, Patch, Param, UseGuards, Request, UnauthorizedException, ParseIntPipe, BadRequestException } from '@nestjs/common';
 import { DriversService } from './drivers.service';
 import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto } from './dto/driver-status-summary.dto';
@@ -89,6 +89,7 @@ export class DriversController {
     @Patch('tasks/:task_id/accept')
     async acceptTask(
         @Param('task_id', ParseIntPipe) taskId: number,
+        @Query('task_type') taskType: 'pickup' | 'delivery',
         @Request() req: any
     ): Promise<AcceptTaskResponseDto> {
         const driverId = req.user?.id;
@@ -96,7 +97,11 @@ export class DriversController {
             throw new UnauthorizedException('User tidak terautentikasi');
         }
 
-        return this.driversService.acceptTask(taskId, driverId);
+        if (!taskType || !['pickup', 'delivery'].includes(taskType)) {
+            throw new BadRequestException('task_type wajib diisi dan harus salah satu dari: pickup, delivery');
+        }
+
+        return this.driversService.acceptTask(taskId, driverId, taskType);
     }
 
     @UseGuards(JwtAuthGuard)
