@@ -45,6 +45,7 @@ export class DriverTaskDto {
     kota_penerima: string;
     no_telepon_penerima: string;
     status: number;
+    reweight_status?: number;
     status_label: string;
     assign_date: Date;
     notes?: string;
