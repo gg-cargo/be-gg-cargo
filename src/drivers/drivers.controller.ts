@@ -1,9 +1,10 @@
-import { Controller, Get, Query, Post, Body, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Query, Post, Body, Patch, Param, UseGuards, Request, UnauthorizedException, ParseIntPipe } from '@nestjs/common';
 import { DriversService } from './drivers.service';
 import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { MyTasksQueryDto, MyTasksResponseDto } from './dto/my-tasks.dto';
+import { AcceptTaskResponseDto } from './dto/accept-task.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('drivers')
@@ -81,5 +82,19 @@ export class DriversController {
         }
 
         return this.driversService.getMyTasks(driverId, query);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch('tasks/:task_id/accept')
+    async acceptTask(
+        @Param('task_id', ParseIntPipe) taskId: number,
+        @Request() req: any
+    ): Promise<AcceptTaskResponseDto> {
+        const driverId = req.user?.id;
+        if (!driverId) {
+            throw new UnauthorizedException('User tidak terautentikasi');
+        }
+
+        return this.driversService.acceptTask(taskId, driverId);
     }
 } 

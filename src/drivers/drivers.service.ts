@@ -13,6 +13,7 @@ import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForD
 import { DriverStatusSummaryQueryDto, DriverStatusSummaryResponseDto, DriverStatusSummaryDto, DriverWorkloadDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { MyTasksQueryDto, MyTasksResponseDto, DriverTaskDto } from './dto/my-tasks.dto';
+import { AcceptTaskResponseDto } from './dto/accept-task.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { ORDER_STATUS } from 'src/common/constants/order-status.constants';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
@@ -1614,5 +1615,154 @@ export class DriversService {
         }
 
         return barangInfoMap;
+    }
+
+    /**
+     * Driver menerima tugas (pickup atau delivery)
+     * Mengubah status task dari 0 (Pending) ke 1 (In Progress)
+     */
+    async acceptTask(taskId: number, driverId: number): Promise<AcceptTaskResponseDto> {
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+
+        const transaction = await this.orderModel.sequelize.transaction();
+
+        try {
+            // 1. Cek apakah task adalah pickup task
+            let pickupTask = await this.orderPickupDriverModel.findOne({
+                where: {
+                    id: taskId,
+                    driver_id: driverId,
+                },
+                transaction,
+            });
+
+            if (pickupTask) {
+                // Validasi status task masih Pending (0)
+                const currentStatus = pickupTask.getDataValue('status');
+                if (currentStatus !== 0) {
+                    throw new BadRequestException(`Task tidak dapat diterima karena status saat ini bukan Pending. Status saat ini: ${this.getTaskStatusLabel(currentStatus)}`);
+                }
+
+                // Update status menjadi In Progress (1)
+                await this.orderPickupDriverModel.update(
+                    {
+                        status: 1, // In Progress
+                    },
+                    {
+                        where: { id: taskId },
+                        transaction,
+                    }
+                );
+
+                // Ambil order information
+                const orderId = pickupTask.getDataValue('order_id');
+                const order = await this.orderModel.findByPk(orderId, {
+                    attributes: ['id', 'no_tracking'],
+                    transaction,
+                });
+
+                if (!order) {
+                    throw new NotFoundException('Order tidak ditemukan');
+                }
+
+                await transaction.commit();
+
+                return {
+                    message: 'Task pickup berhasil diterima',
+                    success: true,
+                    data: {
+                        task_id: taskId,
+                        task_type: 'pickup',
+                        order_id: orderId,
+                        no_tracking: order.getDataValue('no_tracking'),
+                        status: 1,
+                        status_label: 'In Progress',
+                        accepted_at: new Date(),
+                    },
+                };
+            }
+
+            // 2. Cek apakah task adalah delivery task
+            let deliveryTask = await this.orderDeliverDriverModel.findOne({
+                where: {
+                    id: taskId,
+                    driver_id: driverId,
+                },
+                transaction,
+            });
+
+            if (deliveryTask) {
+                // Validasi status task masih Pending (0)
+                const currentStatus = deliveryTask.getDataValue('status');
+                if (currentStatus !== 0) {
+                    throw new BadRequestException(`Task tidak dapat diterima karena status saat ini bukan Pending. Status saat ini: ${this.getTaskStatusLabel(currentStatus)}`);
+                }
+
+                // Update status menjadi In Progress (1)
+                await this.orderDeliverDriverModel.update(
+                    {
+                        status: 1, // In Progress
+                    },
+                    {
+                        where: { id: taskId },
+                        transaction,
+                    }
+                );
+
+                // Ambil order information
+                const orderId = deliveryTask.getDataValue('order_id');
+                const order = await this.orderModel.findByPk(orderId, {
+                    attributes: ['id', 'no_tracking'],
+                    transaction,
+                });
+
+                if (!order) {
+                    throw new NotFoundException('Order tidak ditemukan');
+                }
+
+                // Buat order history
+                const { date, time } = getOrderHistoryDateTime();
+                await this.orderHistoryModel.create({
+                    order_id: orderId,
+                    status: 'Task Accepted by Driver',
+                    remark: 'Kurir menerima tugas delivery',
+                    date: date,
+                    time: time,
+                    created_by: driverId,
+                    created_at: new Date(),
+                    provinsi: '',
+                    kota: '',
+                }, { transaction });
+
+                await transaction.commit();
+
+                return {
+                    message: 'Task delivery berhasil diterima',
+                    success: true,
+                    data: {
+                        task_id: taskId,
+                        task_type: 'delivery',
+                        order_id: orderId,
+                        no_tracking: order.getDataValue('no_tracking'),
+                        status: 1,
+                        status_label: 'In Progress',
+                        accepted_at: new Date(),
+                    },
+                };
+            }
+
+            // 3. Task tidak ditemukan
+            throw new NotFoundException('Task tidak ditemukan atau tidak memiliki akses untuk task ini');
+
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error in acceptTask: ${error.message}`, error.stack);
+            if (error instanceof BadRequestException || error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Gagal menerima task');
+        }
     }
 } 
