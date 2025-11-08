@@ -1432,7 +1432,7 @@ export class DriversService {
                         if (!order || !validPickupOrderIds.has(order.id)) continue;
 
                         const hubName = hubMap.get(order.hub_source_id);
-                        const statusLabel = this.getTaskStatusLabel(pickupTask.status);
+                        const statusLabel = this.getTaskStatusLabel(pickupTask.status, 'pickup', order.status_pickup);
                         const barangInfo = barangInfoMap.get(order.id);
 
                         tasks.push({
@@ -1572,7 +1572,7 @@ export class DriversService {
                         if (!order || !validDeliveryOrderIds.has(order.id)) continue;
 
                         const hubName = hubMap.get(order.hub_dest_id);
-                        const statusLabel = this.getTaskStatusLabel(deliveryTask.status);
+                        const statusLabel = this.getTaskStatusLabel(deliveryTask.status, 'delivery', order.status);
                         const barangInfo = barangInfoMap.get(order.id);
 
                         tasks.push({
@@ -1639,11 +1639,20 @@ export class DriversService {
      * 1 = Completed (selesai dengan bukti foto)
      * 2 = Failed (gagal)
      */
-    private getTaskStatusLabel(status: number): string {
+    private getTaskStatusLabel(status: number, taskType?: 'pickup' | 'delivery', orderStatus?: string): string {
         switch (status) {
             case 0:
                 return 'Pending';
             case 1:
+                // Untuk pickup tasks, cek status_pickup untuk menentukan label
+                if (taskType === 'pickup' && orderStatus !== undefined) {
+                    if (orderStatus === 'Completed') {
+                        return 'Completed';
+                    } else {
+                        return 'In Progress';
+                    }
+                }
+                // Untuk delivery tasks atau default, tetap 'Completed'
                 return 'Completed';
             case 2:
                 return 'Failed';
