@@ -1662,6 +1662,7 @@ export class DriversService {
                     order_id: { [Op.in]: orderIds },
                 },
                 attributes: [
+                    'id',
                     'order_id',
                     'piece_id',
                     'berat',
@@ -1693,6 +1694,7 @@ export class DriversService {
 
                 // Detail koli (ambil maksimal 10 koli pertama untuk menghindari response terlalu besar)
                 const detail_koli = orderPieces.slice(0, 10).map((piece: any) => ({
+                    id: piece.id || '',
                     piece_id: piece.piece_id || '',
                     berat: Number(piece.berat) || 0,
                     panjang: Number(piece.panjang) || 0,
