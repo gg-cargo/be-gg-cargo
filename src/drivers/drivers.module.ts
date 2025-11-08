@@ -11,6 +11,7 @@ import { Hub } from '../models/hub.model';
 import { LogGps } from '../models/log-gps.model';
 import { OrderHistory } from '../models/order-history.model';
 import { OrderPiece } from '../models/order-piece.model';
+import { OrderNotifikasi } from '../models/order-notifikasi.model';
 
 @Module({
     imports: [
@@ -23,6 +24,7 @@ import { OrderPiece } from '../models/order-piece.model';
             Hub,
             OrderHistory,
             OrderPiece,
+            OrderNotifikasi,
         ]),
         NotificationBadgesModule,
     ],

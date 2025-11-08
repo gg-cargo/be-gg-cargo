@@ -9,11 +9,13 @@ import { Order } from '../models/order.model';
 import { Hub } from '../models/hub.model';
 import { OrderHistory } from '../models/order-history.model';
 import { OrderPiece } from '../models/order-piece.model';
+import { OrderNotifikasi } from '../models/order-notifikasi.model';
 import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto, AvailableDriversResponseDto, AvailableDriverDto, DriverLocationDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto, DriverStatusSummaryResponseDto, DriverStatusSummaryDto, DriverWorkloadDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { MyTasksQueryDto, MyTasksResponseDto, DriverTaskDto } from './dto/my-tasks.dto';
 import { AcceptTaskResponseDto } from './dto/accept-task.dto';
+import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { ORDER_STATUS } from 'src/common/constants/order-status.constants';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
@@ -39,6 +41,8 @@ export class DriversService {
         private orderHistoryModel: typeof OrderHistory,
         @InjectModel(OrderPiece)
         private orderPieceModel: typeof OrderPiece,
+        @InjectModel(OrderNotifikasi)
+        private orderNotifikasiModel: typeof OrderNotifikasi,
         private readonly notificationBadgesService: NotificationBadgesService,
     ) { }
 
@@ -1856,6 +1860,187 @@ export class DriversService {
                 throw error;
             }
             throw new InternalServerErrorException('Gagal menerima task');
+        }
+    }
+
+    /**
+     * Konfirmasi delivery task oleh driver
+     * Mengupdate status delivery menjadi Completed atau Failed dengan bukti foto
+     */
+    async confirmDelivery(confirmDto: ConfirmDeliveryDto): Promise<{ message: string; success: boolean; data: any }> {
+        const {
+            order_id,
+            status,
+            photo_base64,
+            signature_base64,
+            notes,
+            latlng,
+            user_id,
+            reason,
+        } = confirmDto;
+
+        // Validasi user_id
+        if (!user_id) {
+            throw new BadRequestException('User ID wajib diisi');
+        }
+
+        // Validasi status
+        const isSuccess = status === 'success' || status === 'completed';
+        const isFailed = status === 'failed' || status === 'cancelled';
+
+        if (!isSuccess && !isFailed) {
+            throw new BadRequestException('Status tidak valid. Harus salah satu dari: success, completed, failed, cancelled');
+        }
+
+        // Validasi reason untuk delivery gagal
+        if (isFailed && !reason) {
+            throw new BadRequestException('Alasan kegagalan wajib diisi untuk delivery yang gagal');
+        }
+
+        // Validasi order exists
+        const order = await this.orderModel.findByPk(order_id);
+        if (!order) {
+            throw new NotFoundException('Order tidak ditemukan');
+        }
+
+        // Validasi order sudah dalam status yang memungkinkan konfirmasi delivery
+        const currentStatus = order.getDataValue('status');
+        if (currentStatus === ORDER_STATUS.DELIVERED || currentStatus === ORDER_STATUS.CANCELLED) {
+            throw new BadRequestException(`Order tidak dapat dikonfirmasi karena sudah dalam status: ${currentStatus}`);
+        }
+
+        // Validasi delivery task exists untuk driver ini
+        const deliveryTask = await this.orderDeliverDriverModel.findOne({
+            where: {
+                order_id,
+                driver_id: user_id,
+            },
+        });
+
+        if (!deliveryTask) {
+            throw new NotFoundException('Delivery task tidak ditemukan atau driver tidak memiliki akses untuk task ini');
+        }
+
+        // Mulai transaction
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+
+        const transaction = await this.orderModel.sequelize.transaction();
+
+        try {
+            const now = new Date();
+            const orderDeliveryStatus = isSuccess ? 1 : 2; // 1: Completed, 2: Failed
+
+            // 1. Update orders table - hanya update jika delivery berhasil
+            if (isSuccess) {
+                await this.orderModel.update(
+                    {
+                        status: ORDER_STATUS.DELIVERED,
+                        updated_at: now,
+                    },
+                    {
+                        where: { id: order_id },
+                        transaction,
+                    }
+                );
+            }
+
+            // 2. Update order_deliver_drivers
+            await this.orderDeliverDriverModel.update(
+                {
+                    status: orderDeliveryStatus,
+                    photo: photo_base64 || '',
+                    notes: notes || reason || '',
+                    signature: signature_base64 || '',
+                    latlng: latlng,
+                    updated_at: now,
+                } as any,
+                {
+                    where: { order_id, driver_id: user_id },
+                    transaction,
+                }
+            );
+
+            // 3. Update order_pieces jika delivery berhasil
+            if (isSuccess) {
+                await this.orderPieceModel.update(
+                    {
+                        deliver_status: 1, // Delivered
+                        updatedAt: now,
+                    },
+                    {
+                        where: { order_id },
+                        transaction,
+                    }
+                );
+            }
+
+            // 4. Create order_history
+            const { date, time } = getOrderHistoryDateTime();
+            const historyStatus = isSuccess ? ORDER_STATUS.DELIVERED : 'Delivery Failed';
+            const historyRemark = isSuccess
+                ? `Barang berhasil dikirim oleh driver`
+                : `Delivery gagal. Alasan: ${reason}`;
+
+            await this.orderHistoryModel.create(
+                {
+                    order_id,
+                    status: historyStatus,
+                    remark: historyRemark,
+                    date: date,
+                    time: time,
+                    provinsi: order.getDataValue('provinsi_penerima') || '',
+                    kota: order.getDataValue('kota_penerima') || '',
+                    created_by: user_id,
+                },
+                { transaction }
+            );
+
+            // 5. Create order_notifikasi
+            const notificationMessage = isSuccess
+                ? `Barang order #${order.getDataValue('no_tracking')} telah berhasil di-deliver`
+                : `Delivery order #${order.getDataValue('no_tracking')} gagal. Alasan: ${reason}`;
+
+            await this.orderNotifikasiModel.create(
+                {
+                    message: notificationMessage,
+                    order_id,
+                    svc_source: order.getDataValue('svc_source_id'),
+                    hub_source: order.getDataValue('hub_source_id'),
+                    svc_dest: order.getDataValue('svc_dest_id'),
+                    hub_dest: order.getDataValue('hub_dest_id'),
+                    user_id: order.getDataValue('order_by'),
+                    pengiriman: '1',
+                } as any,
+                { transaction }
+            );
+
+            await transaction.commit();
+
+            return {
+                message: `Delivery berhasil dikonfirmasi sebagai ${isSuccess ? 'berhasil' : 'gagal'}`,
+                success: true,
+                data: {
+                    order_id,
+                    status: isSuccess ? ORDER_STATUS.DELIVERED : ORDER_STATUS.OUT_FOR_DELIVERY,
+                    task_status: orderDeliveryStatus,
+                    confirmed_at: now,
+                    confirmed_by: user_id,
+                    location: latlng,
+                    notes: notes || reason,
+                },
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error in confirmDelivery: ${error.message}`, error.stack);
+
+            if (error instanceof BadRequestException || error instanceof NotFoundException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Gagal mengkonfirmasi delivery');
         }
     }
 } 

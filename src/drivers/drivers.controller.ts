@@ -5,6 +5,7 @@ import { DriverStatusSummaryQueryDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { MyTasksQueryDto, MyTasksResponseDto } from './dto/my-tasks.dto';
 import { AcceptTaskResponseDto } from './dto/accept-task.dto';
+import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('drivers')
@@ -96,5 +97,22 @@ export class DriversController {
         }
 
         return this.driversService.acceptTask(taskId, driverId);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('deliveries/confirm')
+    async confirmDelivery(
+        @Body() confirmDto: ConfirmDeliveryDto,
+        @Request() req: any
+    ): Promise<{ message: string; success: boolean; data: any }> {
+        const driverId = req.user?.id;
+        if (!driverId) {
+            throw new UnauthorizedException('User tidak terautentikasi');
+        }
+
+        // Override user_id dengan driver yang sedang login
+        confirmDto.user_id = driverId;
+
+        return this.driversService.confirmDelivery(confirmDto);
     }
 } 

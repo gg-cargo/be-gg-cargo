@@ -28,7 +28,6 @@ import { OrderKendala } from '../models/order-kendala.model';
 import { JobAssign } from '../models/job-assign.model';
 import { TruckList } from '../models/truck-list.model';
 import { FileService } from '../file/file.service';
-import { DriversService } from '../drivers/drivers.service';
 import { DriversModule } from '../drivers/drivers.module';
 import { NotificationBadgesModule } from '../notification-badges/notification-badges.module';
 import { RatesModule } from '../rates/rates.module';
@@ -67,7 +66,7 @@ import { Vendor } from '../models/vendor.model';
         ])
     ],
     controllers: [OrdersController, InboundController],
-    providers: [OrdersService, FileService, DriversService, {
+    providers: [OrdersService, FileService, {
         provide: 'SEQUELIZE',
         useValue: Sequelize
     }],
