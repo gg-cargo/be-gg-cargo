@@ -1286,8 +1286,15 @@ export class DriversService {
             const offset = (page - 1) * limit;
 
             // Build filter untuk status
+            // Status mapping:
+            // 0 = Pending
+            // 1 = Completed (untuk pickup/delivery yang selesai)
+            // 2 = Failed
+            // 'completed' = Selesai dengan bukti foto (status = 1 dan photo tidak kosong)
             const statusFilter: any = {};
-            if (status !== undefined) {
+            const isCompletedFilter = status === 'completed';
+
+            if (status !== undefined && !isCompletedFilter) {
                 statusFilter.status = parseInt(status);
             }
 
@@ -1311,25 +1318,52 @@ export class DriversService {
             if (task_type === 'pickup' || task_type === 'all') {
                 const pickupWhere: any = {
                     driver_id: driverId,
-                    ...statusFilter,
-                    ...dateFilter,
                 };
+
+                // Gabungkan dateFilter jika ada
+                if (Object.keys(dateFilter).length > 0) {
+                    Object.assign(pickupWhere, dateFilter);
+                }
+
+                // Filter untuk task selesai (completed): status = 1
+                // Filter photo akan dilakukan setelah query untuk memastikan photo tidak kosong
+                if (isCompletedFilter) {
+                    pickupWhere.status = 1; // Completed
+                } else if (status !== undefined) {
+                    pickupWhere.status = parseInt(status);
+                }
 
                 const pickupTasks = await this.orderPickupDriverModel.findAll({
                     where: pickupWhere,
-                    attributes: ['id', 'order_id', 'status', 'assign_date', 'notes', 'latlng'],
+                    attributes: ['id', 'order_id', 'status', 'assign_date', 'notes', 'latlng', 'photo'],
                     raw: true,
                 });
 
-                if (pickupTasks.length > 0) {
-                    // Ambil order_ids
-                    const orderIds = pickupTasks.map((task: any) => task.order_id);
+                // Filter tambahan: untuk task selesai, pastikan photo tidak kosong
+                let filteredPickupTasks = pickupTasks;
+                if (isCompletedFilter) {
+                    filteredPickupTasks = pickupTasks.filter((task: any) => {
+                        const photo = task.photo;
+                        return photo && photo !== '' && photo !== null;
+                    });
+                }
 
-                    // Query orders
+                if (filteredPickupTasks.length > 0) {
+                    // Ambil order_ids
+                    const orderIds = filteredPickupTasks.map((task: any) => task.order_id);
+
+                    // Query orders dengan filter tambahan untuk task selesai
+                    const orderWhere: any = {
+                        id: { [Op.in]: orderIds },
+                    };
+
+                    // Untuk task selesai, pastikan status_pickup = 'Completed'
+                    if (isCompletedFilter) {
+                        orderWhere.status_pickup = 'Completed';
+                    }
+
                     const orders = await this.orderModel.findAll({
-                        where: {
-                            id: { [Op.in]: orderIds },
-                        },
+                        where: orderWhere,
                         attributes: [
                             'id',
                             'no_tracking',
@@ -1344,9 +1378,21 @@ export class DriversService {
                             'nama_barang',
                             'layanan',
                             'hub_source_id',
+                            'status_pickup',
                         ],
                         raw: true,
                     });
+
+                    // Filter pickup tasks berdasarkan order status jika filter completed
+                    // Hanya ambil task yang order status_pickup = 'Completed' untuk task selesai
+                    if (isCompletedFilter) {
+                        const completedOrderIds = orders
+                            .filter((order: any) => order.status_pickup === 'Completed')
+                            .map((order: any) => order.id);
+                        filteredPickupTasks = filteredPickupTasks.filter((task: any) =>
+                            completedOrderIds.includes(task.order_id)
+                        );
+                    }
 
                     // Buat map untuk akses cepat
                     const orderMap = new Map(orders.map((order: any) => [order.id, order]));
@@ -1366,13 +1412,16 @@ export class DriversService {
                     const hubMap = new Map(hubs.map((hub: any) => [hub.id, hub.nama]));
 
                     // Ambil informasi barang untuk semua orders sekaligus
-                    const orderIdsForPickup = orders.map((order: any) => order.id);
+                    const validPickupOrderIds = new Set(filteredPickupTasks.map((task: any) => task.order_id));
+                    const orderIdsForPickup = orders
+                        .filter((order: any) => validPickupOrderIds.has(order.id))
+                        .map((order: any) => order.id);
                     const barangInfoMap = await this.getBarangInfoForOrders(orderIdsForPickup);
 
                     // Transform pickup tasks
-                    for (const pickupTask of pickupTasks) {
+                    for (const pickupTask of filteredPickupTasks) {
                         const order = orderMap.get(pickupTask.order_id);
-                        if (!order) continue;
+                        if (!order || !validPickupOrderIds.has(order.id)) continue;
 
                         const hubName = hubMap.get(order.hub_source_id);
                         const statusLabel = this.getTaskStatusLabel(pickupTask.status);
@@ -1409,13 +1458,24 @@ export class DriversService {
             if (task_type === 'delivery' || task_type === 'all') {
                 const deliveryWhere: any = {
                     driver_id: driverId,
-                    ...statusFilter,
-                    ...dateFilter,
                 };
+
+                // Gabungkan dateFilter jika ada
+                if (Object.keys(dateFilter).length > 0) {
+                    Object.assign(deliveryWhere, dateFilter);
+                }
+
+                // Filter untuk task selesai (completed): status = 1
+                // Filter photo akan dilakukan setelah query untuk memastikan photo tidak kosong
+                if (isCompletedFilter) {
+                    deliveryWhere.status = 1; // Completed
+                } else if (status !== undefined) {
+                    deliveryWhere.status = parseInt(status);
+                }
 
                 const deliveryTasks = await this.orderDeliverDriverModel.findAll({
                     where: deliveryWhere,
-                    attributes: ['id', 'order_id', 'status', 'assign_date', 'notes', 'latlng'],
+                    attributes: ['id', 'order_id', 'status', 'assign_date', 'notes', 'latlng', 'photo'],
                     raw: true,
                 });
 
@@ -1423,11 +1483,18 @@ export class DriversService {
                     // Ambil order_ids
                     const orderIds = deliveryTasks.map((task: any) => task.order_id);
 
-                    // Query orders
+                    // Query orders dengan filter tambahan untuk task selesai
+                    const orderWhere: any = {
+                        id: { [Op.in]: orderIds },
+                    };
+
+                    // Untuk task selesai, pastikan order status = 'Delivered'
+                    if (isCompletedFilter) {
+                        orderWhere.status = 'Delivered';
+                    }
+
                     const orders = await this.orderModel.findAll({
-                        where: {
-                            id: { [Op.in]: orderIds },
-                        },
+                        where: orderWhere,
                         attributes: [
                             'id',
                             'no_tracking',
@@ -1442,9 +1509,28 @@ export class DriversService {
                             'nama_barang',
                             'layanan',
                             'hub_dest_id',
+                            'status',
                         ],
                         raw: true,
                     });
+
+                    // Filter tambahan: untuk task selesai, pastikan photo tidak kosong
+                    let filteredDeliveryTasks = deliveryTasks;
+                    if (isCompletedFilter) {
+                        filteredDeliveryTasks = deliveryTasks.filter((task: any) => {
+                            const photo = task.photo;
+                            return photo && photo !== '' && photo !== null;
+                        });
+
+                        // Filter delivery tasks berdasarkan order status jika filter completed
+                        // Hanya ambil task yang order status = 'Delivered' untuk task selesai
+                        const deliveredOrderIds = orders
+                            .filter((order: any) => order.status === 'Delivered')
+                            .map((order: any) => order.id);
+                        filteredDeliveryTasks = filteredDeliveryTasks.filter((task: any) =>
+                            deliveredOrderIds.includes(task.order_id)
+                        );
+                    }
 
                     // Buat map untuk akses cepat
                     const orderMap = new Map(orders.map((order: any) => [order.id, order]));
@@ -1464,13 +1550,16 @@ export class DriversService {
                     const hubMap = new Map(hubs.map((hub: any) => [hub.id, hub.nama]));
 
                     // Ambil informasi barang untuk semua orders sekaligus
-                    const orderIdsForDelivery = orders.map((order: any) => order.id);
+                    const validDeliveryOrderIds = new Set(filteredDeliveryTasks.map((task: any) => task.order_id));
+                    const orderIdsForDelivery = orders
+                        .filter((order: any) => validDeliveryOrderIds.has(order.id))
+                        .map((order: any) => order.id);
                     const barangInfoMap = await this.getBarangInfoForOrders(orderIdsForDelivery);
 
                     // Transform delivery tasks
-                    for (const deliveryTask of deliveryTasks) {
+                    for (const deliveryTask of filteredDeliveryTasks) {
                         const order = orderMap.get(deliveryTask.order_id);
-                        if (!order) continue;
+                        if (!order || !validDeliveryOrderIds.has(order.id)) continue;
 
                         const hubName = hubMap.get(order.hub_dest_id);
                         const statusLabel = this.getTaskStatusLabel(deliveryTask.status);
@@ -1534,15 +1623,19 @@ export class DriversService {
 
     /**
      * Helper method untuk mendapatkan label status task
+     * Status mapping berdasarkan confirmPickup:
+     * 0 = Pending (baru ditugaskan)
+     * 1 = Completed (selesai dengan bukti foto)
+     * 2 = Failed (gagal)
      */
     private getTaskStatusLabel(status: number): string {
         switch (status) {
             case 0:
                 return 'Pending';
             case 1:
-                return 'In Progress';
-            case 2:
                 return 'Completed';
+            case 2:
+                return 'Failed';
             default:
                 return 'Unknown';
         }

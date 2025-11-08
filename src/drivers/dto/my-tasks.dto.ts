@@ -7,7 +7,7 @@ export class MyTasksQueryDto {
     task_type?: 'pickup' | 'delivery' | 'all';
 
     @IsOptional()
-    @IsIn(['0', '1', '2'], { message: 'status harus salah satu dari: 0 (pending), 1 (in progress), 2 (completed)' })
+    @IsIn(['0', '1', '2', 'completed'], { message: 'status harus salah satu dari: 0 (pending), 1 (in progress/assigned), 2 (failed), completed (selesai dengan bukti foto)' })
     status?: string;
 
     @IsOptional()
