@@ -3,6 +3,7 @@ import { DriversService } from './drivers.service';
 import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
+import { MyTasksQueryDto, MyTasksResponseDto } from './dto/my-tasks.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('drivers')
@@ -66,5 +67,19 @@ export class DriversController {
         // Override assigned_by_user_id dengan user yang sedang login
         assignDriverDto.assigned_by_user_id = req.user?.id;
         return this.driversService.assignDriverToOrder(assignDriverDto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get('my-tasks')
+    async getMyTasks(
+        @Query() query: MyTasksQueryDto,
+        @Request() req: any
+    ): Promise<MyTasksResponseDto> {
+        const driverId = req.user?.id;
+        if (!driverId) {
+            throw new UnauthorizedException('User tidak terautentikasi');
+        }
+
+        return this.driversService.getMyTasks(driverId, query);
     }
 } 

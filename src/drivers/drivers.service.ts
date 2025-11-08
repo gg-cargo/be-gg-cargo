@@ -8,9 +8,11 @@ import { LogGps } from '../models/log-gps.model';
 import { Order } from '../models/order.model';
 import { Hub } from '../models/hub.model';
 import { OrderHistory } from '../models/order-history.model';
+import { OrderPiece } from '../models/order-piece.model';
 import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto, AvailableDriversResponseDto, AvailableDriverDto, DriverLocationDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto, DriverStatusSummaryResponseDto, DriverStatusSummaryDto, DriverWorkloadDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
+import { MyTasksQueryDto, MyTasksResponseDto, DriverTaskDto } from './dto/my-tasks.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { ORDER_STATUS } from 'src/common/constants/order-status.constants';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
@@ -34,6 +36,8 @@ export class DriversService {
         private hubModel: typeof Hub,
         @InjectModel(OrderHistory)
         private orderHistoryModel: typeof OrderHistory,
+        @InjectModel(OrderPiece)
+        private orderPieceModel: typeof OrderPiece,
         private readonly notificationBadgesService: NotificationBadgesService,
     ) { }
 
@@ -1262,5 +1266,353 @@ export class DriversService {
         } catch (error) {
             this.logger.error(`Error marking Order kirim as read for order ${orderId}: ${error.message}`);
         }
+    }
+
+    /**
+     * Mendapatkan daftar task (pickup dan delivery) untuk driver yang sedang login
+     */
+    async getMyTasks(driverId: number, query: MyTasksQueryDto): Promise<MyTasksResponseDto> {
+        try {
+            const {
+                task_type = 'all',
+                status,
+                date_from,
+                date_to,
+                page = 1,
+                limit = 20,
+            } = query;
+
+            const offset = (page - 1) * limit;
+
+            // Build filter untuk status
+            const statusFilter: any = {};
+            if (status !== undefined) {
+                statusFilter.status = parseInt(status);
+            }
+
+            // Build filter untuk tanggal
+            const dateFilter: any = {};
+            if (date_from || date_to) {
+                dateFilter.assign_date = {};
+                if (date_from) {
+                    dateFilter.assign_date[Op.gte] = new Date(date_from);
+                }
+                if (date_to) {
+                    const endDate = new Date(date_to);
+                    endDate.setHours(23, 59, 59, 999);
+                    dateFilter.assign_date[Op.lte] = endDate;
+                }
+            }
+
+            const tasks: DriverTaskDto[] = [];
+
+            // 1. Ambil pickup tasks jika task_type adalah 'pickup' atau 'all'
+            if (task_type === 'pickup' || task_type === 'all') {
+                const pickupWhere: any = {
+                    driver_id: driverId,
+                    ...statusFilter,
+                    ...dateFilter,
+                };
+
+                const pickupTasks = await this.orderPickupDriverModel.findAll({
+                    where: pickupWhere,
+                    attributes: ['id', 'order_id', 'status', 'assign_date', 'notes', 'latlng'],
+                    raw: true,
+                });
+
+                if (pickupTasks.length > 0) {
+                    // Ambil order_ids
+                    const orderIds = pickupTasks.map((task: any) => task.order_id);
+
+                    // Query orders
+                    const orders = await this.orderModel.findAll({
+                        where: {
+                            id: { [Op.in]: orderIds },
+                        },
+                        attributes: [
+                            'id',
+                            'no_tracking',
+                            'nama_pengirim',
+                            'alamat_pengirim',
+                            'kota_pengirim',
+                            'no_telepon_pengirim',
+                            'nama_penerima',
+                            'alamat_penerima',
+                            'kota_penerima',
+                            'no_telepon_penerima',
+                            'nama_barang',
+                            'layanan',
+                            'hub_source_id',
+                        ],
+                        raw: true,
+                    });
+
+                    // Buat map untuk akses cepat
+                    const orderMap = new Map(orders.map((order: any) => [order.id, order]));
+
+                    // Ambil semua hub_source_id yang unik
+                    const hubSourceIds = [...new Set(orders.map((order: any) => order.hub_source_id).filter(Boolean))];
+
+                    // Query hubs sekaligus
+                    const hubs = await this.hubModel.findAll({
+                        where: {
+                            id: { [Op.in]: hubSourceIds },
+                        },
+                        attributes: ['id', 'nama'],
+                        raw: true,
+                    });
+
+                    const hubMap = new Map(hubs.map((hub: any) => [hub.id, hub.nama]));
+
+                    // Ambil informasi barang untuk semua orders sekaligus
+                    const orderIdsForPickup = orders.map((order: any) => order.id);
+                    const barangInfoMap = await this.getBarangInfoForOrders(orderIdsForPickup);
+
+                    // Transform pickup tasks
+                    for (const pickupTask of pickupTasks) {
+                        const order = orderMap.get(pickupTask.order_id);
+                        if (!order) continue;
+
+                        const hubName = hubMap.get(order.hub_source_id);
+                        const statusLabel = this.getTaskStatusLabel(pickupTask.status);
+                        const barangInfo = barangInfoMap.get(order.id);
+
+                        tasks.push({
+                            task_id: pickupTask.id,
+                            task_type: 'pickup',
+                            order_id: order.id,
+                            no_tracking: order.no_tracking,
+                            nama_pengirim: order.nama_pengirim,
+                            alamat_pengirim: order.alamat_pengirim,
+                            kota_pengirim: order.kota_pengirim,
+                            no_telepon_pengirim: order.no_telepon_pengirim,
+                            nama_penerima: order.nama_penerima,
+                            alamat_penerima: order.alamat_penerima,
+                            kota_penerima: order.kota_penerima,
+                            no_telepon_penerima: order.no_telepon_penerima,
+                            status: pickupTask.status,
+                            status_label: statusLabel,
+                            assign_date: pickupTask.assign_date,
+                            notes: pickupTask.notes || undefined,
+                            latlng: pickupTask.latlng || undefined,
+                            nama_barang: order.nama_barang || undefined,
+                            layanan: order.layanan || undefined,
+                            hub_name: hubName,
+                            barang_info: barangInfo,
+                        });
+                    }
+                }
+            }
+
+            // 2. Ambil delivery tasks jika task_type adalah 'delivery' atau 'all'
+            if (task_type === 'delivery' || task_type === 'all') {
+                const deliveryWhere: any = {
+                    driver_id: driverId,
+                    ...statusFilter,
+                    ...dateFilter,
+                };
+
+                const deliveryTasks = await this.orderDeliverDriverModel.findAll({
+                    where: deliveryWhere,
+                    attributes: ['id', 'order_id', 'status', 'assign_date', 'notes', 'latlng'],
+                    raw: true,
+                });
+
+                if (deliveryTasks.length > 0) {
+                    // Ambil order_ids
+                    const orderIds = deliveryTasks.map((task: any) => task.order_id);
+
+                    // Query orders
+                    const orders = await this.orderModel.findAll({
+                        where: {
+                            id: { [Op.in]: orderIds },
+                        },
+                        attributes: [
+                            'id',
+                            'no_tracking',
+                            'nama_pengirim',
+                            'alamat_pengirim',
+                            'kota_pengirim',
+                            'no_telepon_pengirim',
+                            'nama_penerima',
+                            'alamat_penerima',
+                            'kota_penerima',
+                            'no_telepon_penerima',
+                            'nama_barang',
+                            'layanan',
+                            'hub_dest_id',
+                        ],
+                        raw: true,
+                    });
+
+                    // Buat map untuk akses cepat
+                    const orderMap = new Map(orders.map((order: any) => [order.id, order]));
+
+                    // Ambil semua hub_dest_id yang unik
+                    const hubDestIds = [...new Set(orders.map((order: any) => order.hub_dest_id).filter(Boolean))];
+
+                    // Query hubs sekaligus
+                    const hubs = hubDestIds.length > 0 ? await this.hubModel.findAll({
+                        where: {
+                            id: { [Op.in]: hubDestIds },
+                        },
+                        attributes: ['id', 'nama'],
+                        raw: true,
+                    }) : [];
+
+                    const hubMap = new Map(hubs.map((hub: any) => [hub.id, hub.nama]));
+
+                    // Ambil informasi barang untuk semua orders sekaligus
+                    const orderIdsForDelivery = orders.map((order: any) => order.id);
+                    const barangInfoMap = await this.getBarangInfoForOrders(orderIdsForDelivery);
+
+                    // Transform delivery tasks
+                    for (const deliveryTask of deliveryTasks) {
+                        const order = orderMap.get(deliveryTask.order_id);
+                        if (!order) continue;
+
+                        const hubName = hubMap.get(order.hub_dest_id);
+                        const statusLabel = this.getTaskStatusLabel(deliveryTask.status);
+                        const barangInfo = barangInfoMap.get(order.id);
+
+                        tasks.push({
+                            task_id: deliveryTask.id,
+                            task_type: 'delivery',
+                            order_id: order.id,
+                            no_tracking: order.no_tracking,
+                            nama_pengirim: order.nama_pengirim,
+                            alamat_pengirim: order.alamat_pengirim,
+                            kota_pengirim: order.kota_pengirim,
+                            no_telepon_pengirim: order.no_telepon_pengirim,
+                            nama_penerima: order.nama_penerima,
+                            alamat_penerima: order.alamat_penerima,
+                            kota_penerima: order.kota_penerima,
+                            no_telepon_penerima: order.no_telepon_penerima,
+                            status: deliveryTask.status,
+                            status_label: statusLabel,
+                            assign_date: deliveryTask.assign_date,
+                            notes: deliveryTask.notes || undefined,
+                            latlng: deliveryTask.latlng || undefined,
+                            nama_barang: order.nama_barang || undefined,
+                            layanan: order.layanan || undefined,
+                            hub_name: hubName,
+                            barang_info: barangInfo,
+                        });
+                    }
+                }
+            }
+
+            // Sort berdasarkan assign_date (terbaru dulu)
+            tasks.sort((a, b) => {
+                return new Date(b.assign_date).getTime() - new Date(a.assign_date).getTime();
+            });
+
+            // Pagination
+            const total = tasks.length;
+            const paginatedTasks = tasks.slice(offset, offset + limit);
+            const totalPages = Math.ceil(total / limit);
+
+            return {
+                message: 'Daftar task berhasil diambil',
+                success: true,
+                data: {
+                    tasks: paginatedTasks,
+                    pagination: {
+                        page,
+                        limit,
+                        total,
+                        total_pages: totalPages,
+                    },
+                },
+            };
+        } catch (error) {
+            this.logger.error(`Error in getMyTasks: ${error.message}`, error.stack);
+            throw new InternalServerErrorException('Gagal mengambil daftar task');
+        }
+    }
+
+    /**
+     * Helper method untuk mendapatkan label status task
+     */
+    private getTaskStatusLabel(status: number): string {
+        switch (status) {
+            case 0:
+                return 'Pending';
+            case 1:
+                return 'In Progress';
+            case 2:
+                return 'Completed';
+            default:
+                return 'Unknown';
+        }
+    }
+
+    /**
+     * Helper method untuk mendapatkan informasi barang (jumlah koli, total berat, detail koli) untuk multiple orders
+     */
+    private async getBarangInfoForOrders(orderIds: number[]): Promise<Map<number, { jumlah_koli: number; total_berat_kg: number; detail_koli?: Array<{ piece_id: string; berat: number; panjang: number; lebar: number; tinggi: number }> }>> {
+        const barangInfoMap = new Map<number, { jumlah_koli: number; total_berat_kg: number; detail_koli?: Array<{ piece_id: string; berat: number; panjang: number; lebar: number; tinggi: number }> }>();
+
+        if (orderIds.length === 0) {
+            return barangInfoMap;
+        }
+
+        try {
+            // Ambil semua pieces untuk orders tersebut
+            const pieces = await this.orderPieceModel.findAll({
+                where: {
+                    order_id: { [Op.in]: orderIds },
+                },
+                attributes: [
+                    'order_id',
+                    'piece_id',
+                    'berat',
+                    'panjang',
+                    'lebar',
+                    'tinggi',
+                ],
+                raw: true,
+            });
+
+            // Group pieces by order_id
+            const piecesByOrder = new Map<number, any[]>();
+            for (const piece of pieces) {
+                const orderId = (piece as any).order_id;
+                if (!piecesByOrder.has(orderId)) {
+                    piecesByOrder.set(orderId, []);
+                }
+                piecesByOrder.get(orderId)!.push(piece);
+            }
+
+            // Hitung jumlah koli dan total berat untuk setiap order
+            for (const orderId of orderIds) {
+                const orderPieces = piecesByOrder.get(orderId) || [];
+
+                const jumlah_koli = orderPieces.length;
+                const total_berat_kg = orderPieces.reduce((sum, piece: any) => {
+                    return sum + (Number(piece.berat) || 0);
+                }, 0);
+
+                // Detail koli (ambil maksimal 10 koli pertama untuk menghindari response terlalu besar)
+                const detail_koli = orderPieces.slice(0, 10).map((piece: any) => ({
+                    piece_id: piece.piece_id || '',
+                    berat: Number(piece.berat) || 0,
+                    panjang: Number(piece.panjang) || 0,
+                    lebar: Number(piece.lebar) || 0,
+                    tinggi: Number(piece.tinggi) || 0,
+                }));
+
+                barangInfoMap.set(orderId, {
+                    jumlah_koli,
+                    total_berat_kg: Number(total_berat_kg.toFixed(2)),
+                    detail_koli: detail_koli.length > 0 ? detail_koli : undefined,
+                });
+            }
+        } catch (error) {
+            this.logger.error(`Error getting barang info for orders: ${error.message}`);
+            // Return empty map on error, so the response still works
+        }
+
+        return barangInfoMap;
     }
 } 
