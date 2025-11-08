@@ -643,8 +643,8 @@ export class PickupsService {
         const {
             order_id,
             status,
-            photo_base64,
-            signature_base64,
+            photo,
+            signature,
             notes,
             latlng,
             user_id,
@@ -701,9 +701,9 @@ export class PickupsService {
             await this.orderPickupDriverModel.update(
                 {
                     status: orderPickupStatus,
-                    photo: photo_base64 || '',
+                    photo: photo || '',
                     notes: notes || '',
-                    signature: signature_base64 || '',
+                    signature: signature || '',
                     latlng: latlng,
                     updated_at: now,
                 } as any,

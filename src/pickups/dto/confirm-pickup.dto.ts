@@ -14,11 +14,11 @@ export class ConfirmPickupDto {
 
     @IsOptional()
     @IsString()
-    photo_base64?: string;
+    photo?: string;
 
     @IsOptional()
     @IsString()
-    signature_base64?: string;
+    signature?: string;
 
     @IsOptional()
     @IsString()
