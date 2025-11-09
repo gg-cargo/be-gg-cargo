@@ -1497,9 +1497,17 @@ export class DriversService {
                         id: { [Op.in]: orderIds },
                     };
 
-                    // Untuk task selesai, pastikan order status = 'Delivered'
+                    // Untuk task selesai (completed dengan foto), pastikan status_deliver = 'Completed'
                     if (isCompletedFilter) {
-                        orderWhere.status = 'Delivered';
+                        orderWhere.status_deliver = 'Completed';
+                    } else if (status !== undefined && parseInt(status) === 1) {
+                        // Untuk status = 1 (In Progress/Completed task), pastikan status_deliver != 'Completed' atau status_deliver = null
+                        orderWhere.status_deliver = {
+                            [Op.or]: [
+                                { [Op.ne]: 'Completed' },
+                                { [Op.is]: null }
+                            ]
+                        };
                     }
 
                     const orders = await this.orderModel.findAll({
@@ -1519,6 +1527,7 @@ export class DriversService {
                             'layanan',
                             'hub_dest_id',
                             'status',
+                            'status_deliver',
                             'reweight_status',
                         ],
                         raw: true,
@@ -1533,9 +1542,9 @@ export class DriversService {
                         });
 
                         // Filter delivery tasks berdasarkan order status jika filter completed
-                        // Hanya ambil task yang order status = 'Delivered' untuk task selesai
+                        // Hanya ambil task yang order status_deliver = 'Completed' untuk task selesai
                         const deliveredOrderIds = orders
-                            .filter((order: any) => order.status === 'Delivered')
+                            .filter((order: any) => order.status_deliver === 'Completed')
                             .map((order: any) => order.id);
                         filteredDeliveryTasks = filteredDeliveryTasks.filter((task: any) =>
                             deliveredOrderIds.includes(task.order_id)
@@ -1572,7 +1581,7 @@ export class DriversService {
                         if (!order || !validDeliveryOrderIds.has(order.id)) continue;
 
                         const hubName = hubMap.get(order.hub_dest_id);
-                        const statusLabel = this.getTaskStatusLabel(deliveryTask.status, 'delivery', order.status);
+                        const statusLabel = this.getTaskStatusLabel(deliveryTask.status, 'delivery', order.status_deliver);
                         const barangInfo = barangInfoMap.get(order.id);
 
                         tasks.push({
@@ -1652,7 +1661,15 @@ export class DriversService {
                         return 'In Progress';
                     }
                 }
-                // Untuk delivery tasks atau default, tetap 'Completed'
+                // Untuk delivery tasks, cek status_deliver untuk menentukan label
+                if (taskType === 'delivery' && orderStatus !== undefined) {
+                    if (orderStatus === 'Completed') {
+                        return 'Completed';
+                    } else {
+                        return 'In Progress';
+                    }
+                }
+                // Default untuk status = 1
                 return 'Completed';
             case 2:
                 return 'Failed';
