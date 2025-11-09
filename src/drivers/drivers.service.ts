@@ -13,7 +13,7 @@ import { OrderNotifikasi } from '../models/order-notifikasi.model';
 import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto, AvailableDriversResponseDto, AvailableDriverDto, DriverLocationDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto, DriverStatusSummaryResponseDto, DriverStatusSummaryDto, DriverWorkloadDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
-import { MyTasksQueryDto, MyTasksResponseDto, DriverTaskDto } from './dto/my-tasks.dto';
+import { MyTasksQueryDto, MyTasksResponseDto, DriverTaskDto, TaskStatisticsDto } from './dto/my-tasks.dto';
 import { AcceptTaskResponseDto } from './dto/accept-task.dto';
 import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
@@ -1627,6 +1627,9 @@ export class DriversService {
             const paginatedTasks = tasks.slice(offset, offset + limit);
             const totalPages = Math.ceil(total / limit);
 
+            // Hitung statistik tugas (tanpa filter pagination, tapi tetap mengikuti filter tanggal)
+            const statistics = await this.calculateTaskStatistics(driverId, date_from, date_to);
+
             return {
                 message: 'Daftar task berhasil diambil',
                 success: true,
@@ -1638,11 +1641,158 @@ export class DriversService {
                         total,
                         total_pages: totalPages,
                     },
+                    statistics,
                 },
             };
         } catch (error) {
             this.logger.error(`Error in getMyTasks: ${error.message}`, error.stack);
             throw new InternalServerErrorException('Gagal mengambil daftar task');
+        }
+    }
+
+    /**
+     * Menghitung statistik tugas untuk driver
+     */
+    private async calculateTaskStatistics(driverId: number, dateFrom?: string, dateTo?: string): Promise<TaskStatisticsDto> {
+        try {
+            // Build filter untuk tanggal
+            const dateFilter: any = {};
+            if (dateFrom || dateTo) {
+                dateFilter.assign_date = {};
+                if (dateFrom) {
+                    dateFilter.assign_date[Op.gte] = new Date(dateFrom);
+                }
+                if (dateTo) {
+                    const endDate = new Date(dateTo);
+                    endDate.setHours(23, 59, 59, 999);
+                    dateFilter.assign_date[Op.lte] = endDate;
+                }
+            }
+
+            // Query semua pickup tasks
+            const pickupWhere: any = {
+                driver_id: driverId,
+            };
+            if (Object.keys(dateFilter).length > 0) {
+                Object.assign(pickupWhere, dateFilter);
+            }
+
+            const allPickupTasks = await this.orderPickupDriverModel.findAll({
+                where: pickupWhere,
+                attributes: ['id', 'order_id', 'status', 'photo'],
+                raw: true,
+            });
+
+            // Query semua delivery tasks
+            const deliveryWhere: any = {
+                driver_id: driverId,
+            };
+            if (Object.keys(dateFilter).length > 0) {
+                Object.assign(deliveryWhere, dateFilter);
+            }
+
+            const allDeliveryTasks = await this.orderDeliverDriverModel.findAll({
+                where: deliveryWhere,
+                attributes: ['id', 'order_id', 'status', 'photo'],
+                raw: true,
+            });
+
+            // Ambil order_ids untuk query orders
+            const pickupOrderIds = allPickupTasks.map((task: any) => task.order_id);
+            const deliveryOrderIds = allDeliveryTasks.map((task: any) => task.order_id);
+            const allOrderIds = [...new Set([...pickupOrderIds, ...deliveryOrderIds])];
+
+            // Query orders untuk mendapatkan status_pickup dan status_deliver
+            const orders = allOrderIds.length > 0 ? await this.orderModel.findAll({
+                where: {
+                    id: { [Op.in]: allOrderIds },
+                },
+                attributes: ['id', 'status_pickup', 'status_deliver'],
+                raw: true,
+            }) : [];
+
+            const orderMap = new Map(orders.map((order: any) => [order.id, order]));
+
+            // Hitung statistik
+            let totalTasks = 0;
+            let totalPickup = allPickupTasks.length;
+            let totalDelivery = allDeliveryTasks.length;
+            let pending = 0;
+            let inProgress = 0;
+            let completed = 0;
+            let failed = 0;
+            let completedPickup = 0;
+            let completedDelivery = 0;
+
+            // Hitung statistik pickup tasks
+            for (const pickupTask of allPickupTasks) {
+                const order = orderMap.get(pickupTask.order_id);
+                const photo = pickupTask.photo;
+                const hasPhoto = photo && photo !== '' && photo !== null;
+                const isOrderCompleted = order && order.status_pickup === 'Completed';
+
+                if (pickupTask.status === 0) {
+                    pending++;
+                } else if (pickupTask.status === 1) {
+                    if (isOrderCompleted && hasPhoto) {
+                        completed++;
+                        completedPickup++;
+                    } else {
+                        inProgress++;
+                    }
+                } else if (pickupTask.status === 2) {
+                    failed++;
+                }
+            }
+
+            // Hitung statistik delivery tasks
+            for (const deliveryTask of allDeliveryTasks) {
+                const order = orderMap.get(deliveryTask.order_id);
+                const photo = deliveryTask.photo;
+                const hasPhoto = photo && photo !== '' && photo !== null;
+                const isOrderCompleted = order && order.status_deliver === 'Completed';
+
+                if (deliveryTask.status === 0) {
+                    pending++;
+                } else if (deliveryTask.status === 1) {
+                    if (isOrderCompleted && hasPhoto) {
+                        completed++;
+                        completedDelivery++;
+                    } else {
+                        inProgress++;
+                    }
+                } else if (deliveryTask.status === 2) {
+                    failed++;
+                }
+            }
+
+            totalTasks = totalPickup + totalDelivery;
+
+            return {
+                total_tasks: totalTasks,
+                total_pickup: totalPickup,
+                total_delivery: totalDelivery,
+                pending,
+                in_progress: inProgress,
+                completed,
+                failed,
+                completed_pickup: completedPickup,
+                completed_delivery: completedDelivery,
+            };
+        } catch (error) {
+            this.logger.error(`Error in calculateTaskStatistics: ${error.message}`, error.stack);
+            // Return default statistics jika error
+            return {
+                total_tasks: 0,
+                total_pickup: 0,
+                total_delivery: 0,
+                pending: 0,
+                in_progress: 0,
+                completed: 0,
+                failed: 0,
+                completed_pickup: 0,
+                completed_delivery: 0,
+            };
         }
     }
 

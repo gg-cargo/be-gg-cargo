@@ -66,6 +66,18 @@ export class DriverTaskDto {
     };
 }
 
+export class TaskStatisticsDto {
+    total_tasks: number;
+    total_pickup: number;
+    total_delivery: number;
+    pending: number;
+    in_progress: number;
+    completed: number;
+    failed: number;
+    completed_pickup: number;
+    completed_delivery: number;
+}
+
 export class MyTasksResponseDto {
     message: string;
     success: boolean;
@@ -77,6 +89,7 @@ export class MyTasksResponseDto {
             total: number;
             total_pages: number;
         };
+        statistics: TaskStatisticsDto;
     };
 }
 
