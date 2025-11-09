@@ -141,6 +141,12 @@ export class Order extends Model {
     status_pickup: string;
 
     @Column({
+        type: DataType.STRING(20),
+        allowNull: true,
+    })
+    status_deliver: string;
+
+    @Column({
         type: DataType.TEXT,
         allowNull: true,
     })
