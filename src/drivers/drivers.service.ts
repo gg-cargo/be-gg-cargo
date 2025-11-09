@@ -1365,8 +1365,13 @@ export class DriversService {
                     if (isCompletedFilter) {
                         orderWhere.status_pickup = 'Completed';
                     } else if (status !== undefined && parseInt(status) === 1) {
-                        // Untuk status = 1 (In Progress/Completed task), pastikan status_pickup != 'Completed'
-                        orderWhere.status_pickup = { [Op.ne]: 'Completed' };
+                        // Untuk status = 1 (In Progress/Completed task), pastikan status_pickup != 'Completed' atau status_pickup = null
+                        orderWhere.status_pickup = {
+                            [Op.or]: [
+                                { [Op.ne]: 'Completed' },
+                                { [Op.is]: null }
+                            ]
+                        };
                     }
 
                     const orders = await this.orderModel.findAll({
