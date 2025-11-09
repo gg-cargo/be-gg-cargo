@@ -1880,8 +1880,8 @@ export class DriversService {
         const {
             order_id,
             status,
-            photo_base64,
-            signature_base64,
+            photo,
+            signature,
             notes,
             latlng,
             user_id,
@@ -1939,13 +1939,27 @@ export class DriversService {
 
         try {
             const now = new Date();
+            const deliveryStatus = isSuccess ? 'Completed' : 'Failed';
             const orderDeliveryStatus = isSuccess ? 1 : 2; // 1: Completed, 2: Failed
 
-            // 1. Update orders table - hanya update jika delivery berhasil
+            // 1. Update orders table 
             if (isSuccess) {
                 await this.orderModel.update(
                     {
                         status: ORDER_STATUS.DELIVERED,
+                        status_deliver: deliveryStatus,
+                        updated_at: now,
+                    },
+                    {
+                        where: { id: order_id },
+                        transaction,
+                    }
+                );
+            } else {
+                // Jika delivery gagal, hanya update status_deliver, jangan ubah status order
+                await this.orderModel.update(
+                    {
+                        status_deliver: deliveryStatus,
                         updated_at: now,
                     },
                     {
@@ -1955,13 +1969,14 @@ export class DriversService {
                 );
             }
 
+
             // 2. Update order_deliver_drivers
             await this.orderDeliverDriverModel.update(
                 {
                     status: orderDeliveryStatus,
-                    photo: photo_base64 || '',
+                    photo: photo || '',
                     notes: notes || reason || '',
-                    signature: signature_base64 || '',
+                    signature: signature || '',
                     latlng: latlng,
                     updated_at: now,
                 } as any,
@@ -1984,46 +1999,6 @@ export class DriversService {
                     }
                 );
             }
-
-            // 4. Create order_history
-            const { date, time } = getOrderHistoryDateTime();
-            const historyStatus = isSuccess ? ORDER_STATUS.DELIVERED : 'Delivery Failed';
-            const historyRemark = isSuccess
-                ? `Barang berhasil dikirim oleh driver`
-                : `Delivery gagal. Alasan: ${reason}`;
-
-            await this.orderHistoryModel.create(
-                {
-                    order_id,
-                    status: historyStatus,
-                    remark: historyRemark,
-                    date: date,
-                    time: time,
-                    provinsi: order.getDataValue('provinsi_penerima') || '',
-                    kota: order.getDataValue('kota_penerima') || '',
-                    created_by: user_id,
-                },
-                { transaction }
-            );
-
-            // 5. Create order_notifikasi
-            const notificationMessage = isSuccess
-                ? `Barang order #${order.getDataValue('no_tracking')} telah berhasil di-deliver`
-                : `Delivery order #${order.getDataValue('no_tracking')} gagal. Alasan: ${reason}`;
-
-            await this.orderNotifikasiModel.create(
-                {
-                    message: notificationMessage,
-                    order_id,
-                    svc_source: order.getDataValue('svc_source_id'),
-                    hub_source: order.getDataValue('hub_source_id'),
-                    svc_dest: order.getDataValue('svc_dest_id'),
-                    hub_dest: order.getDataValue('hub_dest_id'),
-                    user_id: order.getDataValue('order_by'),
-                    pengiriman: '1',
-                } as any,
-                { transaction }
-            );
 
             await transaction.commit();
 
