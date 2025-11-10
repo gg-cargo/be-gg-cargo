@@ -46,6 +46,7 @@ import { InternationalOrderResponseDto } from './dto/international-order-respons
 import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
 import { AssignVendorTrackingDto, AssignVendorTrackingResponseDto } from './dto/assign-vendor-tracking.dto';
 import { StartDeliveryDto, StartDeliveryResponseDto } from './dto/start-delivery.dto';
+// (imports JwtAuthGuard & BadRequestException sudah ada di atas)
 
 @Controller('orders')
 export class OrdersController {
@@ -408,6 +409,16 @@ export class OrdersController {
         return this.ordersService.reweightPiece(pieceId, reweightDto);
     }
 
+    @UseGuards(JwtAuthGuard)
+    @Get('pieces/:piece_id/validate')
+    async validatePiece(
+        @Param('piece_id') pieceId: string,
+    ): Promise<{ message: string; success: boolean; data: { valid: boolean; piece_id: string; order_id?: number; no_tracking?: string } }> {
+        if (!pieceId || pieceId.trim() === '') {
+            throw new BadRequestException('piece_id wajib diisi');
+        }
+        return this.ordersService.validatePieceId(pieceId.trim());
+    }
 
 
     @UseGuards(JwtAuthGuard)

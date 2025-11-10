@@ -3772,6 +3772,45 @@ export class OrdersService {
         }
     }
 
+    /**
+     * Validasi piece_id apakah ada di sistem
+     */
+    async validatePieceId(pieceId: string): Promise<{ message: string; success: boolean; data: { valid: boolean; piece_id: string; order_id?: number; no_tracking?: string } }> {
+        const piece = await this.orderPieceModel.findOne({
+            where: { piece_id: pieceId },
+            include: [
+                {
+                    model: this.orderModel,
+                    as: 'order',
+                    attributes: ['id', 'no_tracking'],
+                },
+            ],
+        });
+
+        if (!piece) {
+            throw new NotFoundException(`Piece ID ${pieceId} tidak ditemukan`);
+        }
+
+        const reweightStatus = (piece as any).getDataValue
+            ? (piece as any).getDataValue('reweight_status')
+            : (piece as any).reweight_status;
+        if (reweightStatus === 1) {
+            throw new BadRequestException(`Piece ID ${pieceId} sudah di-reweight`);
+        }
+
+        const order: any = (piece as any).order || {};
+        return {
+            message: 'Piece valid',
+            success: true,
+            data: {
+                valid: true,
+                piece_id: pieceId,
+                order_id: order.id,
+                no_tracking: order.no_tracking,
+            },
+        };
+    }
+
     async getOrderDetail(noResi: string): Promise<OrderDetailResponseDto> {
         try {
             // 1. Get order with all related data
