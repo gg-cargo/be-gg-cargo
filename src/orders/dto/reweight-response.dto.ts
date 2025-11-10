@@ -2,7 +2,7 @@ export class ReweightPieceResponseDto {
     message: string;
     success: boolean;
     data: {
-        piece_id: number;
+        piece_id: string;
         order_id: number;
         berat_lama: number;
         berat_baru: number;

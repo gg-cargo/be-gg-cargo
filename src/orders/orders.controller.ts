@@ -400,9 +400,9 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
-    @Patch('pieces/:id/reweight')
+    @Patch('pieces/:piece_id/reweight')
     async reweightPiece(
-        @Param('id', ParseIntPipe) pieceId: number,
+        @Param('piece_id') pieceId: string,
         @Body() reweightDto: ReweightPieceDto,
     ): Promise<ReweightPieceResponseDto> {
         return this.ordersService.reweightPiece(pieceId, reweightDto);

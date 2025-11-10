@@ -3645,7 +3645,7 @@ export class OrdersService {
         }
     }
 
-    async reweightPiece(pieceId: number, reweightDto: ReweightPieceDto): Promise<ReweightPieceResponseDto> {
+    async reweightPiece(pieceId: string, reweightDto: ReweightPieceDto): Promise<ReweightPieceResponseDto> {
         const {
             berat,
             panjang,
@@ -3655,7 +3655,8 @@ export class OrdersService {
         } = reweightDto;
 
         // Validasi piece exists
-        const piece = await this.orderPieceModel.findByPk(pieceId, {
+        const piece = await this.orderPieceModel.findOne({
+            where: { piece_id: pieceId },
             include: [
                 {
                     model: this.orderModel,
@@ -3703,7 +3704,7 @@ export class OrdersService {
                     updatedAt: now,
                 },
                 {
-                    where: { id: pieceId },
+                    where: { piece_id: pieceId },
                     transaction,
                 }
             );
