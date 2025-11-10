@@ -410,6 +410,14 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Get('pieces/:piece_id')
+    async getPieceDetail(
+        @Param('piece_id') pieceId: string,
+    ): Promise<{ message: string; success: boolean; data: any }> {
+        return this.ordersService.getPieceDetail(pieceId.trim());
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Get('pieces/:piece_id/validate')
     async validatePiece(
         @Param('piece_id') pieceId: string,

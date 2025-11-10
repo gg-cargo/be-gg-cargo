@@ -3773,6 +3773,42 @@ export class OrdersService {
     }
 
     /**
+     * Ambil detail piece berdasarkan piece_id
+     */
+    async getPieceDetail(pieceId: string): Promise<{ message: string; success: boolean; data: any }> {
+        const piece = await this.orderPieceModel.findOne({
+            where: { piece_id: pieceId },
+            include: [
+                {
+                    model: this.orderModel,
+                    as: 'order',
+                    attributes: ['id', 'no_tracking'],
+                },
+            ],
+        });
+
+        if (!piece) {
+            throw new NotFoundException(`Piece ID ${pieceId} tidak ditemukan`);
+        }
+
+        const order: any = (piece as any).order || {};
+        return {
+            message: 'Detail piece ditemukan',
+            success: true,
+            data: {
+                piece_id: piece.getDataValue('piece_id'),
+                order_id: order.id,
+                no_tracking: order.no_tracking,
+                berat: piece.getDataValue('berat'),
+                panjang: piece.getDataValue('panjang'),
+                lebar: piece.getDataValue('lebar'),
+                tinggi: piece.getDataValue('tinggi'),
+                reweight_status: piece.getDataValue('reweight_status'),
+                pickup_status: piece.getDataValue('pickup_status'),
+            },
+        };
+    }
+    /**
      * Validasi piece_id apakah ada di sistem
      */
     async validatePieceId(pieceId: string): Promise<{ message: string; success: boolean; data: { valid: boolean; piece_id: string; order_id?: number; no_tracking?: string } }> {
