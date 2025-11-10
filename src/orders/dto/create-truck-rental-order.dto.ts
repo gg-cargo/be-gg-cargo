@@ -41,8 +41,8 @@ export class CreateTruckRentalOrderDto {
     kelurahan_pengirim: string;
 
     @IsString()
-    @IsNotEmpty()
-    kodepos_pengirim: string;
+    @IsOptional()
+    kodepos_pengirim?: string;
 
     @IsString()
     @IsNotEmpty()
@@ -75,8 +75,8 @@ export class CreateTruckRentalOrderDto {
     kelurahan_penerima: string;
 
     @IsString()
-    @IsNotEmpty()
-    kodepos_penerima: string;
+    @IsOptional()
+    kodepos_penerima?: string;
 
     @IsString()
     @IsNotEmpty()

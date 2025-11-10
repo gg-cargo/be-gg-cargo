@@ -6923,6 +6923,14 @@ export class OrdersService {
                 createTruckRentalDto.alamat_penerima,
             );
 
+            // Handle default value untuk kodepos_pengirim dan kodepos_penerima jika kosong
+            const kodeposPengirim = createTruckRentalDto.kodepos_pengirim && createTruckRentalDto.kodepos_pengirim.trim() !== ''
+                ? createTruckRentalDto.kodepos_pengirim.trim()
+                : '-';
+            const kodeposPenerima = createTruckRentalDto.kodepos_penerima && createTruckRentalDto.kodepos_penerima.trim() !== ''
+                ? createTruckRentalDto.kodepos_penerima.trim()
+                : '-';
+
             // Buat pesanan baru
             const newOrder = await this.orderModel.create({
                 no_tracking: noTracking,
@@ -6934,7 +6942,7 @@ export class OrdersService {
                 kota_pengirim: createTruckRentalDto.kota_pengirim,
                 kecamatan_pengirim: createTruckRentalDto.kecamatan_pengirim,
                 kelurahan_pengirim: createTruckRentalDto.kelurahan_pengirim,
-                kodepos_pengirim: createTruckRentalDto.kodepos_pengirim,
+                kodepos_pengirim: kodeposPengirim,
                 no_telepon_pengirim: createTruckRentalDto.no_telepon_pengirim,
                 nama_penerima: createTruckRentalDto.nama_penerima,
                 alamat_penerima: createTruckRentalDto.alamat_penerima,
@@ -6942,7 +6950,7 @@ export class OrdersService {
                 kota_penerima: createTruckRentalDto.kota_penerima,
                 kecamatan_penerima: createTruckRentalDto.kecamatan_penerima,
                 kelurahan_penerima: createTruckRentalDto.kelurahan_penerima,
-                kodepos_penerima: createTruckRentalDto.kodepos_penerima,
+                kodepos_penerima: kodeposPenerima,
                 no_telepon_penerima: createTruckRentalDto.no_telepon_penerima,
                 nama_barang: createTruckRentalDto.keterangan_barang || "Muatan sewa truck",
                 harga_barang: 0, // Default untuk sewa truk
@@ -7004,7 +7012,7 @@ export class OrdersService {
                 kota_pengirim: createTruckRentalDto.kota_pengirim,
                 kecamatan_pengirim: createTruckRentalDto.kecamatan_pengirim,
                 kelurahan_pengirim: createTruckRentalDto.kelurahan_pengirim,
-                kodepos_pengirim: createTruckRentalDto.kodepos_pengirim,
+                kodepos_pengirim: kodeposPengirim,
                 no_telepon_pengirim: createTruckRentalDto.no_telepon_pengirim,
                 nama_penerima: createTruckRentalDto.nama_penerima,
                 alamat_penerima: createTruckRentalDto.alamat_penerima,
@@ -7012,7 +7020,7 @@ export class OrdersService {
                 kota_penerima: createTruckRentalDto.kota_penerima,
                 kecamatan_penerima: createTruckRentalDto.kecamatan_penerima,
                 kelurahan_penerima: createTruckRentalDto.kelurahan_penerima,
-                kodepos_penerima: createTruckRentalDto.kodepos_penerima,
+                kodepos_penerima: kodeposPenerima,
                 no_telepon_penerima: createTruckRentalDto.no_telepon_penerima,
                 nama_barang: createTruckRentalDto.keterangan_barang || "Muatan sewa truck",
                 status: ORDER_STATUS.DRAFT,
