@@ -5,7 +5,10 @@ export enum TruckType {
     CDDL = 'CDDL box',
     PICKUP = 'Pick Up box',
     FUSO = 'Fuso box',
-    CDE = 'CDE box'
+    CDE = 'CDE box',
+    TRAGA = 'Traga box',
+    WING = 'Wing box',
+    FUSO_BAK = 'Fuso Bak'
 }
 
 export enum TollPaymentMethod {
