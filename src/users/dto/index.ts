@@ -4,5 +4,6 @@ export * from './update-user.dto';
 export * from './change-password.dto';
 export * from './change-my-password.dto';
 export * from './change-my-password-response.dto';
+export * from './update-location.dto';
 export * from './user-response.dto';
 export * from './user-detail-response.dto'; 

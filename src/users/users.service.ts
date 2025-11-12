@@ -13,6 +13,7 @@ import { ChangeMyPasswordDto } from './dto/change-my-password.dto';
 import { ListUsersResponseDto, UserResponseDto, PaginationDto, CreateUserResponseDto, UpdateUserResponseDto, ChangePasswordResponseDto } from './dto/user-response.dto';
 import { ChangeMyPasswordResponseDto } from './dto/change-my-password-response.dto';
 import { UserDetailResponseDto } from './dto/user-detail-response.dto';
+import { UpdateLocationDto, UpdateLocationResponseDto } from './dto/update-location.dto';
 import { Op, Sequelize } from 'sequelize';
 import * as bcrypt from 'bcrypt';
 
@@ -608,6 +609,57 @@ export class UsersService {
         return {
             message: 'Password berhasil diubah. Silakan login ulang dengan password baru.',
             success: true,
+        };
+    }
+
+    async updateMyLocation(userId: number, updateLocationDto: UpdateLocationDto): Promise<UpdateLocationResponseDto> {
+        const user = await this.userModel.findByPk(userId);
+        if (!user) {
+            throw new NotFoundException('User tidak ditemukan');
+        }
+
+        const rawLatlng = updateLocationDto.latlng?.trim();
+        if (!rawLatlng) {
+            throw new BadRequestException('Lokasi (latlng) tidak boleh kosong');
+        }
+
+        const [latStr, lngStr] = rawLatlng.split(',').map(part => part.trim());
+        const latitude = parseFloat(latStr);
+        const longitude = parseFloat(lngStr);
+
+        if (!latStr || !lngStr || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+            throw new BadRequestException('Format latlng tidak valid. Gunakan format "latitude,longitude"');
+        }
+
+        if (latitude < -90 || latitude > 90) {
+            throw new BadRequestException('Nilai latitude harus berada pada rentang -90 hingga 90');
+        }
+
+        if (longitude < -180 || longitude > 180) {
+            throw new BadRequestException('Nilai longitude harus berada pada rentang -180 hingga 180');
+        }
+
+        const normalizedLatlng = `${latitude},${longitude}`;
+        const now = new Date();
+
+        await this.userModel.update(
+            {
+                latlng: normalizedLatlng,
+                last_update_gps: now,
+                updated_at: now,
+            },
+            {
+                where: { id: userId },
+            }
+        );
+
+        return {
+            message: 'Lokasi berhasil diperbarui',
+            success: true,
+            data: {
+                latlng: normalizedLatlng,
+                last_update_gps: now,
+            },
         };
     }
 } 
