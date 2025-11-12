@@ -5226,7 +5226,7 @@ export class OrdersService {
                     case 'order jemput':
                         statusFilter = {
                             [Op.and]: [
-                                { [Op.or]: [{ status_pickup: null }, { status_pickup: 'siap pickup' }, { status_pickup: 'Picked Up' }, { status_pickup: 'Completed' }] },
+                                { [Op.or]: [{ status_pickup: null }, { status_pickup: 'siap pickup' }, { status_pickup: 'Picked Up' }, { status_pickup: 'Completed' }, { status_pickup: 'Failed' }] },
                                 { is_gagal_pickup: 0 },
                                 { issetManifest_inbound: 0 }
                             ]
