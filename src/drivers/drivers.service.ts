@@ -19,6 +19,7 @@ import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { ORDER_STATUS } from 'src/common/constants/order-status.constants';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 
 @Injectable()
 export class DriversService {
@@ -44,6 +45,7 @@ export class DriversService {
         @InjectModel(OrderNotifikasi)
         private orderNotifikasiModel: typeof OrderNotifikasi,
         private readonly notificationBadgesService: NotificationBadgesService,
+        private readonly whatsappService: WhatsappService,
     ) { }
 
     async getAvailableDrivers(params: AvailableDriversDto) {
@@ -955,8 +957,22 @@ export class DriversService {
                 kota: ''     // default empty string untuk field wajib
             }, { transaction });
 
+            const driverPhone = driver.getDataValue('phone');
+            const driverName = driver.getDataValue('name');
+            const assignerName = assignedByUser.getDataValue('name');
+            const orderTracking = order.getDataValue('no_tracking');
+
             // 8. Commit transaction
             await transaction.commit();
+
+            await this.sendDriverAssignmentWhatsapp({
+                phone: driverPhone,
+                driverName,
+                taskType: assignDriverDto.task_type,
+                orderId: order.getDataValue('id'),
+                orderTracking,
+                assignerName,
+            });
 
             return {
                 message: `Kurir berhasil ditugaskan untuk ${assignDriverDto.task_type}`,
@@ -2197,6 +2213,71 @@ export class DriversService {
             }
 
             throw new InternalServerErrorException('Gagal mengkonfirmasi delivery');
+        }
+    }
+
+    private normalizePhoneNumber(phone?: string | null): string | null {
+        if (!phone) {
+            return null;
+        }
+
+        let cleaned = phone.trim();
+        if (!cleaned) {
+            return null;
+        }
+
+        cleaned = cleaned.replace(/\s+/g, '');
+        if (cleaned.startsWith('+')) {
+            cleaned = cleaned.substring(1);
+        }
+
+        cleaned = cleaned.replace(/[^0-9]/g, '');
+        if (!cleaned) {
+            return null;
+        }
+
+        if (cleaned.startsWith('62')) {
+            return `+${cleaned}`;
+        }
+
+        if (cleaned.startsWith('0')) {
+            return `+62${cleaned.substring(1)}`;
+        }
+
+        return `+62${cleaned}`;
+    }
+
+    private async sendDriverAssignmentWhatsapp(params: {
+        phone?: string | null;
+        driverName: string;
+        taskType: 'pickup' | 'delivery';
+        orderTracking?: string | null;
+        orderId: number;
+        assignerName: string;
+    }): Promise<void> {
+        const phoneNumber = this.normalizePhoneNumber(params.phone);
+
+        if (!phoneNumber) {
+            this.logger.warn(`Tidak dapat mengirim notifikasi WhatsApp: nomor telepon driver ${params.driverName} tidak valid atau kosong`);
+            return;
+        }
+
+        const taskLabel = params.taskType === 'pickup' ? 'pickup' : 'delivery';
+        const orderIdentifier = params.orderTracking && params.orderTracking.trim().length > 0
+            ? params.orderTracking.trim()
+            : `#${params.orderId}`;
+
+        const message = `Halo ${params.driverName}, Anda baru saja ditugaskan untuk ${taskLabel} order ${orderIdentifier} oleh ${params.assignerName}. Mohon cek aplikasi GG Kurir untuk detail tugasnya. Terima kasih.`;
+
+        try {
+            await this.whatsappService.sendText({
+                phoneNumber,
+                message,
+            });
+            this.logger.log(`Notifikasi WhatsApp penugasan berhasil dikirim ke ${params.driverName} (${phoneNumber}) untuk ${taskLabel} order ${orderIdentifier}`);
+        } catch (error: any) {
+            const errMsg = error?.message || 'Unknown error';
+            this.logger.error(`Gagal mengirim notifikasi WhatsApp ke ${params.driverName} (${phoneNumber}): ${errMsg}`, error?.stack);
         }
     }
 } 
