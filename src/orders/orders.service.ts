@@ -70,6 +70,8 @@ import { StartDeliveryDto, StartDeliveryResponseDto } from './dto/start-delivery
 import { BypassInboundDto, BypassInboundResponseDto } from './dto/bypass-inbound.dto';
 import { AssignVendorTrackingDto, AssignVendorTrackingResponseDto } from './dto/assign-vendor-tracking.dto';
 import { Vendor } from '../models/vendor.model';
+import { OrderPickupDriver } from '../models/order-pickup-driver.model';
+import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
 
 @Injectable()
 export class OrdersService {
@@ -116,6 +118,10 @@ export class OrdersService {
         private readonly truckListModel: typeof TruckList,
         @InjectModel(Vendor)
         private readonly vendorModel: typeof Vendor,
+        @InjectModel(OrderPickupDriver)
+        private readonly orderPickupDriverModel: typeof OrderPickupDriver,
+        @InjectModel(OrderDeliverDriver)
+        private readonly orderDeliverDriverModel: typeof OrderDeliverDriver,
         private readonly fileService: FileService,
         private readonly driversService: DriversService,
         private readonly notificationBadgesService: NotificationBadgesService,
@@ -5440,6 +5446,8 @@ export class OrdersService {
                     'vendor_tracking_number',
                     'issetManifest_inbound',
                     'issetManifest_outbound',
+                    'status_pickup',
+                    'status_deliver',
                     'hub_dest_id'
                 ],
                 include: [
@@ -5472,6 +5480,39 @@ export class OrdersService {
                 limit: limit,
                 offset: offset,
             });
+
+            const orderIds = orders.map(order => order.getDataValue('id') as number);
+
+            const pickupStatusMap = new Map<number, number>();
+            const deliveryStatusMap = new Map<number, number>();
+
+            if (orderIds.length > 0) {
+                const pickupStatusRecords = await this.orderPickupDriverModel.findAll({
+                    where: { order_id: { [Op.in]: orderIds } },
+                    attributes: ['order_id', 'status'],
+                    order: [['updated_at', 'DESC']],
+                    raw: true,
+                }) as Array<{ order_id: number; status: number }>;
+
+                for (const record of pickupStatusRecords) {
+                    if (!pickupStatusMap.has(record.order_id)) {
+                        pickupStatusMap.set(record.order_id, record.status);
+                    }
+                }
+
+                const deliveryStatusRecords = await this.orderDeliverDriverModel.findAll({
+                    where: { order_id: { [Op.in]: orderIds } },
+                    attributes: ['order_id', 'status'],
+                    order: [['updated_at', 'DESC']],
+                    raw: true,
+                }) as Array<{ order_id: number; status: number }>;
+
+                for (const record of deliveryStatusRecords) {
+                    if (!deliveryStatusMap.has(record.order_id)) {
+                        deliveryStatusMap.set(record.order_id, record.status);
+                    }
+                }
+            }
 
             // 10. Transform data ke format response yang diinginkan
             const transformedOrders: OrderOpsDto[] = await Promise.all(
@@ -5585,7 +5626,11 @@ export class OrdersService {
                         hub_tujuan: hubTujuanNama || undefined,
                         issetManifest_inbound: order.getDataValue('issetManifest_inbound'),
                         vendor_id: order.getDataValue('vendor_id'),
-                        vendor_tracking_number: order.getDataValue('vendor_tracking_number')
+                        vendor_tracking_number: order.getDataValue('vendor_tracking_number'),
+                        pickup_driver_status: pickupStatusMap.get(orderId) ?? null,
+                        delivery_driver_status: deliveryStatusMap.get(orderId) ?? null,
+                        status_deliver: order.getDataValue('status_deliver'),
+                        status_pickup: order.getDataValue('status_pickup')
                     };
                 })
             );

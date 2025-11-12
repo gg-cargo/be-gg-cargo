@@ -73,6 +73,14 @@ export class OrderOpsDto {
     no_delivery_note?: string;
     hub_selanjutnya?: string;
     hub_tujuan?: string;
+    hub_asal?: string;
+    deliver_by?: any;
+    status_pengiriman?: string;
+    issetManifest_inbound?: number;
+    vendor_id?: number;
+    vendor_tracking_number?: string;
+    pickup_driver_status?: number | null;
+    delivery_driver_status?: number | null;
 }
 
 export class PaginationDto {
