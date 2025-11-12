@@ -55,7 +55,7 @@ export class TransportersController {
             return {
                 message: 'Berhasil mengambil detail transporter',
                 data,
-            };
+        };
         } catch (e) {
             throw new HttpException(e.message || 'Transporter tidak ditemukan', HttpStatus.NOT_FOUND);
         }

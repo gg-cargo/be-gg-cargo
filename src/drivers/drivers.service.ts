@@ -268,6 +268,63 @@ export class DriversService {
         });
 
         const driversWithSummary: DriverStatusSummaryDto[] = [];
+        const driverIds = drivers.map((driver: any) => driver.id);
+        let pickupTasksForAvailability: any[] = [];
+        let deliveryTasksForAvailability: any[] = [];
+        const orderStatusMap = new Map<number, { status_pickup: string | null; status_deliver: string | null }>();
+
+        if (driverIds.length > 0) {
+            pickupTasksForAvailability = await this.orderPickupDriverModel.findAll({
+                where: {
+                    driver_id: {
+                        [Op.in]: driverIds,
+                    },
+                },
+                attributes: ['driver_id', 'order_id', 'status'],
+                raw: true,
+            });
+
+            deliveryTasksForAvailability = await this.orderDeliverDriverModel.findAll({
+                where: {
+                    driver_id: {
+                        [Op.in]: driverIds,
+                    },
+                },
+                attributes: ['driver_id', 'order_id', 'status'],
+                raw: true,
+            });
+
+            const relatedOrderIds = new Set<number>();
+            for (const task of pickupTasksForAvailability) {
+                if (task?.order_id !== undefined && task?.order_id !== null) {
+                    relatedOrderIds.add(Number(task.order_id));
+                }
+            }
+            for (const task of deliveryTasksForAvailability) {
+                if (task?.order_id !== undefined && task?.order_id !== null) {
+                    relatedOrderIds.add(Number(task.order_id));
+                }
+            }
+
+            if (relatedOrderIds.size > 0) {
+                const orders = await this.orderModel.findAll({
+                    where: {
+                        id: {
+                            [Op.in]: Array.from(relatedOrderIds),
+                        },
+                    },
+                    attributes: ['id', 'status_pickup', 'status_deliver'],
+                    raw: true,
+                });
+
+                for (const order of orders) {
+                    orderStatusMap.set(order.id, {
+                        status_pickup: order.status_pickup ?? null,
+                        status_deliver: order.status_deliver ?? null,
+                    });
+                }
+            }
+        }
 
         for (const driver of drivers) {
             // Hitung beban kerja pickup untuk tanggal tertentu
@@ -313,9 +370,34 @@ export class DriversService {
 
             const totalPendingTasks = pendingPickupTasks + pendingDeliveryTasks;
 
-            // Tentukan status ketersediaan
-            const statusKetersediaan: 'Sibuk' | 'Siap Menerima Tugas' =
-                totalPendingTasks > 0 ? 'Sibuk' : 'Siap Menerima Tugas';
+            const pickupTasksForDriver = pickupTasksForAvailability.filter(task => Number(task.driver_id) === driver.id);
+            const deliveryTasksForDriver = deliveryTasksForAvailability.filter(task => Number(task.driver_id) === driver.id);
+
+            const hasReadyPickupTask = pickupTasksForDriver.some(task => {
+                const order = orderStatusMap.get(Number(task.order_id));
+                if (!order) {
+                    return false;
+                }
+                const taskStatus = Number(task.status);
+                const orderStatusPickup = order.status_pickup;
+                return (taskStatus === 0 || taskStatus === 2) && (orderStatusPickup === null || orderStatusPickup === undefined);
+            });
+
+            const hasReadyDeliveryTask = deliveryTasksForDriver.some(task => {
+                const order = orderStatusMap.get(Number(task.order_id));
+                if (!order) {
+                    return false;
+                }
+                const taskStatus = Number(task.status);
+                const orderStatusDeliver = order.status_deliver;
+                return (taskStatus === 0 || taskStatus === 2) && (orderStatusDeliver === null || orderStatusDeliver === undefined);
+            });
+
+            const hasAnyTask = pickupTasksForDriver.length > 0 || deliveryTasksForDriver.length > 0;
+
+            // Tentukan status ketersediaan sesuai ketentuan baru
+            const statusKetersediaan: 'siap' | 'sibuk' =
+                hasReadyPickupTask || hasReadyDeliveryTask || !hasAnyTask ? 'siap' : 'sibuk';
 
             // Ambil nama hub untuk area kerja
             let areaKerja = 'Unknown Hub';

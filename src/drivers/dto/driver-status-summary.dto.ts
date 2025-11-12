@@ -26,7 +26,7 @@ export class DriverStatusSummaryDto {
     id: number;
     name: string;
     phone: string;
-    status_ketersediaan: 'Sibuk' | 'Siap Menerima Tugas';
+    status_ketersediaan: 'siap' | 'sibuk';
     lokasi_saat_ini: string;
     terakhir_update_gps: string;
     beban_kerja_hari_ini: DriverWorkloadDto;
