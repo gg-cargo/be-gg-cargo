@@ -2195,6 +2195,7 @@ export class OrdersService {
         const dataPDF: any = {
             no_tracking: noTracking,
             created_at: order.created_at,
+            layanan: order.layanan || 'REGULER',
             pengirim: {
                 nama: order.nama_pengirim,
                 alamat: order.alamat_pengirim,
