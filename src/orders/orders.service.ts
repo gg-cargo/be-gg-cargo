@@ -5241,7 +5241,7 @@ export class OrdersService {
                             [Op.and]: [
                                 { reweight_status: 0 },
                                 { issetManifest_inbound: 1 },
-                                { [Op.or]: [{ status_pickup: 'Picked Up' }, { status_pickup: null }] }
+                                { [Op.or]: [{ status_pickup: 'Picked Up' }, { status_pickup: null }, { status_pickup: 'Completed' }] }
                             ]
                         };
                         break;
