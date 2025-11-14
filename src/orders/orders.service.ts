@@ -5454,6 +5454,7 @@ export class OrdersService {
                     'issetManifest_outbound',
                     'status_pickup',
                     'status_deliver',
+                    'invoiceStatus',
                     'hub_dest_id'
                 ],
                 include: [
@@ -5636,6 +5637,7 @@ export class OrdersService {
                         pickup_driver_status: pickupStatusMap.get(orderId) ?? null,
                         delivery_driver_status: deliveryStatusMap.get(orderId) ?? null,
                         status_deliver: order.getDataValue('status_deliver'),
+                        invoice_status: order.getDataValue('invoiceStatus'),
                         status_pickup: order.getDataValue('status_pickup')
                     };
                 })
