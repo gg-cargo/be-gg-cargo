@@ -5181,43 +5181,46 @@ export class OrdersService {
             const userHubId = user.getDataValue('hub_id');
             const userServiceCenterId = user.getDataValue('service_center_id');
 
-            if (!userHubId && !userServiceCenterId) {
+            const showAllHubs = query.all_hubs === true;
+
+            if (!showAllHubs && !userHubId && !userServiceCenterId) {
                 throw new BadRequestException('User tidak memiliki akses ke area operasional');
             }
 
-            // 2. Buat base query dengan filter area
             let areaFilter = {};
             const requestedHubId = query.hub_id;
 
-            if (query.next_hub) {
-                areaFilter = { next_hub: query.next_hub };
-            } else if (requestedHubId) {
-                areaFilter = {
-                    [Op.or]: [
-                        { hub_source_id: requestedHubId },
-                        { hub_dest_id: requestedHubId },
-                        { current_hub: requestedHubId },
-                        { next_hub: requestedHubId }
-                    ]
-                };
-            } else if (userHubId) {
-                areaFilter = {
-                    [Op.or]: [
-                        { hub_source_id: userHubId },      // Order Pickup (First Mile)
-                        { hub_dest_id: userHubId },        // Order Delivery (Last Mile)
-                        { current_hub: userHubId },          // Transit (Mid Mile)
-                        { next_hub: userHubId }
-                    ]
-                };
-            } else if (userServiceCenterId) {
-                areaFilter = {
-                    [Op.or]: [
-                        { hub_source_id: userServiceCenterId },
-                        { hub_dest_id: userServiceCenterId },
-                        { current_hub: userServiceCenterId },
-                        { next_hub: userServiceCenterId }
-                    ]
-                };
+            if (!showAllHubs) {
+                if (query.next_hub) {
+                    areaFilter = { next_hub: query.next_hub };
+                } else if (requestedHubId) {
+                    areaFilter = {
+                        [Op.or]: [
+                            { hub_source_id: requestedHubId },
+                            { hub_dest_id: requestedHubId },
+                            { current_hub: requestedHubId },
+                            { next_hub: requestedHubId }
+                        ]
+                    };
+                } else if (userHubId) {
+                    areaFilter = {
+                        [Op.or]: [
+                            { hub_source_id: userHubId },      // Order Pickup (First Mile)
+                            { hub_dest_id: userHubId },        // Order Delivery (Last Mile)
+                            { current_hub: userHubId },          // Transit (Mid Mile)
+                            { next_hub: userHubId }
+                        ]
+                    };
+                } else if (userServiceCenterId) {
+                    areaFilter = {
+                        [Op.or]: [
+                            { hub_source_id: userServiceCenterId },
+                            { hub_dest_id: userServiceCenterId },
+                            { current_hub: userServiceCenterId },
+                            { next_hub: userServiceCenterId }
+                        ]
+                    };
+                }
             }
 
             // 3. Buat filter berdasarkan status OPS
@@ -5298,44 +5301,46 @@ export class OrdersService {
                 }
             }
 
-            if (['order kirim', 'menunggu pengiriman', 'completed', 'outbound', 'vendor'].includes(query.status as string)) {
-                if (requestedHubId) {
-                    areaFilter = { current_hub: requestedHubId };
-                } else if (userHubId) {
-                    areaFilter = { current_hub: userHubId };
-                } else if (userServiceCenterId) {
-                    areaFilter = { current_hub: userServiceCenterId };
+            if (!showAllHubs) {
+                if (['order kirim', 'menunggu pengiriman', 'completed', 'outbound', 'vendor'].includes(query.status as string)) {
+                    if (requestedHubId) {
+                        areaFilter = { current_hub: requestedHubId };
+                    } else if (userHubId) {
+                        areaFilter = { current_hub: userHubId };
+                    } else if (userServiceCenterId) {
+                        areaFilter = { current_hub: userServiceCenterId };
+                    }
                 }
-            }
 
-            // Jika status adalah 'inbound', batasi area filter hanya pada next_hub
-            if (query.status === 'inbound') {
-                if (requestedHubId) {
-                    areaFilter = { next_hub: requestedHubId };
-                } else if (userHubId) {
-                    areaFilter = { next_hub: userHubId };
-                } else if (userServiceCenterId) {
-                    areaFilter = { next_hub: userServiceCenterId };
+                // Jika status adalah 'inbound', batasi area filter hanya pada next_hub
+                if (query.status === 'inbound') {
+                    if (requestedHubId) {
+                        areaFilter = { next_hub: requestedHubId };
+                    } else if (userHubId) {
+                        areaFilter = { next_hub: userHubId };
+                    } else if (userServiceCenterId) {
+                        areaFilter = { next_hub: userServiceCenterId };
+                    }
                 }
-            }
 
-            if (query.status === 'order jemput') {
-                if (requestedHubId) {
-                    areaFilter = { hub_source_id: requestedHubId };
-                } else if (userHubId) {
-                    areaFilter = { hub_source_id: userHubId };
-                } else if (userServiceCenterId) {
-                    areaFilter = { hub_source_id: userServiceCenterId };
+                if (query.status === 'order jemput') {
+                    if (requestedHubId) {
+                        areaFilter = { hub_source_id: requestedHubId };
+                    } else if (userHubId) {
+                        areaFilter = { hub_source_id: userHubId };
+                    } else if (userServiceCenterId) {
+                        areaFilter = { hub_source_id: userServiceCenterId };
+                    }
                 }
-            }
 
-            if (query.status === 'reweight') {
-                if (requestedHubId) {
-                    areaFilter = { hub_source_id: requestedHubId };
-                } else if (userHubId) {
-                    areaFilter = { hub_source_id: userHubId };
-                } else if (userServiceCenterId) {
-                    areaFilter = { hub_source_id: userServiceCenterId };
+                if (query.status === 'reweight') {
+                    if (requestedHubId) {
+                        areaFilter = { hub_source_id: requestedHubId };
+                    } else if (userHubId) {
+                        areaFilter = { hub_source_id: userHubId };
+                    } else if (userServiceCenterId) {
+                        areaFilter = { hub_source_id: userServiceCenterId };
+                    }
                 }
             }
 

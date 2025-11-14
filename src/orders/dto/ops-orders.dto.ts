@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, IsIn } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsIn, IsBoolean } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 export class OpsOrdersQueryDto {
@@ -48,6 +48,15 @@ export class OpsOrdersQueryDto {
         message: 'Tipe harus berupa: barang, sewa_truk, atau international'
     })
     tipe?: string;
+
+    @IsOptional()
+    @IsBoolean()
+    @Transform(({ value }) => {
+        if (value === 'true' || value === true) return true;
+        if (value === 'false' || value === false) return false;
+        return value;
+    })
+    all_hubs?: boolean;
 }
 
 export class CustomerDto {
