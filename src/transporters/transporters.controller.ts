@@ -55,9 +55,22 @@ export class TransportersController {
             return {
                 message: 'Berhasil mengambil detail transporter',
                 data,
-        };
+            };
         } catch (e) {
             throw new HttpException(e.message || 'Transporter tidak ditemukan', HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Patch(':id/approve')
+    async approveTransporter(@Param('id', ParseIntPipe) id: number) {
+        try {
+            const data = await this.transportersService.approveTransporter(id);
+            return {
+                message: 'Transporter berhasil di-approve',
+                data,
+            };
+        } catch (e) {
+            throw new HttpException(e.message || 'Gagal approve transporter', HttpStatus.BAD_REQUEST);
         }
     }
 

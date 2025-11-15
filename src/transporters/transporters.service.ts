@@ -271,7 +271,7 @@ export class TransportersService {
         const user = await this.userModel.findByPk(id);
         if (!user) throw new BadRequestException('Transporter tidak ditemukan');
         const {
-            first_name, last_name, email, phone, password, 
+            first_name, last_name, email, phone, password,
             ktp, sim, foto_kurir_sim, foto_kendaraan, alamat, kir, stnk, role, kontak_emergency
         } = body;
         const name = [first_name, last_name].filter(Boolean).join(' ');
@@ -324,6 +324,35 @@ export class TransportersService {
             // Ambil dan kembalikan detail
             return await this.getTransporterDetail(id);
         });
+    }
+
+    async approveTransporter(id: number) {
+        if (!id || isNaN(id)) throw new BadRequestException('ID tidak valid');
+
+        const user = await this.userModel.findByPk(id);
+        if (!user) throw new BadRequestException('Transporter tidak ditemukan');
+
+        const userLevel = user.getDataValue('level');
+        if (![4, 8].includes(Number(userLevel))) {
+            throw new BadRequestException('User yang dipilih bukan transporter/kurir (level harus 4 atau 8)');
+        }
+
+        const currentIsApprove = user.getDataValue('isApprove');
+        if (currentIsApprove === 1) {
+            throw new BadRequestException('Transporter sudah di-approve sebelumnya');
+        }
+
+        // Update isApprove menjadi 1 dan aktif menjadi 1
+        await this.userModel.update(
+            {
+                isApprove: 1,
+                aktif: 1,
+            },
+            { where: { id } }
+        );
+
+        // Ambil dan kembalikan detail yang sudah di-update
+        return await this.getTransporterDetail(id);
     }
 }
 
