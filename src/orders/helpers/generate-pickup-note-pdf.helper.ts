@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import axios from 'axios';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const PdfPrinter = require('pdfmake/src/printer');
 
@@ -51,14 +52,35 @@ export async function generatePickupNotePDF(payload: {
             ? 'data:image/png;base64,' + fs.readFileSync(logoPath).toString('base64')
             : undefined;
 
-        // Helper function to convert file path to base64
-        const convertFileToBase64 = (filePath: string): string | undefined => {
+        // Helper function to convert file path or URL to base64
+        const convertFileToBase64 = async (filePathOrUrl: string): Promise<string | undefined> => {
             try {
-                if (filePath.startsWith('data:')) {
-                    return filePath; // Already base64
+                // Jika sudah base64, langsung return
+                if (filePathOrUrl.startsWith('data:')) {
+                    return filePathOrUrl;
                 }
 
-                const fullPath = path.join(process.cwd(), filePath.replace(/^\//, ''));
+                // Jika URL HTTP/HTTPS, download dan convert ke base64
+                if (filePathOrUrl.startsWith('http://') || filePathOrUrl.startsWith('https://')) {
+                    try {
+                        const response = await axios.get(filePathOrUrl, {
+                            responseType: 'arraybuffer',
+                            timeout: 10000, // 10 detik timeout
+                        });
+
+                        const buffer = Buffer.from(response.data);
+                        // Deteksi mime type dari response header atau extension
+                        const contentType = response.headers['content-type'] || 'image/jpeg';
+                        const base64 = buffer.toString('base64');
+                        return `data:${contentType};base64,${base64}`;
+                    } catch (error) {
+                        console.warn(`Error downloading image from URL ${filePathOrUrl}: ${error.message}`);
+                        return undefined;
+                    }
+                }
+
+                // Jika file path lokal
+                const fullPath = path.join(process.cwd(), filePathOrUrl.replace(/^\//, ''));
                 if (fs.existsSync(fullPath)) {
                     const fileBuffer = fs.readFileSync(fullPath);
                     const mimeType = path.extname(fullPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
@@ -149,6 +171,11 @@ export async function generatePickupNotePDF(payload: {
             margin: [0, 0, 0, 20],
         } as any;
 
+        // Convert signature customer jika ada
+        const signatureCustomerBase64 = payload.signature_customer
+            ? await convertFileToBase64(payload.signature_customer) || payload.signature_customer
+            : null;
+
         // Section tanda tangan dalam 2 kolom
         const signatureSection = {
             columns: [
@@ -157,10 +184,12 @@ export async function generatePickupNotePDF(payload: {
                     width: '50%',
                     stack: [
                         { text: 'PENGIRIM', bold: true, margin: [0, 0, 0, 10] },
-                        payload.signature_customer ?
-                            { image: convertFileToBase64(payload.signature_customer) || payload.signature_customer, width: 160, height: 80, margin: [0, 0, 0, 10] } :
-                            { text: '_________________', fontSize: 16, margin: [0, 0, 0, 10] },
-                        { text: `Nama: ${payload.from.nama}`, margin: [0, 0, 0, 5] },
+                        ...(signatureCustomerBase64 ? [
+                            { image: signatureCustomerBase64, width: 120, height: 80, margin: [0, 0, 0, 10] },
+                            { text: `${payload.from.nama}`, margin: [0, 0, 0, 5] },
+                        ] : [
+                            { text: `${payload.from.nama}`, margin: [0, 91, 0, 5] },
+                        ]),
                     ],
                 },
                 // Kolom kanan - Tanda tangan kurir
@@ -168,7 +197,7 @@ export async function generatePickupNotePDF(payload: {
                     width: '50%',
                     stack: [
                         { text: 'KURIR/CHECKER', bold: true, margin: [0, 0, 0, 10] },
-                        { text: `Nama: ${payload.courier_name || '-'}`, margin: [0, 91, 0, 5] },
+                        { text: `${payload.courier_name || '-'}`, margin: [0, 91, 0, 5] },
                     ],
                 },
             ],
@@ -185,8 +214,8 @@ export async function generatePickupNotePDF(payload: {
         } as any;
 
         const photos = (payload.photos || []).slice(0, 3);
-        const photoBlocks = photos.map((p) => {
-            const imageBase64 = convertFileToBase64(p.image);
+        const photoBlocks = await Promise.all(photos.map(async (p) => {
+            const imageBase64 = await convertFileToBase64(p.image);
             return {
                 stack: [
                     imageBase64 ?
@@ -196,7 +225,7 @@ export async function generatePickupNotePDF(payload: {
                 ],
                 margin: [8, 8, 8, 8],
             };
-        });
+        }));
 
         const docDefinition = {
             pageMargins: [32, 32, 32, 48],

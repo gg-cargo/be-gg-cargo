@@ -1567,12 +1567,16 @@ export class OrdersService {
         const qty = Number((pieceAgg[0] as any)?.jumlah_koli || 0);
         const berat_total = Number((pieceAgg[0] as any)?.berat_total || 0);
 
-        // Ambil tanda tangan dari file_log
-        const customerSignatureFile = await this.fileLogModel.findOne({
-            where: { used_for: `customer_signature_order_id_${order.id}`, is_assigned: 1 },
+        // Ambil tanda tangan customer dan nama kurir dari order_pickup_drivers
+        const pickupDriver = await this.orderPickupDriverModel.findOne({
+            where: { order_id: order.id },
+            attributes: ['signature', 'name'],
             raw: true,
-            order: [['created_at', 'DESC']],
+            order: [['updated_at', 'DESC']],
         }).catch(() => null);
+
+        const customerSignature = pickupDriver?.signature || null;
+        const courierName = pickupDriver?.name || null;
 
         const driverSignatureFile = await this.fileLogModel.findOne({
             where: { used_for: `driver_signature_order_id_${order.id}`, is_assigned: 1 },
@@ -1632,8 +1636,8 @@ export class OrdersService {
                 phone: order.no_telepon_penerima || '-'
             },
             summary: { qty, berat_total },
-            signature_customer: customerSignatureFile?.file_path || undefined,
-            courier_name: order?.pickup_courier_name || undefined,
+            signature_customer: customerSignature || undefined,
+            courier_name: courierName || undefined,
             layanan: order?.layanan || 'Reguler',
             deskripsi: order?.nama_barang || 'Paket',
             catatan: order?.remark_sales || '',
