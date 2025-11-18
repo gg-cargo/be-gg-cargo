@@ -1787,21 +1787,23 @@ export class OrdersService {
         const qty = Number((pieceAgg[0] as any)?.jumlah_koli || 0);
         const berat_total = Number((pieceAgg[0] as any)?.berat_total || 0);
 
-        // Ambil tanda tangan dari file_log
-        const customerSignatureFile = await this.fileLogModel.findOne({
-            where: { used_for: `customer_signature_delivery_order_id_${order.id}`, is_assigned: 1 },
+
+        const deliveryDriver = await this.orderDeliverDriverModel.findOne({
+            where: { order_id: order.id },
+            attributes: ['signature', 'name'],
             raw: true,
-            order: [['created_at', 'DESC']],
+            order: [['updated_at', 'DESC']],
         }).catch(() => null);
 
-        // Ambil foto dari file_log (maks 3) berdasarkan used_for = 'delivery_proof'
+        const customerSignature = deliveryDriver?.signature || null;
+        const courierName = deliveryDriver?.name || null;
+
         const fileProofs = await this.fileLogModel.findAll({
             where: { used_for: `delivery_proof_order_id_${order.id}`, is_assigned: 1 },
             raw: true,
             order: [['created_at', 'DESC']],
         }).catch(() => []);
 
-        // Ambil foto bukti (maksimal 3)
         const photos = [] as Array<{ image: string; datetime?: string; latlng?: string }>;
         for (const f of fileProofs.slice(0, 3)) {
             if (f?.file_path) {
@@ -1813,7 +1815,6 @@ export class OrdersService {
             }
         }
 
-        // Siapkan payload PDF
         const link = await generateDeliveryNotePDF({
             no_tracking: noTracking,
             from: {
@@ -1827,8 +1828,8 @@ export class OrdersService {
                 phone: order.no_telepon_penerima || '-'
             },
             summary: { qty, berat_total },
-            signature_customer: customerSignatureFile?.file_path || undefined,
-            courier_name: order?.delivery_courier_name || undefined,
+            signature_customer: customerSignature || undefined,
+            courier_name: courierName || undefined,
             layanan: order?.layanan || 'Reguler',
             deskripsi: order?.nama_barang || 'Paket',
             catatan: order?.remark_sales || '',

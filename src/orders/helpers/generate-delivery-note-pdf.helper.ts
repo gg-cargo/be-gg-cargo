@@ -1,6 +1,7 @@
 import * as PdfPrinter from 'pdfmake';
 import * as fs from 'fs';
 import * as path from 'path';
+import axios from 'axios';
 
 interface DeliveryNotePayload {
     no_tracking: string;
@@ -28,13 +29,35 @@ function ensurePdfDir(): string {
     return outDir;
 }
 
-function convertFileToBase64(filePath: string): string | undefined {
+// Helper function to convert file path or URL to base64
+async function convertFileToBase64(filePathOrUrl: string): Promise<string | undefined> {
     try {
-        if (filePath.startsWith('data:')) {
-            return filePath; // Already base64
+        // Jika sudah base64, langsung return
+        if (filePathOrUrl.startsWith('data:')) {
+            return filePathOrUrl;
         }
 
-        const fullPath = path.join(process.cwd(), filePath.replace(/^\//, ''));
+        // Jika URL HTTP/HTTPS, download dan convert ke base64
+        if (filePathOrUrl.startsWith('http://') || filePathOrUrl.startsWith('https://')) {
+            try {
+                const response = await axios.get(filePathOrUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 10000, // 10 detik timeout
+                });
+
+                const buffer = Buffer.from(response.data);
+                // Deteksi mime type dari response header atau extension
+                const contentType = response.headers['content-type'] || 'image/jpeg';
+                const base64 = buffer.toString('base64');
+                return `data:${contentType};base64,${base64}`;
+            } catch (error) {
+                console.warn(`Error downloading image from URL ${filePathOrUrl}: ${error.message}`);
+                return undefined;
+            }
+        }
+
+        // Jika file path lokal
+        const fullPath = path.join(process.cwd(), filePathOrUrl.replace(/^\//, ''));
         if (fs.existsSync(fullPath)) {
             const fileBuffer = fs.readFileSync(fullPath);
             const mimeType = path.extname(fullPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
@@ -73,23 +96,25 @@ export async function generateDeliveryNotePDF(payload: DeliveryNotePayload): Pro
         // Convert photos to base64
         const photos = payload.photos || [];
         console.log('Processing photos:', photos.length);
-        const photoBlocks = photos.map((photo, index) => {
-            const convertedImage = convertFileToBase64(photo.image);
+        const photoBlocks = await Promise.all(photos.map(async (photo, index) => {
+            const convertedImage = await convertFileToBase64(photo.image);
             console.log(`Photo ${index + 1}:`, photo.image, '-> Converted:', convertedImage ? 'Yes' : 'No');
             return {
                 stack: [
                     { text: `Foto ${index + 1}`, style: 'photoLabel', alignment: 'center' },
-                    {
-                        image: convertedImage || photo.image,
-                        width: 150,
-                        height: 100,
-                        alignment: 'center',
-                    },
+                    convertedImage ?
+                        {
+                            image: convertedImage,
+                            width: 150,
+                            height: 100,
+                            alignment: 'center',
+                        } :
+                        { text: 'Gambar tidak tersedia', width: 150, height: 100, alignment: 'center' },
                     { text: `Waktu: ${photo.datetime || '-'}`, fontSize: 8, alignment: 'center' },
                     { text: `Lokasi: ${photo.latlng || '-'}`, fontSize: 8, alignment: 'center' },
                 ],
             };
-        });
+        }));
 
         const header = {
             columns: [
@@ -168,6 +193,11 @@ export async function generateDeliveryNotePDF(payload: DeliveryNotePayload): Pro
             margin: [0, 0, 0, 20],
         } as any;
 
+        // Convert signature customer jika ada
+        const signatureCustomerBase64 = payload.signature_customer
+            ? await convertFileToBase64(payload.signature_customer) || payload.signature_customer
+            : null;
+
         // Section tanda tangan dalam 2 kolom
         const signatureSection = {
             columns: [
@@ -176,13 +206,12 @@ export async function generateDeliveryNotePDF(payload: DeliveryNotePayload): Pro
                     width: '50%',
                     stack: [
                         { text: 'DITERIMA OLEH:', bold: true, margin: [0, 0, 0, 10] },
-                        payload.signature_customer ?
-                            (() => {
-                                const convertedSignature = convertFileToBase64(payload.signature_customer);
-                                console.log('Customer signature:', payload.signature_customer, '-> Converted:', convertedSignature ? 'Yes' : 'No');
-                                return { image: convertedSignature || payload.signature_customer, width: 160, height: 80, margin: [0, 0, 0, 10] };
-                            })() :
-                            { text: `Nama: ${payload.to.nama}`, margin: [0, 91, 0, 5] },
+                        ...(signatureCustomerBase64 ? [
+                            { image: signatureCustomerBase64, width: 120, height: 80, margin: [0, 0, 0, 10] },
+                            { text: `${payload.to.nama}`, margin: [0, 0, 0, 5] },
+                        ] : [
+                            { text: `${payload.to.nama}`, margin: [0, 91, 0, 5] },
+                        ]),
                     ],
                 },
                 // Kolom kanan - Tanda tangan kurir
@@ -190,7 +219,7 @@ export async function generateDeliveryNotePDF(payload: DeliveryNotePayload): Pro
                     width: '50%',
                     stack: [
                         { text: 'KURIR/CHECKER:', bold: true, margin: [0, 0, 0, 10] },
-                        { text: `Nama: ${payload.courier_name || '-'}`, margin: [0, 91, 0, 5] },
+                        { text: `${payload.courier_name || '-'}`, margin: [0, 91, 0, 5] },
                     ],
                 },
             ],
