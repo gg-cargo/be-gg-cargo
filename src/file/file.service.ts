@@ -10,6 +10,14 @@ export class FileService {
         private fileLogModel: typeof FileLog,
     ) { }
 
+    async isFileNameExists(fileName: string): Promise<boolean> {
+        if (!fileName) return false;
+        const count = await this.fileLogModel.count({
+            where: { file_name: fileName },
+        });
+        return count > 0;
+    }
+
     async createFileLog(file: Express.Multer.File, user_id?: number, used_for?: string) {
         try {
             // @ts-ignore
