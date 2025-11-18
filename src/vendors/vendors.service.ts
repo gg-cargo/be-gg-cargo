@@ -180,13 +180,14 @@ export class VendorsService {
 
         let nextNumber = 1;
         if (existingVendors.length > 0) {
-            const lastKode = existingVendors[0].kode_vendor;
-            const match = lastKode.match(/\d+/);
-            if (match) {
-                nextNumber = parseInt(match[0], 10) + 1;
+            const lastKode = existingVendors[0].getDataValue('kode_vendor');
+            if (lastKode) {
+                const match = lastKode.match(/\d+/);
+                if (match) {
+                    nextNumber = parseInt(match[0], 10) + 1;
+                }
             }
         }
-
         return `${prefix}-${String(nextNumber).padStart(3, '0')}`;
     }
 
