@@ -1490,6 +1490,8 @@ export class OrdersService {
                 await this.createNotificationBadge(order.id, 'hub kosong', 'order');
             }
 
+            await this.autoAssignPickupDriver(order, hubSourceId, userId);
+
             return {
                 order_id: order.id,
                 no_tracking: noTracking,
@@ -1508,6 +1510,99 @@ export class OrdersService {
             await transaction.rollback();
             throw new BadRequestException('Gagal membuat order: ' + error.message);
         }
+    }
+
+    private async autoAssignPickupDriver(order: Order, hubSourceId: number | null, assignedByUserId: number): Promise<void> {
+        if (!order) {
+            return;
+        }
+
+        const orderId = order.getDataValue('id');
+        const targetHubId = hubSourceId ?? order.getDataValue('hub_source_id') ?? null;
+
+        try {
+            let selectedDriver = await this.findBestPickupDriver(targetHubId);
+
+            if (!selectedDriver && targetHubId) {
+                selectedDriver = await this.findBestPickupDriver();
+            }
+
+            if (!selectedDriver) {
+                this.logger.warn(`Auto assign pickup: tidak ada kurir tersedia untuk order ${orderId} (hub ${targetHubId ?? 'global'})`);
+                return;
+            }
+
+            await this.driversService.assignDriverToOrder({
+                order_id: orderId,
+                driver_id: selectedDriver.id,
+                assigned_by_user_id: assignedByUserId,
+                task_type: 'pickup',
+            });
+        } catch (error) {
+            this.logger.error(
+                `Auto assign pickup gagal untuk order ${orderId}: ${error instanceof Error ? error.message : error}`,
+                error instanceof Error ? error.stack : undefined,
+            );
+        }
+    }
+
+    private async findBestPickupDriver(hubId?: number | null): Promise<{ id: number; name: string } | null> {
+        const driverWhereClause: any = {
+            level: 8,
+            aktif: 1,
+            status_app: 1,
+            freeze_saldo: 0,
+            freeze_gps: 0,
+        };
+
+        if (hubId) {
+            driverWhereClause.hub_id = hubId;
+        }
+
+        const drivers = await this.userModel.findAll({
+            where: driverWhereClause,
+            attributes: ['id', 'name', 'hub_id'],
+            raw: true,
+        });
+
+        if (!drivers.length) {
+            return null;
+        }
+
+        const driverIds = drivers.map((driver: any) => Number(driver.id));
+
+        const lastAssignRows = await this.orderPickupDriverModel.findAll({
+            attributes: [
+                'driver_id',
+                [fn('MAX', col('assign_date')), 'last_assign_date'],
+            ],
+            where: {
+                driver_id: { [Op.in]: driverIds },
+            },
+            group: ['driver_id'],
+            raw: true,
+        }) as unknown as Array<Record<string, any>>;
+
+        const lastAssignMap = new Map<number, Date>();
+        for (const row of lastAssignRows) {
+            const driverId = Number(row.driver_id);
+            const lastAssignDate = row.last_assign_date ? new Date(row.last_assign_date) : new Date(0);
+            lastAssignMap.set(driverId, lastAssignDate);
+        }
+
+        const scoredDrivers = drivers.map((driver: any) => {
+            const driverId = Number(driver.id);
+            return {
+                driver,
+                lastAssignDate: lastAssignMap.get(driverId) ?? new Date(0),
+            };
+        });
+
+        scoredDrivers.sort((a, b) => {
+            return a.lastAssignDate.getTime() - b.lastAssignDate.getTime();
+        });
+
+        return scoredDrivers.length > 0 ? scoredDrivers[0].driver : null;
     }
 
     async generateOrderLabelsPdf(noTracking: string): Promise<string> {
