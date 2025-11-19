@@ -3412,9 +3412,14 @@ export class OrdersService {
                 throw new BadRequestException(`Action tidak valid: ${action.action}`);
             }
 
-            // Validasi data untuk action update dan add
-            if (action.action === 'update' || action.action === 'add') {
-                if (!action.berat || !action.panjang || !action.lebar || !action.tinggi) {
+            // Validasi data dimensi hanya untuk update (add boleh kosong / 0)
+            if (action.action === 'update') {
+                if (
+                    action.berat === undefined ||
+                    action.panjang === undefined ||
+                    action.lebar === undefined ||
+                    action.tinggi === undefined
+                ) {
                     throw new BadRequestException(`Data dimensi wajib untuk action ${action.action}`);
                 }
             }
@@ -3681,23 +3686,28 @@ export class OrdersService {
                     } else if (actionData.action === 'add') {
                         // Add new piece dengan auto-generate piece_id
 
+                        const addBerat = actionData.berat !== undefined ? Number(actionData.berat) : 0;
+                        const addPanjang = actionData.panjang !== undefined ? Number(actionData.panjang) : 0;
+                        const addLebar = actionData.lebar !== undefined ? Number(actionData.lebar) : 0;
+                        const addTinggi = actionData.tinggi !== undefined ? Number(actionData.tinggi) : 0;
+
                         // 1. Generate piece_id dengan format P{order_id}-{counter}
                         const pieceCounter = await this.getNextPieceCounter(orderId);
                         const generatedPieceId = `P${orderId}-${pieceCounter}`;
 
                         // 2. Cari atau buat shipment yang cocok
                         // Cari shipment yang cocok dengan dimensi (dual search)
-                        const shipmentId = await this.findOrCreateShipmentForDimensions(orderId, actionData.berat!, actionData.panjang!, actionData.lebar!, actionData.tinggi!);
+                        const shipmentId = await this.findOrCreateShipmentForDimensions(orderId, addBerat, addPanjang, addLebar, addTinggi);
 
                         // 3. Create piece dengan semua field yang diperlukan
                         const newPiece = await this.orderPieceModel.create({
                             order_id: orderId,
                             order_shipment_id: shipmentId,
                             piece_id: generatedPieceId,
-                            berat: actionData.berat!,
-                            panjang: actionData.panjang!,
-                            lebar: actionData.lebar!,
-                            tinggi: actionData.tinggi!,
+                            berat: addBerat,
+                            panjang: addPanjang,
+                            lebar: addLebar,
+                            tinggi: addTinggi,
                             reweight_status: 1,
                             reweight_by: reweight_by_user_id,
                             createdAt: now,
@@ -3711,10 +3721,10 @@ export class OrdersService {
                             message: `Piece berhasil ditambahkan dengan piece_id: ${generatedPieceId}`,
                             old_data: undefined,
                             new_data: {
-                                berat: actionData.berat!,
-                                panjang: actionData.panjang!,
-                                lebar: actionData.lebar!,
-                                tinggi: actionData.tinggi!,
+                                berat: addBerat,
+                                panjang: addPanjang,
+                                lebar: addLebar,
+                                tinggi: addTinggi,
                             }
                         });
                         piecesAdded++;
