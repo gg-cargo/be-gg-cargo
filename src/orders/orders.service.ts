@@ -48,6 +48,7 @@ import { DriversService } from '../drivers/drivers.service';
 import { Hub } from '../models/hub.model';
 import { generateOrderLabelsPDF } from './helpers/generate-order-labels-pdf.helper';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
+import { InvoicesService } from '../invoices/invoices.service';
 import { ReportMissingItemDto } from './dto/report-missing-item.dto';
 import { ResolveMissingItemDto } from './dto/resolve-missing-item.dto';
 import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
@@ -126,6 +127,7 @@ export class OrdersService {
         private readonly driversService: DriversService,
         private readonly notificationBadgesService: NotificationBadgesService,
         private readonly ratesService: RatesService,
+        private readonly invoicesService: InvoicesService,
         @Inject('SEQUELIZE') private readonly sequelize: Sequelize,
     ) { }
 
@@ -777,7 +779,11 @@ export class OrdersService {
 
             // Validasi apakah sudah ada invoice
             if (order.getDataValue('orderInvoice') && order.getDataValue('orderInvoice').getDataValue('invoice_no')) {
-                return null; // Sudah ada invoice
+                return {
+                    invoice_no: order.getDataValue('orderInvoice').getDataValue('invoice_no'),
+                    invoice_id: order.getDataValue('orderInvoice').getDataValue('id'),
+                    total_amount: order.getDataValue('orderInvoice').getDataValue('total_amount')
+                }; // Sudah ada invoice
             }
 
             // Ambil info bank default
@@ -6356,6 +6362,53 @@ export class OrdersService {
             // 10. Commit transaction
             await transaction.commit();
 
+            // 11. Auto-send invoice email setelah commit transaction berhasil
+            let emailSent = false;
+            let emailError: string | null = null;
+            if (invoiceData && invoiceData.invoice_no) {
+                try {
+                    // Ambil email penerima dari order
+                    const emailPenerima = order.getDataValue('email_penerima');
+                    const billingEmail = order.getDataValue('billing_email');
+                    const emailTarget = billingEmail || emailPenerima;
+
+                    // Hanya kirim email jika ada email tujuan yang valid
+                    if (emailTarget && emailTarget.trim() !== '') {
+                        const noTracking = order.getDataValue('no_tracking');
+                        const billingName = order.getDataValue('billing_name') || order.getDataValue('nama_penerima');
+                        const totalHarga = order.getDataValue('total_harga') || 0;
+
+                        // Buat subject dan body email
+                        const emailSubject = `Invoice ${noTracking}`;
+                        const emailBody = `<p>Yth Customer GG Kargo Mr/Mrs. ${billingName}</p>
+<p>Kami infokan tagihan(invoice) Anda sudah terbit, Berikut adalah tagihan Anda dengan nomor tracking ${noTracking} sebesar<b>Rp${totalHarga.toLocaleString('id-ID')}.</b></p>
+<p>Harap segera lakukan proses pembayaran atau konfirmasi harga pada kami.</p>
+<p><b>Pembayaran dapat dilakukan melalui:<br/>Virtual Account yang terdapat pada Aplikasi GG Kargo</b></p>
+<p>Terima kasih atas kerja samanya.</p>`;
+
+                        // Kirim email invoice
+                        await this.invoicesService.sendEmail({
+                            invoice_no: invoiceData.invoice_no,
+                            to_emails: [emailTarget],
+                            cc_emails: [],
+                            subject: emailSubject,
+                            body: emailBody,
+                            send_download_link: true,
+                            sent_by_user_id: submitReweightDto.submitted_by_user_id
+                        });
+
+                        emailSent = true;
+                        this.logger.log(`Invoice email berhasil dikirim untuk order ${orderId} ke ${emailTarget}`);
+                    } else {
+                        this.logger.warn(`Email tidak dikirim untuk order ${orderId} karena email penerima tidak tersedia`);
+                    }
+                } catch (error) {
+                    emailError = error.message;
+                    this.logger.error(`Gagal mengirim invoice email untuk order ${orderId}: ${error.message}`, error.stack);
+                    // Tidak throw error karena transaction sudah commit
+                }
+            }
+
             return {
                 message: 'Reweight berhasil di-submit dan order siap untuk delivery',
                 success: true,
@@ -6366,6 +6419,8 @@ export class OrdersService {
                     total_volume: totalVolume,
                     invoice_created: !!invoiceData,
                     invoice_data: invoiceData || undefined,
+                    invoice_email_sent: emailSent,
+                    invoice_email_error: emailError || undefined,
                     submitted_at: new Date().toISOString(),
                     submitted_by: submittedByUser.getDataValue('name')
                 }

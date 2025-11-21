@@ -49,7 +49,7 @@ export class InvoicesService {
                 include: [{
                     model: Order,
                     as: 'order',
-                    attributes: ['id', 'no_tracking', 'nama_penerima', 'total_harga', 'email_penerima', 'alamat_penerima']
+                    attributes: ['no_tracking', 'total_harga', 'billing_name', 'billing_email', 'billing_phone', 'nama_penerima', 'email_penerima', 'no_telepon_penerima', 'id', 'layanan', 'nama_pengirim', 'alamat_pengirim', 'provinsi_pengirim', 'kota_pengirim', 'kecamatan_pengirim', 'kelurahan_pengirim', 'kodepos_pengirim', 'no_telepon_pengirim', 'nama_penerima', 'alamat_penerima', 'provinsi_penerima', 'kota_penerima', 'kecamatan_penerima', 'kelurahan_penerima', 'kodepos_penerima', 'no_telepon_penerima']
                 }]
             });
 

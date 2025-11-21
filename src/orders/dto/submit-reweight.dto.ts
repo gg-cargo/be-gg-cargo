@@ -24,6 +24,8 @@ export class SubmitReweightResponseDto {
             invoice_id: number;
             total_amount: number;
         };
+        invoice_email_sent: boolean;
+        invoice_email_error?: string;
         submitted_at: string;
         submitted_by: string;
     };

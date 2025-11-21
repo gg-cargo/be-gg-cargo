@@ -31,6 +31,7 @@ import { FileService } from '../file/file.service';
 import { DriversModule } from '../drivers/drivers.module';
 import { NotificationBadgesModule } from '../notification-badges/notification-badges.module';
 import { RatesModule } from '../rates/rates.module';
+import { InvoicesModule } from '../invoices/invoices.module';
 import { Vendor } from '../models/vendor.model';
 
 @Module({
@@ -38,6 +39,7 @@ import { Vendor } from '../models/vendor.model';
         DriversModule,
         NotificationBadgesModule,
         RatesModule,
+        InvoicesModule,
         SequelizeModule.forFeature([
             Order,
             OrderShipment,
