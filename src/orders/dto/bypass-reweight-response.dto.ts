@@ -19,5 +19,7 @@ export class BypassReweightResponseDto {
             invoice_id: number;
             total_amount: number;
         } | null;
+        invoice_email_sent?: boolean;
+        invoice_email_error?: string;
     };
 } 

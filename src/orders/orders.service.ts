@@ -1089,6 +1089,9 @@ export class OrdersService {
                         transaction,
                     }
                 );
+
+                // Update order shipments dengan data terbaru
+                await this.updateOrderShipmentsFromPieces(orderId, transaction);
             } else {
                 // Jika bypass dinonaktifkan, reset reweight status pieces yang belum di-reweight manual
                 const updateResult = await this.orderPieceModel.update(
@@ -1150,6 +1153,17 @@ export class OrdersService {
                 await this.markOrderReweight(orderId);
             }
 
+            // 4. Auto-create invoice jika bypass diaktifkan
+            let invoiceData: { invoice_no: string; invoice_id: number; total_amount: number; } | null = null;
+            if (isBypassEnabled) {
+                try {
+                    invoiceData = await this.autoCreateInvoice(orderId, transaction);
+                } catch (error) {
+                    this.logger.error(`Gagal auto-create invoice untuk order ${orderId}: ${error.message}`);
+                    // Invoice gagal dibuat, tapi bypass tetap berhasil
+                }
+            }
+
             // 5. Create order_histories
             const hubAsalName = hubAsal?.nama || 'Unknown Hub';
             const statusText = isBypassEnabled ? 'Reweight Bypass Enabled' : 'Reweight Bypass Disabled';
@@ -1171,6 +1185,53 @@ export class OrdersService {
 
             await transaction.commit();
 
+            // 6. Auto-send invoice email setelah commit transaction berhasil
+            let emailSent = false;
+            let emailError: string | null = null;
+            if (isBypassEnabled && invoiceData && invoiceData.invoice_no) {
+                try {
+                    // Ambil email penerima dari order
+                    const emailPenerima = order.getDataValue('email_penerima');
+                    const billingEmail = order.getDataValue('billing_email');
+                    const emailTarget = billingEmail || emailPenerima;
+
+                    // Hanya kirim email jika ada email tujuan yang valid
+                    if (emailTarget && emailTarget.trim() !== '') {
+                        const noTracking = order.getDataValue('no_tracking');
+                        const billingName = order.getDataValue('billing_name') || order.getDataValue('nama_penerima');
+                        const totalHarga = order.getDataValue('total_harga') || 0;
+
+                        // Buat subject dan body email
+                        const emailSubject = `Invoice ${noTracking}`;
+                        const emailBody = `<p>Yth Customer GG Kargo Mr/Mrs. ${billingName}</p>
+<p>Kami infokan tagihan(invoice) Anda sudah terbit, Berikut adalah tagihan Anda dengan nomor tracking ${noTracking} sebesar<b>Rp${totalHarga.toLocaleString('id-ID')}.</b></p>
+<p>Harap segera lakukan proses pembayaran atau konfirmasi harga pada kami.</p>
+<p><b>Pembayaran dapat dilakukan melalui:<br/>Virtual Account yang terdapat pada Aplikasi GG Kargo</b></p>
+<p>Terima kasih atas kerja samanya.</p>`;
+
+                        // Kirim email invoice
+                        await this.invoicesService.sendEmail({
+                            invoice_no: invoiceData.invoice_no,
+                            to_emails: [emailTarget],
+                            cc_emails: [],
+                            subject: emailSubject,
+                            body: emailBody,
+                            send_download_link: true,
+                            sent_by_user_id: updated_by_user_id
+                        });
+
+                        emailSent = true;
+                        this.logger.log(`Invoice email berhasil dikirim untuk order ${orderId} ke ${emailTarget}`);
+                    } else {
+                        this.logger.warn(`Email tidak dikirim untuk order ${orderId} karena email penerima tidak tersedia`);
+                    }
+                } catch (error) {
+                    emailError = error.message;
+                    this.logger.error(`Gagal mengirim invoice email untuk order ${orderId}: ${error.message}`, error.stack);
+                    // Tidak throw error karena transaction sudah commit
+                }
+            }
+
             return {
                 message: `Bypass reweight berhasil ${isBypassEnabled ? 'diaktifkan' : 'dinonaktifkan'}`,
                 success: true,
@@ -1187,6 +1248,9 @@ export class OrdersService {
                         file_path: proofImageData.file_path,
                         file_id: proofImageData.id
                     } : null,
+                    invoice_created: invoiceData || null,
+                    invoice_email_sent: emailSent || undefined,
+                    invoice_email_error: emailError || undefined,
                 },
             };
 
