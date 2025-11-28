@@ -28,6 +28,7 @@ import { RatesModule } from './rates/rates.module';
 import { GeocodingModule } from './geocoding/geocoding.module';
 import { OcrModule } from './ocr/ocr.module';
 import { VendorsModule } from './vendors/vendors.module';
+import { PiecesModule } from './pieces/pieces.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { VendorsModule } from './vendors/vendors.module';
     GeocodingModule,
     OcrModule,
     VendorsModule,
+    PiecesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

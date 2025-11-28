@@ -18,6 +18,7 @@ import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { OrderManifestInbound } from '../models/order-manifest-inbound.model';
 import { InboundScanDto, InboundScanResponseDto } from './dto/inbound-scan.dto';
 import { InboundConfirmWebDto, InboundConfirmWebResponseDto } from './dto/inbound-confirm-web.dto';
+import { ScanPieceDto, ScanPieceResponseDto } from './dto/scan-piece.dto';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
 
 @Injectable()
@@ -961,6 +962,123 @@ export class DeliveryNotesService {
         } catch (error) {
             await transaction.rollback();
             throw new InternalServerErrorException(`Error dalam inbound confirm web: ${error.message}`);
+        }
+    }
+
+    /**
+     * Scan single piece_id untuk menandai piece sudah sampai di hub
+     * @param pieceId Piece ID yang di-scan
+     * @param dto Data untuk scan piece
+     * @returns Response dari scan piece
+     */
+    async scanPiece(pieceId: string, dto: ScanPieceDto): Promise<ScanPieceResponseDto> {
+        // Validasi user yang melakukan scan
+        const scannedByUser = await this.userModel.findByPk(dto.scanned_by_user_id, {
+            attributes: ['id', 'name', 'level'],
+            raw: true,
+        });
+
+        if (!scannedByUser) {
+            throw new NotFoundException('User yang melakukan scan tidak ditemukan');
+        }
+
+        // Validasi hub tujuan
+        const destinationHub = await this.hubModel.findByPk(dto.destination_hub_id, {
+            attributes: ['id', 'nama'],
+            raw: true,
+        });
+
+        if (!destinationHub) {
+            throw new NotFoundException('Hub tujuan tidak ditemukan');
+        }
+
+        // Validasi piece yang di-scan
+        const piece = await this.orderPieceModel.findOne({
+            where: { piece_id: pieceId },
+            include: [
+                {
+                    model: this.orderModel,
+                    as: 'order',
+                    attributes: ['id', 'no_tracking', 'status', 'current_hub', 'next_hub'],
+                },
+            ],
+            raw: true,
+            nest: true,
+        });
+
+        if (!piece) {
+            throw new NotFoundException(`Piece dengan ID ${pieceId} tidak ditemukan`);
+        }
+
+        // Mulai transaction
+        const transaction = await this.orderModel.sequelize!.transaction();
+
+        try {
+            const now = new Date();
+            const order = piece.order as any;
+
+            // Update piece
+            await this.orderPieceModel.update(
+                {
+                    inbound_status: 1,
+                    hub_current_id: dto.destination_hub_id,
+                    inbound_by: dto.scanned_by_user_id,
+                    updatedAt: now,
+                },
+                {
+                    where: { piece_id: pieceId },
+                    transaction,
+                }
+            );
+
+            // Update order
+            await this.orderModel.update(
+                {
+                    current_hub: String(dto.destination_hub_id),
+                    issetManifest_inbound: 1,
+                    issetManifest_outbound: 0,
+                    updatedAt: now,
+                },
+                {
+                    where: { id: order.id },
+                    transaction,
+                }
+            );
+
+            // Schedule automatic "pesanan diproses di svc" entry after 1 hour
+            this.scheduleAutoProcessInbound(order.id, dto.scanned_by_user_id, destinationHub.nama);
+
+            // Buat manifest inbound record
+            await this.orderManifestInboundModel.create({
+                order_id: order.no_tracking,
+                svc_id: String(dto.destination_hub_id),
+                user_id: String(dto.scanned_by_user_id),
+                created_at: now,
+            } as any, { transaction });
+
+            await transaction.commit();
+
+            return {
+                message: 'Piece berhasil di-scan dan ditandai sudah sampai di hub',
+                success: true,
+                data: {
+                    piece_id: pieceId,
+                    order_id: order.id,
+                    no_tracking: order.no_tracking,
+                    current_hub: dto.destination_hub_id,
+                    hub_name: destinationHub.nama,
+                    inbound_status: 1,
+                    scanned_at: now,
+                    order_updated: true,
+                    history_created: true,
+                    manifest_created: true,
+                },
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error dalam scan piece ${pieceId}: ${error.message}`, error.stack);
+            throw new InternalServerErrorException(`Error dalam scan piece: ${error.message}`);
         }
     }
 
