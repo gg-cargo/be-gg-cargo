@@ -35,28 +35,49 @@ export async function generateOrderLabelsPDF(order: OrderForLabels, pieceIds: st
     };
     const printer = new PdfPrinter(fonts);
 
-    // Barcode Code128 untuk no_tracking (no resi)
+    // Konversi mm ke points (1mm = 2.83465 points)
+    const MM_TO_POINTS = 2.83465;
+    const LABEL_WIDTH_MM = 76;
+    const LABEL_HEIGHT_MM = 100;
+    const LABEL_WIDTH_POINTS = LABEL_WIDTH_MM * MM_TO_POINTS; // ~215.43 points
+    const LABEL_HEIGHT_POINTS = LABEL_HEIGHT_MM * MM_TO_POINTS; // ~283.47 points
+
+    // Margin konsisten untuk border luar (akan dikurangi dari content)
+    const BORDER_WIDTH = 1.5; // Border tebal 1.5pt
+    const INNER_MARGIN_MM = 3; // Margin dalam setelah border
+    const INNER_MARGIN_POINTS = INNER_MARGIN_MM * MM_TO_POINTS; // ~8.5 points
+    const CONTENT_WIDTH = LABEL_WIDTH_POINTS - (INNER_MARGIN_POINTS * 2) - (BORDER_WIDTH * 2); // Lebar konten setelah border dan margin
+    const CONTENT_HEIGHT = LABEL_HEIGHT_POINTS - (INNER_MARGIN_POINTS * 2) - (BORDER_WIDTH * 2); // Tinggi konten setelah border dan margin
+
+    // Grid vertikal tetap - Priority Mail style layout
+    const HEADER_HEIGHT = 35; // Header area dengan garis pemisah tebal (logo + QR)
+    const SERVICE_TITLE_HEIGHT = 20; // Service type besar (uppercase)
+    const ADDRESS_HEIGHT = 80; // From/To section
+    const DIVIDER_THIN = 1; // Garis tipis pemisah
+    const BARCODE_SECTION_HEIGHT = CONTENT_HEIGHT - HEADER_HEIGHT - SERVICE_TITLE_HEIGHT - ADDRESS_HEIGHT - (DIVIDER_THIN * 2); // Barcode + tracking number
+
+    // QR code size ~22-24mm untuk header
+    const QR_SIZE_MM = 20;
+    const QR_SIZE_POINTS = QR_SIZE_MM * MM_TO_POINTS; // ~65.2 points
+
+    // Barcode width ~70mm
+    const BARCODE_WIDTH_MM = 70;
+    const BARCODE_WIDTH_POINTS = BARCODE_WIDTH_MM * MM_TO_POINTS; // ~198.4 points
+
+    // Barcode Code128 untuk no_tracking (no resi) - optimized untuk high scannability
     async function generateBarcodeDataUrl(text: string): Promise<string> {
         const png: Buffer = await bwipjs.toBuffer({
             bcid: 'code128',
             text,
-            scale: 2,
-            height: 8,
-            includetext: false,
+            scale: 4, // Higher scale untuk thermal printer scannability
+            height: 12, // Optimal height untuk thermal printer
+            includetext: false, // No text below barcode untuk compact layout
             paddingwidth: 2,
             paddingheight: 2,
         });
         return 'data:image/png;base64,' + png.toString('base64');
     }
     const noResiBarcode = await generateBarcodeDataUrl(order.no_tracking);
-
-    // Autoscale: jika piece banyak, gunakan 12 label/halaman (3x4)
-    const useDenseGrid = pieceIds.length > 200;
-    const labelsPerPage = useDenseGrid ? 12 : 9;
-    const chunks: string[][] = [];
-    for (let i = 0; i < pieceIds.length; i += labelsPerPage) {
-        chunks.push(pieceIds.slice(i, i + labelsPerPage));
-    }
 
     const pagesContent: any[] = [];
     const totalPieces = pieceIds.length;
@@ -65,101 +86,297 @@ export async function generateOrderLabelsPDF(order: OrderForLabels, pieceIds: st
         try { return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return String(d); }
     };
 
-    for (const group of chunks) {
-        const rows: any[] = [];
-        const rowsPerPage = useDenseGrid ? 4 : 3;
-        const qrFit = useDenseGrid ? 48 : 60;
-        const fontBase = useDenseGrid ? 7 : 8;
-        for (let r = 0; r < rowsPerPage; r++) {
-            const rowCells: any[] = [];
-            for (let c = 0; c < 3; c++) {
-                const idx = r * 3 + c;
-                const pieceId = group[idx];
-                if (!pieceId) {
-                    rowCells.push('');
-                    continue;
-                }
-                const absoluteIndex = pieceIds.indexOf(pieceId);
-                const paketText = `Paket: ${absoluteIndex + 1} of ${totalPieces}`;
+    // Helper function untuk truncate text dengan ellipsis
+    const truncateText = (text: string, maxLength: number): string => {
+        if (!text || text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + '...';
+    };
 
-                const cell = {
-                    margin: [4, 4, 4, 4],
-                    unbreakable: true,
+    // Helper function untuk wrap alamat (max 2-3 baris)
+    const wrapAddress = (address: string, maxLines: number = 3, charsPerLine: number = 30): string[] => {
+        if (!address) return [];
+        const words = address.split(' ');
+        const lines: string[] = [];
+        let currentLine = '';
+
+        for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            if (testLine.length <= charsPerLine) {
+                currentLine = testLine;
+            } else {
+                if (currentLine) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                } else {
+                    // Word terlalu panjang, truncate
+                    lines.push(truncateText(word, charsPerLine));
+                }
+                if (lines.length >= maxLines) break;
+            }
+        }
+        if (currentLine && lines.length < maxLines) {
+            lines.push(currentLine);
+        }
+        return lines;
+    };
+
+    // Generate 1 label per page untuk thermal printer
+    for (let i = 0; i < pieceIds.length; i++) {
+        const pieceId = pieceIds[i];
+        const paketText = `Paket: ${i + 1} of ${totalPieces}`;
+
+        // Logo (jika ada) - convert ke grayscale untuk thermal printer
+        let logoImage: string | null = null;
+        if (fs.existsSync(path.join(process.cwd(), 'public/logo-gg-2.png'))) {
+            logoImage = 'data:image/png;base64,' + fs.readFileSync(path.join(process.cwd(), 'public/logo-gg-2.png')).toString('base64');
+        }
+
+        // Priority Mail style layout dengan border luar tebal
+        // Pastikan konten mengisi penuh halaman dengan absolutePosition
+        const labelContent: any = {
+            absolutePosition: { x: 0, y: 0 },
+            stack: [
+                // Content dengan border dan margin dalam
+                {
                     table: {
                         widths: ['*'],
+                        heights: [
+                            HEADER_HEIGHT,        // Header dengan garis pemisah tebal
+                            SERVICE_TITLE_HEIGHT, // Service type besar
+                            DIVIDER_THIN,         // Garis tipis
+                            ADDRESS_HEIGHT,       // From/To section
+                            DIVIDER_THIN,         // Garis tipis
+                            BARCODE_SECTION_HEIGHT // Barcode + tracking number
+                        ],
                         body: [
+                            // Section 1: Header area dengan garis pemisah tebal
+                            [{
+                                stack: [
+                                    {
+                                        columns: [
+                                            {
+                                                width: '*',
+                                                stack: [
+                                                    ...(logoImage ? [{
+                                                        image: logoImage,
+                                                        width: 36,
+                                                        margin: [0, 0, 0, 2],
+                                                        grayscale: true
+                                                    }] : []),
+                                                    { text: `Tanggal: ${formatDate(order.created_at)}`, fontSize: 6, color: 'black', lineHeight: 1.1 },
+                                                    { text: `Layanan: ${order.layanan}`, fontSize: 6, color: 'black', lineHeight: 1.1 },
+                                                    { text: `Berat: ${order.total_berat ?? '-'} Kg`, fontSize: 6, color: 'black', lineHeight: 1.1 },
+                                                    { text: paketText, fontSize: 6, color: 'black', lineHeight: 1.1 },
+                                                ],
+                                                margin: [0, 0, 0, 0]
+                                            },
+                                            {
+                                                width: 'auto',
+                                                alignment: 'right',
+                                                stack: [
+                                                    {
+                                                        qr: pieceId,
+                                                        fit: QR_SIZE_POINTS,
+                                                        alignment: 'right',
+                                                        foreground: 'black',
+                                                        margin: [0, 12, 0, 0] // Margin top untuk memindahkan QR ke bawah
+                                                    },
+                                                    {
+                                                        text: pieceId,
+                                                        fontSize: 7,
+                                                        bold: true,
+                                                        alignment: 'center',
+                                                        color: 'black',
+                                                        margin: [0, 2, 0, 0] // Margin top kecil setelah QR code
+                                                    }
+                                                ],
+                                                margin: [10, 0, 0, 0]
+                                            }
+                                        ],
+                                        margin: [0, 0, 0, 0]
+                                    },
+                                    // Garis pemisah tebal di bawah header
+                                    {
+                                        canvas: [{
+                                            type: 'line',
+                                            x1: 0,
+                                            y1: 0,
+                                            x2: CONTENT_WIDTH,
+                                            y2: 0,
+                                            lineWidth: BORDER_WIDTH,
+                                            lineColor: 'black'
+                                        }],
+                                        margin: [0, 3, 0, 0]
+                                    }
+                                ],
+                                margin: [0, 0, 0, 0],
+                                fillColor: 'white',
+                                valign: 'top'
+                            }],
+                            // Section 2: Service Type besar (uppercase, center, bold)
+                            [{
+                                text: order.layanan.toUpperCase(),
+                                fontSize: 13,
+                                bold: true,
+                                alignment: 'center',
+                                color: 'black',
+                                margin: [0, 3, 0, 0],
+                                fillColor: 'white',
+                                valign: 'middle'
+                            }],
+                            // Divider tipis
+                            [{
+                                canvas: [{
+                                    type: 'line',
+                                    x1: 0,
+                                    y1: 0,
+                                    x2: CONTENT_WIDTH,
+                                    y2: 0,
+                                    lineWidth: BORDER_WIDTH,
+                                    lineColor: 'black'
+                                }],
+                                margin: [0, 0, 0, 0],
+                                fillColor: 'white'
+                            }],
+                            // Section 3: From/To Address Section
                             [{
                                 columns: [
-                                    { width: '*', text: `Tanggal: ${formatDate(order.created_at)}\nLayanan: ${order.layanan}\nBerat: ${order.total_berat ?? '-'} Kg\n${paketText}`, fontSize: fontBase, margin: [0, 15, 0, 0] },
                                     {
-                                        width: '*', alignment: 'right', stack: [
-                                            (fs.existsSync(path.join(process.cwd(), 'public/logo-gg-2.png'))
-                                                ? { image: 'data:image/png;base64,' + fs.readFileSync(path.join(process.cwd(), 'public/logo-gg-2.png')).toString('base64'), width: 28, alignment: 'right', margin: [0, 0, 8, 2] }
-                                                : {}),
-                                            { text: `${order.no_tracking}`, fontSize: fontBase + 1, bold: true, alignment: 'right' },
-                                            { image: noResiBarcode, width: (useDenseGrid ? 70 : 85), alignment: 'right', margin: [0, 2, 0, 0] },
-                                        ]
+                                        width: '*',
+                                        stack: [
+                                            { text: 'Pengirim:', fontSize: 7, bold: true, color: 'black', margin: [0, 0, 0, 1] },
+                                            { text: order.nama_pengirim, fontSize: 6, color: 'black', lineHeight: 1.2, margin: [0, 0, 0, 1] },
+                                            ...wrapAddress(order.alamat_pengirim, 3, 28).map((line, idx) => ({
+                                                text: line,
+                                                fontSize: 6,
+                                                color: 'black',
+                                                lineHeight: 1.15,
+                                                margin: [0, 0, 0, idx === 2 ? 0 : 0.5]
+                                            }))
+                                        ],
+                                        margin: [0, 0, 3, 0]
                                     },
-                                ]
+                                    {
+                                        width: 1, // Width minimal untuk garis vertikal
+                                        stack: [
+                                            {
+                                                canvas: [{
+                                                    type: 'line',
+                                                    x1: 0,
+                                                    y1: 0,
+                                                    x2: 0,
+                                                    y2: ADDRESS_HEIGHT + 15, // Tinggi lebih besar untuk memastikan mencapai bawah
+                                                    lineWidth: BORDER_WIDTH,
+                                                    lineColor: 'black'
+                                                }],
+                                                margin: [0, -2, 0, -2] // Margin negatif kecil untuk memastikan garis mencapai atas dan bawah
+                                            }
+                                        ],
+                                        margin: [3, 0, 3, 0], // Margin kiri dan kanan untuk spacing
+                                        valign: 'top'
+                                    },
+                                    {
+                                        width: '*',
+                                        stack: [
+                                            { text: 'Penerima:', fontSize: 7, bold: true, color: 'black', margin: [0, 0, 0, 1] },
+                                            { text: order.nama_penerima, fontSize: 6, color: 'black', lineHeight: 1.2, margin: [0, 0, 0, 1] },
+                                            ...wrapAddress(order.alamat_penerima, 3, 28).map((line, idx) => ({
+                                                text: line,
+                                                fontSize: 6,
+                                                color: 'black',
+                                                lineHeight: 1.15,
+                                                margin: [0, 0, 0, idx === 2 ? 0 : 0.5]
+                                            }))
+                                        ],
+                                        margin: [6, 0, 0, 0] // Margin kiri ditambah untuk spacing lebih baik
+                                    }
+                                ],
+                                margin: [0, 0, 0, 0],
+                                fillColor: 'white',
+                                valign: 'top'
                             }],
-
+                            // Divider tipis
                             [{
-                                columns: [
-                                    {
-                                        width: '*', stack: [
-                                            { text: 'Pengirim', bold: true, fontSize: fontBase },
-                                            { text: `Nama: ${order.nama_pengirim}`, fontSize: fontBase - 1 },
-                                            { text: `Lokasi: ${order.alamat_pengirim}`, fontSize: fontBase - 1 },
-                                        ]
-                                    },
-                                    {
-                                        width: '*', stack: [
-                                            { text: 'Penerima', bold: true, fontSize: fontBase },
-                                            { text: `Nama: ${order.nama_penerima}`, fontSize: fontBase - 1 },
-                                            { text: `Lokasi: ${order.alamat_penerima}`, fontSize: fontBase - 1 },
-                                        ]
-                                    },
-                                ]
+                                canvas: [{
+                                    type: 'line',
+                                    x1: 0,
+                                    y1: 0,
+                                    x2: CONTENT_WIDTH,
+                                    y2: 0,
+                                    lineWidth: BORDER_WIDTH,
+                                    lineColor: 'black'
+                                }],
+                                margin: [0, 0, 0, 0],
+                                fillColor: 'white'
                             }],
-                            [{ text: 'PIECE ID', alignment: 'center', bold: true, fontSize: fontBase }],
-                            [{ qr: pieceId, fit: qrFit, alignment: 'center', margin: [0, 3, 0, 3] }],
-                            [{ text: pieceId, alignment: 'center', fontSize: fontBase }],
+                            // Section 4: Barcode Code128 + Tracking Number (bottom)
+                            [{
+                                stack: [
+                                    // Code-128 barcode full width (~70mm)
+                                    {
+                                        image: noResiBarcode,
+                                        width: Math.min(BARCODE_WIDTH_POINTS, CONTENT_WIDTH - 5),
+                                        alignment: 'center',
+                                        margin: [0, 0, 0, 3]
+                                    },
+                                    // Tracking number besar di bawah barcode
+                                    {
+                                        text: `No Resi: ${order.no_tracking}`,
+                                        fontSize: 8,
+                                        bold: true,
+                                        alignment: 'center',
+                                        color: 'black',
+                                        margin: [0, 2, 0, 0]
+                                    }
+                                ],
+                                margin: [0, 0, 0, 0],
+                                alignment: 'center',
+                                fillColor: 'white',
+                                valign: 'middle'
+                            }]
                         ]
                     },
                     layout: {
-                        hLineWidth: () => 0.5,
+                        hLineWidth: () => 0,
                         vLineWidth: () => 0,
-                        paddingLeft: () => 2,
-                        paddingRight: () => 2,
-                        paddingTop: () => 1,
-                        paddingBottom: () => 1,
-                    }
-                } as any;
-                rowCells.push(cell);
-            }
-            rows.push(rowCells);
+                        paddingLeft: () => 0,
+                        paddingRight: () => 0,
+                        paddingTop: () => 0,
+                        paddingBottom: () => 0,
+                    },
+                    margin: [INNER_MARGIN_POINTS + BORDER_WIDTH, INNER_MARGIN_POINTS + BORDER_WIDTH, INNER_MARGIN_POINTS + BORDER_WIDTH, INNER_MARGIN_POINTS + BORDER_WIDTH]
+                }
+            ]
+        };
+
+        // Tambahkan pageBreak hanya jika bukan label pertama
+        if (i > 0) {
+            labelContent.pageBreak = 'before';
         }
-        pagesContent.push({
-            table: {
-                widths: ['*', '*', '*'],
-                body: rows,
-                heights: () => (useDenseGrid ? 180 : 240),
-                dontBreakRows: true,
-            },
-            layout: 'noBorders',
-            margin: [6, 6, 6, 6],
-            pageBreak: 'after'
-        });
-    }
-    if (pagesContent.length > 0) {
-        // Hapus pageBreak pada halaman terakhir
-        delete pagesContent[pagesContent.length - 1].pageBreak;
+        
+        pagesContent.push(labelContent);
+
     }
 
     const docDefinition = {
-        pageMargins: [10, 10, 10, 10],
+        pageSize: {
+            width: LABEL_WIDTH_POINTS,
+            height: LABEL_HEIGHT_POINTS
+        },
+        pageMargins: [0, 0, 0, 0], // Margin 0 karena sudah di-handle di content margin
         content: pagesContent,
-        defaultStyle: { font: 'Roboto', fontSize: 9 },
+        defaultStyle: {
+            font: 'Roboto',
+            fontSize: 5,
+            color: 'black', // Monochrome: pure black & white
+            lineHeight: 1.15 // Compact spacing, no large empty areas
+        },
+        // Settings untuk thermal printer - hitam putih, tajam
+        compress: false, // Tidak compress untuk kualitas maksimal
+        info: {
+            title: `Labels - ${order.no_tracking}`,
+            author: 'GG Kargo',
+        }
     } as any;
 
     const pdfDoc = printer.createPdfKitDocument(docDefinition);
