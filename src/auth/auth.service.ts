@@ -74,7 +74,9 @@ export class AuthService {
 
       // Check if email already exists
       const existingEmail = await this.userModel.findOne({ where: { email } });
-      if (existingEmail) {
+      if (existingEmail && existingEmail.getDataValue('phone_verify_at') === null) {
+        await this.userModel.destroy({ where: { id: existingEmail.getDataValue('id') } });
+      } else if (existingEmail) {
         throw new UserAlreadyExistsException('email');
       }
 
