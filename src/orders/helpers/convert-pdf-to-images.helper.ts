@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import { fromPath } from 'pdf2pic';
 
 function ensureImagesDir(): string {
     const dir = path.join(process.cwd(), 'public/pdf/labels');
@@ -10,7 +11,7 @@ function ensureImagesDir(): string {
 }
 
 /**
- * Convert PDF pages to PNG images
+ * Convert PDF pages to PNG images using GraphicsMagick
  * @param pdfPath - Path ke file PDF (e.g., "/pdf/labels-XXX.pdf")
  * @param noTracking - Nomor tracking untuk naming
  * @returns Array of image URLs
@@ -25,23 +26,35 @@ export async function convertPdfToImages(pdfPath: string, noTracking: string): P
     const imageUrls: string[] = [];
     const imagesDir = ensureImagesDir();
 
-    // Dynamic import for ESM module
-    const { pdf } = await import('pdf-to-img');
+    // Configure pdf2pic with GraphicsMagick
+    // Label size: 76mm x 100mm at 300 DPI = 898px x 1181px
+    const options = {
+        density: 300,           // 300 DPI for high quality
+        saveFilename: `label-${noTracking}`,
+        savePath: imagesDir,
+        format: 'png',
+        width: 898,             // 76mm * 11.811 px/mm
+        height: 1181            // 100mm * 11.811 px/mm
+    };
 
-    const document = await pdf(fullPdfPath, { scale: 4.0 });
+    const convert = fromPath(fullPdfPath, options);
     
-    let pageNum = 1;
-    for await (const image of document) {
-        const fileName = `label-${noTracking}-${pageNum}.png`;
-        const filePath = path.join(imagesDir, fileName);
+    try {
+        // Convert all pages (-1 means all pages)
+        const results = await convert.bulk(-1, { responseType: 'image' });
         
-        // Save image buffer as PNG
-        fs.writeFileSync(filePath, image);
+        // Build URLs from converted images
+        for (let i = 0; i < results.length; i++) {
+            const result = results[i];
+            if (result && result.name) {
+                // pdf2pic generates: label-{noTracking}.{pageNumber}.png
+                imageUrls.push(`/pdf/labels/${result.name}`);
+            }
+        }
         
-        imageUrls.push(`/pdf/labels/${fileName}`);
-        pageNum++;
+        return imageUrls;
+    } catch (error) {
+        console.error('Error converting PDF to images:', error);
+        throw new Error(`Failed to convert PDF to images: ${error.message}`);
     }
-    
-    return imageUrls;
 }
-
