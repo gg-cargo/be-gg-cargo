@@ -266,13 +266,14 @@ export class OrdersController {
     @Get(':no_tracking/labels')
     async getOrderLabels(
         @Param('no_tracking') noTracking: string,
-    ): Promise<{ message: string; success: boolean; data: { pdf_url: string; no_resi: string } }> {
-        const pdfUrl = await this.ordersService.generateOrderLabelsPdf(noTracking);
+    ): Promise<{ message: string; success: boolean; data: { pdf_url: string; image_urls: string[]; no_resi: string } }> {
+        const result = await this.ordersService.generateOrderLabelsPdf(noTracking);
         return {
-            message: 'PDF label berhasil dibuat',
+            message: 'PDF dan gambar label berhasil dibuat',
             success: true,
             data: {
-                pdf_url: pdfUrl,
+                pdf_url: result.pdf_url,
+                image_urls: result.image_urls,
                 no_resi: noTracking,
             },
         };
@@ -386,12 +387,12 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
-    @Get(':no_tracking/labels')
+    @Get(':no_tracking/labels-link')
     async getOrderLabelsLink(
         @Param('no_tracking') noTracking: string,
     ): Promise<{ message: string; link: string }> {
-        const link = await this.ordersService.generateOrderLabelsPdf(noTracking);
-        return { message: 'Berhasil menghasilkan tautan PDF label', link };
+        const result = await this.ordersService.generateOrderLabelsPdf(noTracking);
+        return { message: 'Berhasil menghasilkan tautan PDF label', link: result.pdf_url };
     }
 
     @Patch(':no_resi/cancel')

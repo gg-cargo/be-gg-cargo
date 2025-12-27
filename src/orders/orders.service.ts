@@ -47,6 +47,7 @@ import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
 import { Hub } from '../models/hub.model';
 import { generateOrderLabelsPDF } from './helpers/generate-order-labels-pdf.helper';
+import { convertPdfToImages } from './helpers/convert-pdf-to-images.helper';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { ReportMissingItemDto } from './dto/report-missing-item.dto';
@@ -1675,7 +1676,7 @@ export class OrdersService {
         return scoredDrivers.length > 0 ? scoredDrivers[0].driver : null;
     }
 
-    async generateOrderLabelsPdf(noTracking: string): Promise<string> {
+    async generateOrderLabelsPdf(noTracking: string): Promise<{ pdf_url: string; image_urls: string[] }> {
         const order: any = await this.orderModel.findOne({ where: { no_tracking: noTracking }, raw: true });
         if (!order) {
             throw new NotFoundException('Order tidak ditemukan');
@@ -1714,7 +1715,13 @@ export class OrdersService {
             alamat_penerima: order.alamat_penerima,
         };
 
-        return await generateOrderLabelsPDF(orderForLabels, pieceIds);
+        // Generate PDF dulu
+        const pdfUrl = await generateOrderLabelsPDF(orderForLabels, pieceIds);
+
+        // Convert PDF ke images
+        const imageUrls = await convertPdfToImages(pdfUrl, order.no_tracking);
+
+        return { pdf_url: pdfUrl, image_urls: imageUrls };
     }
 
     async generatePickupNotePdf(noTracking: string): Promise<string> {
