@@ -18,7 +18,7 @@ function ensureImagesDir(): string {
  */
 export async function convertPdfToImages(pdfPath: string, noTracking: string): Promise<string[]> {
     const fullPdfPath = path.join(process.cwd(), 'public', pdfPath);
-    
+
     if (!fs.existsSync(fullPdfPath)) {
         throw new Error(`PDF file not found: ${fullPdfPath}`);
     }
@@ -27,22 +27,23 @@ export async function convertPdfToImages(pdfPath: string, noTracking: string): P
     const imagesDir = ensureImagesDir();
 
     // Configure pdf2pic with GraphicsMagick
-    // Label size: 76mm x 100mm at 300 DPI = 898px x 1181px
+    // Thermal printer ready: 76mm x 100mm at 203 DPI (standard thermal resolution)
+    // Calculation: 76mm × 203dpi / 25.4 = 607px, 100mm × 203dpi / 25.4 = 799px
     const options = {
-        density: 300,           // 300 DPI for high quality
+        density: 203,           // 203 DPI - standard thermal printer resolution
         saveFilename: `label-${noTracking}`,
         savePath: imagesDir,
         format: 'png',
-        width: 898,             // 76mm * 11.811 px/mm
-        height: 1181            // 100mm * 11.811 px/mm
+        width: 607,             // 76mm × 203 / 25.4 ≈ 607px
+        height: 799             // 100mm × 203 / 25.4 ≈ 799px
     };
 
     const convert = fromPath(fullPdfPath, options);
-    
+
     try {
         // Convert all pages (-1 means all pages)
         const results = await convert.bulk(-1, { responseType: 'image' });
-        
+
         // Build URLs from converted images
         for (let i = 0; i < results.length; i++) {
             const result = results[i];
@@ -51,7 +52,7 @@ export async function convertPdfToImages(pdfPath: string, noTracking: string): P
                 imageUrls.push(`/pdf/labels/${result.name}`);
             }
         }
-        
+
         return imageUrls;
     } catch (error) {
         console.error('Error converting PDF to images:', error);
