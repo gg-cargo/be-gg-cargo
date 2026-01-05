@@ -9,7 +9,7 @@ import { OrderList } from '../models/order-list.model';
 import { OrderReferensi } from '../models/order-referensi.model';
 import { RequestCancel } from '../models/request-cancel.model';
 import { User } from '../models/user.model';
-import { CreateOrderDto, CreateOrderPieceDto } from './dto/create-order.dto';
+import { CreateOrderDto, CreateOrderPieceDto, LayananType } from './dto/create-order.dto';
 import { CreateOrderResponseDto } from './dto/create-order-response.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateOrderResponseDto } from './dto/order-response.dto';
@@ -1265,6 +1265,16 @@ export class OrdersService {
         // Validasi tambahan
         this.validateOrderData(createOrderDto);
 
+        // Validasi khusus untuk layanan Kirim Motor
+        if (createOrderDto.layanan === LayananType.KIRIM_MOTOR) {
+            if (!createOrderDto.model_motor) {
+                throw new BadRequestException('Model motor wajib diisi untuk layanan Kirim Motor');
+            }
+            if (!createOrderDto.motor_type) {
+                throw new BadRequestException('Motor type wajib diisi untuk layanan Kirim Motor');
+            }
+        }
+
         // Validasi qty maksimal per piece dan total
         this.validateQtyLimits(createOrderDto.pieces);
 
@@ -1368,6 +1378,13 @@ export class OrdersService {
                 asuransi: createOrderDto.asuransi || 0,
                 packing: createOrderDto.packing || 0,
                 harga_barang: createOrderDto.harga_barang || 0,
+
+                // Informasi motor (jika Kirim Motor)
+                model_motor: createOrderDto.model_motor,
+                no_polisi_motor: createOrderDto.no_polisi_motor,
+                besaran_cc: createOrderDto.besaran_cc,
+                motor_type: createOrderDto.motor_type,
+                motor_notes: createOrderDto.motor_notes,
 
                 //billing
                 billing_name: createOrderDto.billing_name,
@@ -1606,7 +1623,13 @@ export class OrdersService {
                 await this.createNotificationBadge(order.id, 'hub kosong', 'order');
             }
 
-            await this.autoAssignPickupDriver(order, hubSourceId, userId);
+            // Auto assign pickup driver hanya untuk layanan selain Sewa Truk & Kirim Motor
+            if (
+                createOrderDto.layanan !== LayananType.SEWA_TRUK &&
+                createOrderDto.layanan !== LayananType.KIRIM_MOTOR
+            ) {
+                await this.autoAssignPickupDriver(order, hubSourceId, userId);
+            }
 
             return {
                 order_id: order.id,

@@ -48,5 +48,6 @@ export class UserDetailResponseDto {
         isHandover: number;
         show_price: number;
         saldo: number;
+        kode_referral: string | null;
     };
 } 

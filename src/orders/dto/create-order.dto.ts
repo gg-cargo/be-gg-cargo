@@ -80,6 +80,31 @@ export class CreateOrderDto {
     @MaxLength(35, { message: 'nama_barang maksimal 35 karakter' })
     nama_barang?: string;
 
+    // Khusus Kirim Motor
+    @IsString()
+    @IsOptional()
+    @MaxLength(100, { message: 'model_motor maksimal 100 karakter' })
+    model_motor?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(20, { message: 'no_polisi_motor maksimal 20 karakter' })
+    no_polisi_motor?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(50, { message: 'besaran_cc maksimal 50 karakter' })
+    besaran_cc?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(20, { message: 'motor_type maksimal 20 karakter' })
+    motor_type?: string;
+
+    @IsString()
+    @IsOptional()
+    motor_notes?: string;
+
     @IsString()
     @IsOptional()
     no_referensi?: string;

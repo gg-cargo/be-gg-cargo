@@ -191,6 +191,36 @@ export class Order extends Model {
     total_harga: number;
 
     @Column({
+        type: DataType.STRING(100),
+        allowNull: true,
+    })
+    model_motor: string;
+
+    @Column({
+        type: DataType.STRING(20),
+        allowNull: true,
+    })
+    no_polisi_motor: string;
+
+    @Column({
+        type: DataType.STRING(50),
+        allowNull: true,
+    })
+    besaran_cc: string;
+
+    @Column({
+        type: DataType.STRING(20),
+        allowNull: true,
+    })
+    motor_type: string;
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true,
+    })
+    motor_notes: string;
+
+    @Column({
         type: DataType.STRING(200),
         allowNull: false,
     })

@@ -319,6 +319,7 @@ export class UsersService {
                 isApprove: user.getDataValue('isApprove'),
                 isHandover: user.getDataValue('isHandover'),
                 show_price: user.getDataValue('show_price'),
+                kode_referral: user.getDataValue('kode_referral'),
                 saldo: saldoAktif,
             }
         };
