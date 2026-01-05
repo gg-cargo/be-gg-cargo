@@ -7,6 +7,9 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangeMyPasswordDto } from './dto/change-my-password.dto';
 import { LinkSalesDto } from './dto/link-sales.dto';
 import { GenerateReferralCodeDto } from './dto/generate-referral-code.dto';
+import { UnassignedCustomersQueryDto } from './dto/unassigned-customers.dto';
+import { BulkAssignSalesDto } from './dto/bulk-assign-sales.dto';
+import { CustomerSalesAssignmentsQueryDto } from './dto/customer-sales-assignments.dto';
 import { ListUsersResponseDto, CreateUserResponseDto, UpdateUserResponseDto, ChangePasswordResponseDto } from './dto/user-response.dto';
 import { ChangeMyPasswordResponseDto } from './dto/change-my-password-response.dto';
 import { UserDetailResponseDto } from './dto/user-detail-response.dto';
@@ -73,6 +76,42 @@ export class UsersController {
     ): Promise<any> {
         const userId = req.user.id;
         return this.usersService.generateReferralCode(userId, generateReferralCodeDto.prefix);
+    }
+
+    /**
+     * Get list customer yang belum terhubung dengan sales (master/admin)
+     */
+    @Get('unassigned-customers')
+    @HttpCode(HttpStatus.OK)
+    async getUnassignedCustomers(
+        @Query() query: UnassignedCustomersQueryDto,
+    ): Promise<any> {
+        return this.usersService.getUnassignedCustomers(query);
+    }
+
+    /**
+     * Bulk assign customer ke sales (master/admin)
+     */
+    @Post('bulk-assign-sales')
+    @HttpCode(HttpStatus.OK)
+    async bulkAssignCustomersToSales(
+        @Body() bulkAssignSalesDto: BulkAssignSalesDto,
+    ): Promise<any> {
+        return this.usersService.bulkAssignCustomersToSales(
+            bulkAssignSalesDto.customer_ids,
+            bulkAssignSalesDto.sales_id,
+        );
+    }
+
+    /**
+     * Get list customer dan sales yang terhubung (master/admin)
+     */
+    @Get('customer-sales-assignments')
+    @HttpCode(HttpStatus.OK)
+    async getCustomerSalesAssignments(
+        @Query() query: CustomerSalesAssignmentsQueryDto,
+    ): Promise<any> {
+        return this.usersService.getCustomerSalesAssignments(query);
     }
 
     @Patch('change-password')

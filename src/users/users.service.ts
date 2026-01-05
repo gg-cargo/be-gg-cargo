@@ -893,4 +893,226 @@ export class UsersService {
         // Format: SALES001, SALES002, SALESPLG001, etc.
         return `${normalizedPrefix}${String(nextNumber).padStart(3, '0')}`;
     }
+
+    /**
+     * Get list customer yang belum terhubung dengan sales (unassigned)
+     */
+    async getUnassignedCustomers(query: {
+        page?: number;
+        limit?: number;
+        search?: string;
+        level?: number;
+    }): Promise<any> {
+        const page = query.page || 1;
+        const limit = query.limit || 20;
+        const offset = (page - 1) * limit;
+
+        const whereCondition: any = {
+            referred_by_sales_id: null, // Belum terhubung dengan sales
+            level: query.level || 1, // Default level customer (1)
+        };
+
+        if (query.search) {
+            whereCondition[Op.or] = [
+                { name: { [Op.like]: `%${query.search}%` } },
+                { email: { [Op.like]: `%${query.search}%` } },
+                { phone: { [Op.like]: `%${query.search}%` } },
+            ];
+        }
+
+        // Get total count
+        const totalCount = await this.userModel.count({
+            where: whereCondition,
+        });
+
+        // Get customers with pagination
+        const customers = await this.userModel.findAll({
+            where: whereCondition,
+            attributes: ['id', 'name', 'email', 'phone', 'level', 'aktif', 'created_at'],
+            include: [
+                {
+                    model: this.levelModel,
+                    as: 'levelData',
+                    attributes: ['id', 'nama', 'level'],
+                },
+            ],
+            order: [['name', 'ASC']],
+            limit,
+            offset,
+        });
+
+        return {
+            success: true,
+            message: 'Daftar customer yang belum terhubung dengan sales',
+            data: {
+                customers: customers.map((customer: any) => ({
+                    id: customer.getDataValue('id'),
+                    name: customer.getDataValue('name'),
+                    email: customer.getDataValue('email'),
+                    phone: customer.getDataValue('phone'),
+                    level: customer.getDataValue('levelData')?.getDataValue('nama') || 'Unknown',
+                    aktif: customer.getDataValue('aktif'),
+                    created_at: customer.getDataValue('created_at'),
+                    kode_referral: customer.getDataValue('kode_referral'),
+                })),
+                pagination: {
+                    page,
+                    limit,
+                    total: totalCount,
+                    totalPages: Math.ceil(totalCount / limit),
+                },
+            },
+        };
+    }
+
+    /**
+     * Bulk assign customer ke sales (master/admin action)
+     */
+    async bulkAssignCustomersToSales(customerIds: number[], salesId: number): Promise<any> {
+        // Validasi sales exists & level 13
+        const sales = await this.userModel.findByPk(salesId, {
+            attributes: ['id', 'name', 'kode_referral', 'level'],
+        });
+
+        if (!sales) {
+            throw new NotFoundException('Sales tidak ditemukan');
+        }
+
+        if (sales.getDataValue('level') !== 13) {
+            throw new BadRequestException('User yang dipilih bukan sales (level harus 13)');
+        }
+
+        if (!sales.getDataValue('kode_referral')) {
+            throw new BadRequestException('Sales belum memiliki kode referral. Silakan generate kode referral terlebih dahulu.');
+        }
+
+        // Validasi customer IDs
+        const customers = await this.userModel.findAll({
+            where: { id: { [Op.in]: customerIds } },
+            attributes: ['id', 'name', 'referred_by_sales_id'],
+        });
+
+        if (customers.length !== customerIds.length) {
+            throw new BadRequestException('Beberapa customer ID tidak ditemukan');
+        }
+
+        // Filter customer yang belum terhubung atau terhubung dengan sales lain
+        const now = new Date();
+        const updateData: any = {
+            referred_by_sales_id: salesId,
+            sales_referral_code: sales.getDataValue('kode_referral'),
+            sales_linked_at: now,
+        };
+
+        // Update multiple customers
+        const [affectedRows] = await this.userModel.update(updateData, {
+            where: { id: { [Op.in]: customerIds } },
+        });
+
+        return {
+            success: true,
+            message: `Berhasil assign ${affectedRows} customer ke sales ${sales.name}`,
+            data: {
+                sales_id: sales.getDataValue('id'),
+                sales_name: sales.getDataValue('name'),
+                sales_code: sales.getDataValue('kode_referral'),
+                assigned_count: affectedRows,
+                customer_ids: customerIds,
+            },
+        };
+    }
+
+    /**
+     * Get list customer dan sales yang terhubung (customer-sales assignments)
+     */
+    async getCustomerSalesAssignments(query: {
+        page?: number;
+        limit?: number;
+        search?: string;
+        sales_id?: number;
+    }): Promise<any> {
+        const page = query.page || 1;
+        const limit = query.limit || 20;
+        const offset = (page - 1) * limit;
+
+        const whereCondition: any = {
+            referred_by_sales_id: { [Op.ne]: null }, // Sudah terhubung dengan sales
+        };
+
+        if (query.sales_id) {
+            whereCondition.referred_by_sales_id = query.sales_id;
+        }
+
+        if (query.search) {
+            whereCondition[Op.or] = [
+                { name: { [Op.like]: `%${query.search}%` } },
+                { email: { [Op.like]: `%${query.search}%` } },
+                { phone: { [Op.like]: `%${query.search}%` } },
+            ];
+        }
+
+        // Get total count
+        const totalCount = await this.userModel.count({
+            where: whereCondition,
+        });
+
+        // Get customers with sales info
+        const customers = await this.userModel.findAll({
+            where: whereCondition,
+            attributes: [
+                'id',
+                'name',
+                'email',
+                'phone',
+                'level',
+                'aktif',
+                'referred_by_sales_id',
+                'sales_referral_code',
+                'sales_linked_at',
+                'created_at',
+            ],
+            include: [
+                {
+                    model: this.levelModel,
+                    as: 'levelData',
+                    attributes: ['id', 'nama', 'level'],
+                },
+                {
+                    model: User,
+                    as: 'mySales',
+                    attributes: ['id', 'name', 'kode_referral', 'email', 'phone'],
+                },
+            ],
+            order: [['name', 'ASC']],
+            limit,
+            offset,
+        });
+
+        return {
+            success: true,
+            message: 'Daftar customer dan sales yang terhubung',
+            data: {
+                assignments: customers.map((customer: any) => ({
+                    customer_id: customer.getDataValue('id'),
+                    customer_name: customer.getDataValue('name'),
+                    customer_email: customer.getDataValue('email'),
+                    customer_phone: customer.getDataValue('phone'),
+                    customer_level: customer.getDataValue('levelData')?.getDataValue('nama') || 'Unknown',
+                    sales_id: customer.getDataValue('referred_by_sales_id'),
+                    sales_name: customer.getDataValue('mySales')?.getDataValue('name') || 'Unknown',
+                    sales_code: customer.getDataValue('sales_referral_code'),
+                    sales_email: customer.getDataValue('mySales')?.getDataValue('email'),
+                    sales_phone: customer.getDataValue('mySales')?.getDataValue('phone'),
+                    linked_at: customer.getDataValue('sales_linked_at'),
+                    customer_created_at: customer.getDataValue('created_at'),
+                })),
+                pagination: {
+                    page,
+                    limit,
+                    total: totalCount,
+                    totalPages: Math.ceil(totalCount / limit),
+                },
+            },
+        };
+    }
 } 
