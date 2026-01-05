@@ -197,6 +197,12 @@ export class UsersService {
         // Generate user code (optional - bisa disesuaikan dengan business logic)
         const userCode = this.generateUserCode();
 
+        // Generate kode referral otomatis jika level sales (13)
+        let kodeReferral: string | null = null;
+        if (createUserDto.level_id === 13) {
+            kodeReferral = await this.generateUniqueReferralCode('SALES');
+        }
+
         // Create user
         const newUser = await this.userModel.create({
             name: createUserDto.name,
@@ -218,6 +224,7 @@ export class UsersService {
             address: createUserDto.address,
             location: createUserDto.location,
             code: userCode,
+            kode_referral: kodeReferral,
             phone_verify_at: new Date(), // Set phone verification to current date
             created_at: new Date(),
             updated_at: new Date(),
@@ -232,6 +239,7 @@ export class UsersService {
                 phone: newUser.phone,
                 level: level.nama,
                 status: this.getUserStatus(newUser),
+                kode_referral: kodeReferral,
             },
         };
     }
@@ -802,5 +810,87 @@ export class UsersService {
             success: true,
             message: 'Berhasil memutus hubungan dengan sales',
         };
+    }
+
+    /**
+     * Generate kode referral untuk user sales
+     */
+    async generateReferralCode(userId: number, prefix: string = 'SALES'): Promise<any> {
+        // Cek apakah user sudah punya kode referral
+        const user = await this.userModel.findByPk(userId, {
+            attributes: ['id', 'name', 'kode_referral', 'level'],
+        });
+
+        if (!user) {
+            throw new NotFoundException('User tidak ditemukan');
+        }
+
+        // Validasi level (hanya sales yang bisa generate)
+        if (user.level !== 13) {
+            throw new BadRequestException('Hanya user dengan level sales yang dapat generate kode referral');
+        }
+
+        // Jika sudah punya kode, return yang existing
+        if (user.kode_referral) {
+            return {
+                success: true,
+                message: 'User sudah memiliki kode referral',
+                data: {
+                    kode_referral: user.kode_referral,
+                    is_new: false,
+                },
+            };
+        }
+
+        // Generate kode referral baru
+        const kodeReferral = await this.generateUniqueReferralCode(prefix);
+
+        // Update user dengan kode referral
+        await this.userModel.update(
+            { kode_referral: kodeReferral },
+            { where: { id: userId } }
+        );
+
+        return {
+            success: true,
+            message: 'Kode referral berhasil di-generate',
+            data: {
+                kode_referral: kodeReferral,
+                is_new: true,
+            },
+        };
+    }
+
+    /**
+     * Generate unique referral code dengan format: PREFIX + 3 digit number
+     * Contoh: SALES001, SALESPLG001, dll
+     */
+    private async generateUniqueReferralCode(prefix: string = 'SALES'): Promise<string> {
+        // Normalize prefix (uppercase, remove spaces)
+        const normalizedPrefix = prefix.trim().toUpperCase().replace(/\s+/g, '');
+
+        // Cari kode referral terakhir dengan prefix yang sama
+        const existingCodes = await this.userModel.findAll({
+            where: {
+                kode_referral: { [Op.like]: `${normalizedPrefix}%` },
+            },
+            order: [['id', 'DESC']],
+            limit: 1,
+        });
+
+        let nextNumber = 1;
+        if (existingCodes.length > 0) {
+            const lastCode = existingCodes[0].getDataValue('kode_referral');
+            if (lastCode) {
+                // Extract number dari kode (e.g., "SALES001" -> 1, "SALESPLG123" -> 123)
+                const match = lastCode.match(/\d+$/);
+                if (match) {
+                    nextNumber = parseInt(match[0], 10) + 1;
+                }
+            }
+        }
+
+        // Format: SALES001, SALES002, SALESPLG001, etc.
+        return `${normalizedPrefix}${String(nextNumber).padStart(3, '0')}`;
     }
 } 

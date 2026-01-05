@@ -6,6 +6,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangeMyPasswordDto } from './dto/change-my-password.dto';
 import { LinkSalesDto } from './dto/link-sales.dto';
+import { GenerateReferralCodeDto } from './dto/generate-referral-code.dto';
 import { ListUsersResponseDto, CreateUserResponseDto, UpdateUserResponseDto, ChangePasswordResponseDto } from './dto/user-response.dto';
 import { ChangeMyPasswordResponseDto } from './dto/change-my-password-response.dto';
 import { UserDetailResponseDto } from './dto/user-detail-response.dto';
@@ -59,6 +60,19 @@ export class UsersController {
     async unlinkFromSales(@Request() req): Promise<any> {
         const userId = req.user.id;
         return this.usersService.unlinkUserFromSales(userId);
+    }
+
+    /**
+     * Generate kode referral untuk user sales
+     */
+    @Post('generate-referral-code')
+    @HttpCode(HttpStatus.OK)
+    async generateReferralCode(
+        @Request() req,
+        @Body() generateReferralCodeDto: GenerateReferralCodeDto,
+    ): Promise<any> {
+        const userId = req.user.id;
+        return this.usersService.generateReferralCode(userId, generateReferralCodeDto.prefix);
     }
 
     @Patch('change-password')

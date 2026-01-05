@@ -19,6 +19,7 @@ export class CreateUserResponseDto {
         phone: string;
         level: string;
         status: string;
+        kode_referral?: string | null;
     };
 }
 
