@@ -662,4 +662,144 @@ export class UsersService {
             },
         };
     }
+
+    /**
+     * Link customer ke sales berdasarkan kode referral
+     */
+    async linkUserToSales(userId: number, kodeReferral: string): Promise<any> {
+        const trimmedCode = kodeReferral.trim().toUpperCase();
+
+        // Validasi kode referral sales
+        const sales = await this.userModel.findOne({
+            where: {
+                kode_referral: trimmedCode,
+                level: 13,
+            },
+            attributes: ['id', 'name', 'kode_referral', 'email', 'phone'],
+        });
+
+        if (!sales) {
+            throw new NotFoundException('Kode referral sales tidak valid');
+        }
+
+        // Cek apakah user sudah linked ke sales yang sama
+        const currentUser = await this.userModel.findByPk(userId, {
+            attributes: ['id', 'referred_by_sales_id', 'sales_referral_code'],
+        });
+
+        if (currentUser?.referred_by_sales_id === sales.id) {
+            return {
+                success: true,
+                message: 'Anda sudah terhubung dengan sales ini',
+                data: {
+                    sales_name: sales.name,
+                    sales_code: sales.kode_referral,
+                    sales_email: sales.email,
+                    sales_phone: sales.phone,
+                    linked_at: currentUser.sales_linked_at,
+                },
+            };
+        }
+
+        // Update user dengan sales referral
+        const now = new Date();
+        await this.userModel.update(
+            {
+                referred_by_sales_id: sales.id,
+                sales_referral_code: trimmedCode,
+                sales_linked_at: now,
+            },
+            {
+                where: { id: userId },
+            }
+        );
+
+        return {
+            success: true,
+            message: 'Berhasil terhubung dengan sales',
+            data: {
+                sales_name: sales.name,
+                sales_code: sales.kode_referral,
+                sales_email: sales.email,
+                sales_phone: sales.phone,
+                linked_at: now,
+            },
+        };
+    }
+
+    /**
+     * Get info sales yang terhubung dengan customer
+     */
+    async getMySalesInfo(userId: number): Promise<any> {
+        const user = await this.userModel.findByPk(userId, {
+            include: [
+                {
+                    model: User,
+                    as: 'mySales',
+                    attributes: ['id', 'name', 'kode_referral', 'email', 'phone'],
+                },
+            ],
+        });
+
+        if (!user) {
+            throw new NotFoundException('User tidak ditemukan');
+        }
+
+        if (!user.getDataValue('mySales')) {
+            return {
+                success: true,
+                message: 'Anda belum terhubung dengan sales',
+                data: null,
+            };
+        }
+
+        return {
+            success: true,
+            message: 'Informasi sales Anda',
+            data: {
+                sales_id: user.getDataValue('mySales')?.getDataValue('id'),
+                sales_name: user.getDataValue('mySales')?.getDataValue('name'),
+                sales_code: user.getDataValue('mySales')?.getDataValue('kode_referral'),
+                sales_email: user.getDataValue('mySales')?.getDataValue('email'),
+                sales_phone: user.getDataValue('mySales')?.getDataValue('phone'),
+                linked_at: user.sales_linked_at,
+            },
+        };
+    }
+
+    /**
+     * Unlink customer dari sales
+     */
+    async unlinkUserFromSales(userId: number): Promise<any> {
+        const user = await this.userModel.findByPk(userId, {
+            attributes: ['id', 'referred_by_sales_id'],
+        });
+
+        if (!user) {
+            throw new NotFoundException('User tidak ditemukan');
+        }
+
+        if (!user.getDataValue('referred_by_sales_id')) {
+            return {
+                success: true,
+                message: 'Anda tidak terhubung dengan sales manapun',
+            };
+        }
+
+        await this.userModel.update(
+            {
+                referred_by_sales_id: null,
+                sales_referral_code: null,
+                sales_linked_at: null,
+            },
+            {
+                where: { id: userId },
+            }
+        );
+
+        return {
+            success: true,
+            message: 'Berhasil memutus hubungan dengan sales',
+        };
+    }
 } 

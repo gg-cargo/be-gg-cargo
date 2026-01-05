@@ -131,6 +131,24 @@ export class User extends Model {
   kode_referral_referensi: string;
 
   @Column({
+    type: DataType.BIGINT.UNSIGNED,
+    allowNull: true,
+  })
+  referred_by_sales_id: number;
+
+  @Column({
+    type: DataType.STRING(25),
+    allowNull: true,
+  })
+  sales_referral_code: string;
+
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+  })
+  sales_linked_at: Date;
+
+  @Column({
     type: DataType.TEXT('long'),
     allowNull: true,
   })
@@ -499,4 +517,7 @@ export class User extends Model {
 
   @HasMany(() => UsersEmergencyContact, { foreignKey: 'user_id', sourceKey: 'id', as: 'emergencyContacts' })
   emergencyContacts: UsersEmergencyContact[];
+
+  @BelongsTo(() => User, { foreignKey: 'referred_by_sales_id', targetKey: 'id', as: 'mySales' })
+  mySales: User;
 } 

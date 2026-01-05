@@ -1290,6 +1290,7 @@ export class OrdersService {
         let salesReferrerId: number | null = null;
         let salesReferralCode: string | null = null;
 
+        // Priority 1: Jika user input kode baru di order (override)
         if (createOrderDto.kode_referral_sales) {
             const trimmedCode = createOrderDto.kode_referral_sales.trim().toUpperCase();
 
@@ -1306,10 +1307,22 @@ export class OrdersService {
             if (sales) {
                 salesReferrerId = sales.id;
                 salesReferralCode = trimmedCode;
-                this.logger.log(`Order referred by: ${sales.name} (${sales.kode_referral})`);
+                this.logger.log(`Order referred by (manual input): ${sales.name} (${sales.kode_referral})`);
             } else {
                 this.logger.warn(`Invalid sales referral code: ${trimmedCode} - Order will proceed without referral`);
                 // Tidak throw error, biarkan order tetap jalan tanpa referral
+            }
+        }
+        // Priority 2: Auto-ambil dari user profile (PERMANENT LINK)
+        else {
+            const user = await this.userModel.findByPk(userId, {
+                attributes: ['referred_by_sales_id', 'sales_referral_code'],
+            });
+
+            if (user && user.referred_by_sales_id) {
+                salesReferrerId = user.referred_by_sales_id;
+                salesReferralCode = user.sales_referral_code;
+                this.logger.log(`🔗 Auto-linked order to sales from user profile: ${salesReferralCode}`);
             }
         }
 
