@@ -353,6 +353,19 @@ export class Order extends Model {
     order_by: number;
 
     @Column({
+        type: DataType.STRING(25),
+        allowNull: true,
+    })
+    sales_referral_code: string;
+
+    @ForeignKey(() => User)
+    @Column({
+        type: DataType.BIGINT.UNSIGNED,
+        allowNull: true,
+    })
+    referred_by_sales_id: number;
+
+    @Column({
         type: DataType.INTEGER,
         allowNull: true,
     })
@@ -1248,6 +1261,9 @@ export class Order extends Model {
     // Relations
     @BelongsTo(() => User, { foreignKey: 'order_by', as: 'orderUser' })
     orderUser: User;
+
+    @BelongsTo(() => User, { foreignKey: 'referred_by_sales_id', as: 'salesReferrer' })
+    salesReferrer: User;
 
     @BelongsTo(() => Hub, { foreignKey: 'hub_dest_id', as: 'hubDestination' })
     hubDestination: Hub;

@@ -697,4 +697,63 @@ export class OrdersController {
     ): Promise<AssignVendorTrackingResponseDto> {
         return this.ordersService.assignVendorTracking(noTracking, dto);
     }
+
+    // ============================================
+    // Sales Referral Endpoints
+    // ============================================
+
+    /**
+     * Get orders yang di-refer oleh sales (sales dashboard)
+     */
+    @UseGuards(JwtAuthGuard)
+    @Get('sales/my-referrals')
+    @HttpCode(HttpStatus.OK)
+    async getMySalesReferrals(
+        @Request() req,
+        @Query('page') page?: number,
+        @Query('limit') limit?: number,
+        @Query('status') status?: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+    ): Promise<any> {
+        const salesUserId = req.user.id; // JWT payload menggunakan 'id'
+        return this.ordersService.getOrdersBySalesReferral(salesUserId, {
+            page,
+            limit,
+            status,
+            startDate,
+            endDate,
+        });
+    }
+
+    /**
+     * Get summary/statistics referral sales
+     */
+    @UseGuards(JwtAuthGuard)
+    @Get('sales/referral-summary')
+    @HttpCode(HttpStatus.OK)
+    async getSalesReferralSummary(@Request() req): Promise<any> {
+        const salesUserId = req.user.id; // JWT payload menggunakan 'id'
+        return this.ordersService.getSalesReferralSummary(salesUserId);
+    }
+
+    /**
+     * Get revenue breakdown per customer untuk sales
+     */
+    @UseGuards(JwtAuthGuard)
+    @Get('sales/customers-revenue')
+    @HttpCode(HttpStatus.OK)
+    async getCustomersRevenueBreakdown(
+        @Request() req,
+        @Query('page') page?: number,
+        @Query('limit') limit?: number,
+        @Query('sortBy') sortBy?: 'revenue' | 'orders' | 'name',
+    ): Promise<any> {
+        const salesUserId = req.user.id;
+        return this.ordersService.getCustomersRevenueBreakdown(salesUserId, {
+            page,
+            limit,
+            sortBy,
+        });
+    }
 }

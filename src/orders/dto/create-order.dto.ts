@@ -84,6 +84,12 @@ export class CreateOrderDto {
     @IsOptional()
     no_referensi?: string;
 
+    // Sales Referral
+    @IsString()
+    @IsOptional()
+    @MaxLength(25, { message: 'kode_referral_sales maksimal 25 karakter' })
+    kode_referral_sales?: string;
+
     // surat jalan balik
     @IsString()
     @IsOptional()

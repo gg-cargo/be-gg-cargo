@@ -1286,6 +1286,33 @@ export class OrdersService {
             createOrderDto.alamat_penerima,
         );
 
+        // Validasi dan cari sales berdasarkan kode referral (jika ada)
+        let salesReferrerId: number | null = null;
+        let salesReferralCode: string | null = null;
+
+        if (createOrderDto.kode_referral_sales) {
+            const trimmedCode = createOrderDto.kode_referral_sales.trim().toUpperCase();
+
+            // Cari user dengan kode referral tersebut
+            // Hanya user dengan level tertentu (sales/agent) yang bisa jadi referrer
+            const sales = await this.userModel.findOne({
+                where: {
+                    kode_referral: trimmedCode,
+                    // level: 3, // Uncomment jika ingin restrict ke level sales specific
+                },
+                attributes: ['id', 'name', 'kode_referral', 'level'],
+            });
+
+            if (sales) {
+                salesReferrerId = sales.id;
+                salesReferralCode = trimmedCode;
+                this.logger.log(`Order referred by: ${sales.name} (${sales.kode_referral})`);
+            } else {
+                this.logger.warn(`Invalid sales referral code: ${trimmedCode} - Order will proceed without referral`);
+                // Tidak throw error, biarkan order tetap jalan tanpa referral
+            }
+        }
+
         // Mulai transaction
         const transaction = await this.orderModel.sequelize!.transaction();
 
@@ -1293,6 +1320,12 @@ export class OrdersService {
             // 1. Simpan ke tabel orders
             const order = await this.orderModel.create({
                 no_tracking: noTracking,
+                order_by: userId,
+
+                // Sales Referral
+                sales_referral_code: salesReferralCode,
+                referred_by_sales_id: salesReferrerId,
+
                 //pengirim
                 nama_pengirim: createOrderDto.nama_pengirim,
                 alamat_pengirim: createOrderDto.alamat_pengirim,
@@ -1343,7 +1376,6 @@ export class OrdersService {
 
                 status: ORDER_STATUS.DRAFT,
                 created_by: userId,
-                order_by: userId,
                 hub_source_id: hubSourceId,
                 hub_dest_id: hubDestId,
             }, { transaction });
@@ -7842,6 +7874,320 @@ export class OrdersService {
         }
 
         return `${prefix}${String(nextNumber).padStart(3, '0')}`;
+    }
+
+    /**
+     * Get orders by sales referral (untuk sales dashboard)
+     * @param salesUserId - ID user sales
+     * @param query - Query parameters (page, limit, status, date range)
+     */
+    async getOrdersBySalesReferral(
+        salesUserId: number,
+        query: {
+            page?: number;
+            limit?: number;
+            status?: string;
+            startDate?: string;
+            endDate?: string;
+        }
+    ): Promise<any> {
+        const page = query.page || 1;
+        const limit = query.limit || 20;
+        const offset = (page - 1) * limit;
+
+        // Build where condition
+        const whereCondition: any = {
+            referred_by_sales_id: salesUserId,
+        };
+
+        if (query.status) {
+            whereCondition.status = query.status;
+        }
+
+        if (query.startDate && query.endDate) {
+            whereCondition.created_at = {
+                [Op.between]: [new Date(query.startDate), new Date(query.endDate)],
+            };
+        }
+
+        // Get orders with pagination
+        const { rows: orders, count: total } = await this.orderModel.findAndCountAll({
+            where: whereCondition,
+            include: [
+                {
+                    model: User,
+                    as: 'orderUser',
+                    attributes: ['id', 'name', 'email', 'phone'],
+                },
+                {
+                    model: OrderInvoice,
+                    as: 'orderInvoice',
+                    attributes: ['id', 'invoice_no', 'konfirmasi_bayar', 'ppn', 'pph', 'asuransi', 'packing', 'discount'],
+                },
+            ],
+            attributes: [
+                'id',
+                'no_tracking',
+                'status',
+                'layanan',
+                'nama_pengirim',
+                'nama_penerima',
+                'kota_pengirim',
+                'kota_penerima',
+                'total_harga',
+                'sales_referral_code',
+                'created_at',
+            ],
+            order: [['created_at', 'DESC']],
+            limit,
+            offset,
+        });
+
+        // Calculate statistics
+        const stats: any = await this.orderModel.findOne({
+            where: { referred_by_sales_id: salesUserId },
+            attributes: [
+                [fn('COUNT', col('id')), 'total_orders'],
+                [fn('SUM', col('total_harga')), 'total_revenue'],
+                [
+                    fn('SUM', literal(`CASE WHEN status = 'Delivered' THEN 1 ELSE 0 END`)),
+                    'delivered_orders',
+                ],
+            ],
+            raw: true,
+        });
+
+        return {
+            success: true,
+            message: 'Data orders berdasarkan referral berhasil diambil',
+            data: {
+                orders: orders.map(order => ({
+                    id: order.id,
+                    no_tracking: order.no_tracking,
+                    status: order.status,
+                    layanan: order.layanan,
+                    customer: {
+                        name: order.orderUser?.name,
+                        email: order.orderUser?.email,
+                        phone: order.orderUser?.phone,
+                    },
+                    pengirim: order.nama_pengirim,
+                    penerima: order.nama_penerima,
+                    route: `${order.kota_pengirim} → ${order.kota_penerima}`,
+                    total_harga: order.total_harga,
+                    invoice: order.orderInvoice
+                        ? {
+                            invoice_no: order.orderInvoice.invoice_no,
+                            konfirmasi_bayar: order.orderInvoice.konfirmasi_bayar,
+                            ppn: order.orderInvoice.ppn,
+                            pph: order.orderInvoice.pph,
+                            asuransi: order.orderInvoice.asuransi,
+                            packing: order.orderInvoice.packing,
+                        }
+                        : null,
+                    sales_referral_code: order.sales_referral_code,
+                    created_at: order.created_at,
+                })),
+                statistics: {
+                    total_orders: parseInt(stats?.total_orders) || 0,
+                    total_revenue: parseFloat(stats?.total_revenue) || 0,
+                    delivered_orders: parseInt(stats?.delivered_orders) || 0,
+                    success_rate:
+                        stats?.total_orders > 0
+                            ? ((parseInt(stats.delivered_orders) / parseInt(stats.total_orders)) * 100).toFixed(2)
+                            : 0,
+                },
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    totalPages: Math.ceil(total / limit),
+                },
+            },
+        };
+    }
+
+    /**
+     * Get sales referral summary/statistics
+     * @param salesUserId - ID user sales
+     */
+    async getSalesReferralSummary(salesUserId: number): Promise<any> {
+        // Get overall stats
+        const overallStats: any = await this.orderModel.findOne({
+            where: { referred_by_sales_id: salesUserId },
+            attributes: [
+                [fn('COUNT', col('id')), 'total_orders'],
+                [fn('SUM', col('total_harga')), 'total_revenue'],
+                [fn('COUNT', fn('DISTINCT', col('order_by'))), 'unique_customers'],
+            ],
+            raw: true,
+        });
+
+        // Get stats by status
+        const statusStats: any = await this.orderModel.findAll({
+            where: { referred_by_sales_id: salesUserId },
+            attributes: [
+                'status',
+                [fn('COUNT', col('id')), 'count'],
+                [fn('SUM', col('total_harga')), 'revenue'],
+            ],
+            group: ['status'],
+            raw: true,
+        });
+
+        // Get monthly trend (last 6 months)
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        const monthlyTrend: any = await this.orderModel.findAll({
+            where: {
+                referred_by_sales_id: salesUserId,
+                created_at: {
+                    [Op.gte]: sixMonthsAgo,
+                },
+            },
+            attributes: [
+                [fn('DATE_FORMAT', col('created_at'), '%Y-%m'), 'month'],
+                [fn('COUNT', col('id')), 'orders'],
+                [fn('SUM', col('total_harga')), 'revenue'],
+            ],
+            group: [fn('DATE_FORMAT', col('created_at'), '%Y-%m')],
+            order: [[fn('DATE_FORMAT', col('created_at'), '%Y-%m'), 'ASC']],
+            raw: true,
+        });
+
+        return {
+            success: true,
+            message: 'Summary referral berhasil diambil',
+            data: {
+                overall: {
+                    total_orders: parseInt(overallStats?.total_orders) || 0,
+                    total_revenue: parseFloat(overallStats?.total_revenue) || 0,
+                    unique_customers: parseInt(overallStats?.unique_customers) || 0,
+                    average_order_value:
+                        overallStats?.total_orders > 0
+                            ? (parseFloat(overallStats.total_revenue) / parseInt(overallStats.total_orders)).toFixed(2)
+                            : 0,
+                },
+                by_status: statusStats.map((stat: any) => ({
+                    status: stat.status,
+                    count: parseInt(stat.count),
+                    revenue: parseFloat(stat.revenue || 0),
+                })),
+                monthly_trend: monthlyTrend.map((trend: any) => ({
+                    month: trend.month,
+                    orders: parseInt(trend.orders),
+                    revenue: parseFloat(trend.revenue || 0),
+                })),
+            },
+        };
+    }
+
+    /**
+     * Get customers revenue breakdown (per customer) untuk sales
+     * @param salesUserId - ID user sales
+     * @param query - Query parameters (page, limit, sortBy)
+     */
+    async getCustomersRevenueBreakdown(
+        salesUserId: number,
+        query: {
+            page?: number;
+            limit?: number;
+            sortBy?: 'revenue' | 'orders' | 'name';
+        }
+    ): Promise<any> {
+        const page = query.page || 1;
+        const limit = query.limit || 20;
+        const offset = (page - 1) * limit;
+        const sortBy = query.sortBy || 'revenue'; // default sort by revenue
+
+        // Get revenue breakdown per customer
+        const customersData: any = await this.orderModel.findAll({
+            where: { referred_by_sales_id: salesUserId },
+            attributes: [
+                'order_by',
+                [fn('COUNT', col('Order.id')), 'total_orders'],
+                [fn('SUM', col('Order.total_harga')), 'total_revenue'],
+                [fn('MIN', col('Order.created_at')), 'first_order_date'],
+                [fn('MAX', col('Order.created_at')), 'last_order_date'],
+            ],
+            include: [
+                {
+                    model: User,
+                    as: 'orderUser',
+                    attributes: ['id', 'name', 'email', 'phone'],
+                },
+            ],
+            group: ['order_by'],
+            raw: false,
+        });
+
+        // Sort data
+        let sortedData = customersData;
+        if (sortBy === 'revenue') {
+            sortedData.sort((a: any, b: any) => {
+                const revenueA = parseFloat(a.getDataValue('total_revenue') || 0);
+                const revenueB = parseFloat(b.getDataValue('total_revenue') || 0);
+                return revenueB - revenueA; // Descending
+            });
+        } else if (sortBy === 'orders') {
+            sortedData.sort((a: any, b: any) => {
+                const ordersA = parseInt(a.getDataValue('total_orders') || 0);
+                const ordersB = parseInt(b.getDataValue('total_orders') || 0);
+                return ordersB - ordersA; // Descending
+            });
+        } else if (sortBy === 'name') {
+            sortedData.sort((a: any, b: any) => {
+                const nameA = a.orderUser?.name || '';
+                const nameB = b.orderUser?.name || '';
+                return nameA.localeCompare(nameB); // Ascending
+            });
+        }
+
+        const total = sortedData.length;
+        const paginatedData = sortedData.slice(offset, offset + limit);
+
+        // Format response
+        const customers = paginatedData.map((item: any) => {
+            const totalRevenue = parseFloat(item.getDataValue('total_revenue') || 0);
+            const totalOrders = parseInt(item.getDataValue('total_orders') || 0);
+
+            return {
+                customer_id: item.getDataValue('order_by'),
+                customer_name: item.getDataValue('orderUser')?.getDataValue('name') || 'Unknown',
+                customer_email: item.getDataValue('orderUser')?.getDataValue('email'),
+                customer_phone: item.getDataValue('orderUser')?.getDataValue('phone'),
+                total_orders: totalOrders,
+                total_revenue: totalRevenue,
+                average_order_value: totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : 0,
+                first_order_date: item.getDataValue('first_order_date'),
+                last_order_date: item.getDataValue('last_order_date'),
+            };
+        });
+
+        // Calculate totals
+        const totalRevenue = customers.reduce((sum: number, c: any) => sum + c.total_revenue, 0);
+        const totalOrders = customers.reduce((sum: number, c: any) => sum + c.total_orders, 0);
+
+        return {
+            success: true,
+            message: 'Data revenue per customer berhasil diambil',
+            data: {
+                customers,
+                summary: {
+                    total_customers: total,
+                    total_revenue: totalRevenue,
+                    total_orders: totalOrders,
+                    average_revenue_per_customer: total > 0 ? (totalRevenue / total).toFixed(2) : 0,
+                },
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    totalPages: Math.ceil(total / limit),
+                },
+            },
+        };
     }
 
 } 
