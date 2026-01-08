@@ -4555,7 +4555,7 @@ export class OrdersService {
         }
 
         if (service_options.packing) {
-            const packingCost = 5000; // Rp5.000
+            const packingCost = 150000; // Rp150.000
             additionalCosts += packingCost;
             additionalServices.push({
                 service: 'Packing',
