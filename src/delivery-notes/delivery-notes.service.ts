@@ -61,10 +61,6 @@ export class DeliveryNotesService {
         if (!hubTujuan) throw new NotFoundException('Hub tujuan tidak ditemukan');
         if (dto.hub_transit_id && !hubTransit) throw new NotFoundException('Hub transit tidak ditemukan');
 
-        // Validasi kendaraan
-        const vehicle = await this.truckListModel.findOne({ where: { no_polisi: dto.no_polisi } });
-        if (!vehicle) throw new NotFoundException('Kendaraan dengan no_polisi tersebut tidak ditemukan');
-
         // Validasi transporter_id & ambil nama_transporter
         const transporter = await this.userModel.findByPk(dto.transporter_id, { attributes: ['id', 'name', 'level'], raw: true });
         if (!transporter) {
@@ -141,7 +137,7 @@ export class DeliveryNotesService {
             no_telp_penerima: (firstOrder as any)?.no_telepon_penerima || null,
             transporter_id: dto.transporter_id,
             nama_transporter: transporter?.name || '',
-            jenis_kendaraan: dto.jenis_kendaraan || vehicle.jenis_mobil || '',
+            jenis_kendaraan: dto.jenis_kendaraan || '',
             no_polisi: dto.no_polisi,
             no_seal: sealString,
             hub_id: hubTujuan.getDataValue('id'),
@@ -200,9 +196,6 @@ export class DeliveryNotesService {
             completed_day: null,
             created_at: new Date(),
         } as any);
-
-        // Update status truck menjadi digunakan
-        await this.truckListModel.update({ status: 1 }, { where: { id: vehicle.id } });
 
         // Insert order_histories untuk setiap order
         const { date, time } = getOrderHistoryDateTime();
