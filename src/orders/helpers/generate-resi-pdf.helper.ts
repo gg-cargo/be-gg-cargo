@@ -326,7 +326,7 @@ export async function generateResiPDF(data: any): Promise<string> {
                                         ['Berat Akt.', ':', createWrappedText(data.barang?.berat_aktual || '-', 40)],
                                         ['Volume Berat', ':', createWrappedText(data.barang?.berat_volume || '-', 40)],
                                         ['Kubikasi', ':', createWrappedText(data.barang?.kubikasi || '-', 40)],
-                                        ['Catatan', ':', createWrappedText(truncateTextForPDF(data.barang?.catatan || '-', 50), 30)],
+                                        ['Catatan', ':', createWrappedTextForNamaBarang(data.barang?.catatan || '-')],
                                     ]
                                 },
                                 layout: 'noBorders',
@@ -378,16 +378,6 @@ export async function generateResiPDF(data: any): Promise<string> {
                 fontSize: 8,
                 margin: [0, 0, 0, 10],
             },
-            // NOTES/CUSTOMS_NOTES (jika ada)
-            ...(data.customs_notes ? [
-                {
-                    text: [
-                        { text: 'Catatan: ', bold: true, fontSize: 9 },
-                        { text: data.customs_notes, fontSize: 9 }
-                    ],
-                    margin: [0, 0, 0, 10],
-                }
-            ] : []),
             // FOOTER
             {
                 absolutePosition: { x: 0, y: 750 },
