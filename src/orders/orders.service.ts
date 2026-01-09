@@ -3308,12 +3308,6 @@ export class OrdersService {
 
                 let errorMessage = '';
                 switch (currentStatus) {
-                    case 'Ready for Pickup':
-                        errorMessage = 'Order tidak bisa dibatalkan karena sudah siap untuk diambil';
-                        break;
-                    case 'Picked Up':
-                        errorMessage = 'Order tidak bisa dibatalkan karena sudah diambil';
-                        break;
                     case 'In Transit':
                         errorMessage = 'Order tidak bisa dibatalkan karena sedang dalam perjalanan';
                         break;
