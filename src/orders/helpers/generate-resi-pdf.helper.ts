@@ -101,6 +101,67 @@ export async function generateResiPDF(data: any): Promise<string> {
         };
     };
 
+    // Helper function khusus untuk nama barang yang memaksa wrapping lebih agresif
+    // Memecah text per 50 karakter dan menampilkan sebagai stack agar wrap lebih andal
+    const createWrappedTextForNamaBarang = (text: string): any => {
+        if (!text) return { text: '-', fontSize: 10 };
+
+        // Jika text pendek, langsung return
+        if (text.length <= 50) {
+            return {
+                text: text,
+                fontSize: 10,
+                lineHeight: 1.2,
+                margin: [0, 0, 0, 2]
+            };
+        }
+
+        // Untuk text panjang, pecah menjadi chunks per 50 karakter
+        // Cari spasi terdekat untuk pemisahan yang lebih natural
+        const chunks: string[] = [];
+        let remaining = text;
+        const maxCharsPerLine = 30;
+
+        while (remaining.length > 0) {
+            if (remaining.length <= maxCharsPerLine) {
+                chunks.push(remaining);
+                break;
+            }
+
+            // Ambil 50 karakter pertama
+            let chunk = remaining.substring(0, maxCharsPerLine);
+            const nextChar = remaining.charAt(maxCharsPerLine);
+
+            // Jika karakter ke-51 bukan spasi, cari spasi terakhir dalam chunk
+            if (nextChar !== ' ' && nextChar !== '') {
+                const lastSpace = chunk.lastIndexOf(' ');
+                if (lastSpace > maxCharsPerLine * 0.6) {
+                    // Jika ada spasi di posisi yang wajar (> 60% dari maxChars), potong di spasi
+                    chunk = chunk.substring(0, lastSpace);
+                    remaining = remaining.substring(lastSpace + 1);
+                } else {
+                    // Jika tidak ada spasi yang wajar, potong di 50 karakter
+                    remaining = remaining.substring(maxCharsPerLine);
+                }
+            } else {
+                // Jika karakter ke-51 adalah spasi, langsung potong
+                remaining = remaining.substring(maxCharsPerLine + 1);
+            }
+
+            chunks.push(chunk);
+        }
+
+        // Return sebagai stack dengan array text untuk memaksa wrap
+        return {
+            stack: chunks.map((chunk, index) => ({
+                text: chunk,
+                fontSize: 9,
+                lineHeight: 1.3,
+                margin: [0, index === 0 ? 0 : 1, 0, index === chunks.length - 1 ? 2 : 0]
+            }))
+        };
+    };
+
     // Helper function untuk memotong text jika benar-benar terlalu panjang
     const truncateTextForPDF = (text: string, maxLength: number = 80): string => {
         if (!text) return '-';
@@ -242,7 +303,7 @@ export async function generateResiPDF(data: any): Promise<string> {
                                 table: {
                                     widths: [80, 5, '*'],
                                     body: [
-                                        ['Nama Barang', ':', createWrappedText(data.barang?.nama_barang || '-', 100)],
+                                        ['Nama Barang', ':', createWrappedTextForNamaBarang(data.barang?.nama_barang || '-')],
                                         ['Harga Barang', ':', createWrappedText(data.barang?.harga_barang || '-', 40)],
                                         ['Asuransi', ':', createWrappedText(data.barang?.asuransi || '-', 40)],
                                         ['Packing', ':', createWrappedText(data.barang?.packing || '-', 40)],
