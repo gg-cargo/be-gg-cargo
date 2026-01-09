@@ -1386,6 +1386,9 @@ export class OrdersService {
                 motor_type: createOrderDto.motor_type,
                 motor_notes: createOrderDto.motor_notes,
 
+                // Catatan/Notes
+                customs_notes: createOrderDto.notes || null,
+
                 //billing
                 billing_name: createOrderDto.billing_name,
                 billing_phone: createOrderDto.billing_phone,
@@ -2467,12 +2470,13 @@ export class OrdersService {
                 asuransi: order.asuransi ? 'Ya' : 'Tidak',
                 packing: order.packing ? 'Ya' : 'Tidak',
                 surat_jalan_balik: order.surat_jalan_balik || 'Tidak',
-                catatan: order.remark_sales || '-',
+                catatan: order.customs_notes || order.remark_sales || '-',
                 jumlah_koli: totalQty,
                 berat_aktual: totalWeight,
                 berat_volume: beratVolume,
                 kubikasi: kubikasi,
             },
+            customs_notes: order.customs_notes || null,
             ringkasan: shipmentItems, // Array item shipment satu-satu
         };
 

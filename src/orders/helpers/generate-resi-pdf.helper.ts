@@ -378,6 +378,16 @@ export async function generateResiPDF(data: any): Promise<string> {
                 fontSize: 8,
                 margin: [0, 0, 0, 10],
             },
+            // NOTES/CUSTOMS_NOTES (jika ada)
+            ...(data.customs_notes ? [
+                {
+                    text: [
+                        { text: 'Catatan: ', bold: true, fontSize: 9 },
+                        { text: data.customs_notes, fontSize: 9 }
+                    ],
+                    margin: [0, 0, 0, 10],
+                }
+            ] : []),
             // FOOTER
             {
                 absolutePosition: { x: 0, y: 750 },

@@ -107,6 +107,11 @@ export class CreateOrderDto {
 
     @IsString()
     @IsOptional()
+    @MaxLength(500, { message: 'notes maksimal 500 karakter' })
+    notes?: string;
+
+    @IsString()
+    @IsOptional()
     no_referensi?: string;
 
     // Sales Referral
