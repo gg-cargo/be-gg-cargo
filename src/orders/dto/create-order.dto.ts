@@ -77,7 +77,7 @@ export class CreateOrderDto {
 
     @IsString()
     @IsOptional()
-    @MaxLength(35, { message: 'nama_barang maksimal 35 karakter' })
+    @MaxLength(100, { message: 'nama_barang maksimal 100 karakter' })
     nama_barang?: string;
 
     // Khusus Kirim Motor
