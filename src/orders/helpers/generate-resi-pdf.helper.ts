@@ -242,7 +242,7 @@ export async function generateResiPDF(data: any): Promise<string> {
                                 table: {
                                     widths: [80, 5, '*'],
                                     body: [
-                                        ['Nama Barang', ':', createWrappedText(truncateTextForPDF(data.barang?.nama_barang || '-', 50), 30)],
+                                        ['Nama Barang', ':', createWrappedText(data.barang?.nama_barang || '-', 100)],
                                         ['Harga Barang', ':', createWrappedText(data.barang?.harga_barang || '-', 40)],
                                         ['Asuransi', ':', createWrappedText(data.barang?.asuransi || '-', 40)],
                                         ['Packing', ':', createWrappedText(data.barang?.packing || '-', 40)],
