@@ -6437,6 +6437,61 @@ export class OrdersService {
                 throw new BadRequestException(`Masih ada ${unreweightedPieces.length} pieces yang belum di-reweight`);
             }
 
+            // 3.1. Update dimensi shipment berdasarkan kelompok shipment di pieces
+            // Ambil semua shipments untuk order ini
+            const shipments = await this.orderShipmentModel.findAll({
+                where: { order_id: orderId },
+                attributes: ['id'],
+                transaction
+            });
+
+            // Update setiap shipment berdasarkan pieces yang sudah di-reweight
+            for (const shipment of shipments) {
+                const shipmentId = shipment.getDataValue('id');
+
+                // Ambil semua pieces yang sudah di-reweight untuk shipment ini
+                const piecesInShipment = orderPieces.filter(piece =>
+                    piece.getDataValue('order_shipment_id') === shipmentId &&
+                    piece.getDataValue('reweight_status') === 1
+                );
+
+                if (piecesInShipment.length === 0) continue;
+
+                // Hitung total berat dari semua pieces di shipment ini (untuk berat_reweight)
+                let totalBeratShipment = 0;
+                piecesInShipment.forEach((piece) => {
+                    totalBeratShipment += Number(piece.getDataValue('berat')) || 0;
+                });
+
+                // Ambil dimensi dan berat satuan dari piece pertama (karena dalam satu shipment dimensi biasanya sama)
+                // Dimensi di piece merepresentasikan dimensi di kelompok shipment
+                const firstPiece = piecesInShipment[0];
+                const beratSatuan = Number(firstPiece.getDataValue('berat')) || 0;
+                const panjang = Number(firstPiece.getDataValue('panjang')) || 0;
+                const lebar = Number(firstPiece.getDataValue('lebar')) || 0;
+                const tinggi = Number(firstPiece.getDataValue('tinggi')) || 0;
+
+                // Update shipment dengan dimensi dan berat dari pieces
+                await this.orderShipmentModel.update(
+                    {
+                        berat: beratSatuan,  // Berat satuan dari piece pertama
+                        panjang: panjang,
+                        lebar: lebar,
+                        tinggi: tinggi,
+                        berat_reweight: totalBeratShipment,  // Total berat dari semua pieces
+                        panjang_reweight: panjang,
+                        lebar_reweight: lebar,
+                        tinggi_reweight: tinggi,
+                        qty_reweight: piecesInShipment.length,
+                        qty: piecesInShipment.length,
+                    },
+                    {
+                        where: { id: shipmentId },
+                        transaction,
+                    }
+                );
+            }
+
             // 4. Hitung total berat dan volume dari pieces yang sudah di-reweight
             let totalBerat = 0;
             let totalVolume = 0;
