@@ -293,84 +293,135 @@ export async function generateResiPDF(data: any): Promise<string> {
                 margin: [0, 15, 0, 10],
             },
             // INFORMASI BARANG (seperti pengirim/penerima)
-            {
-                columns: [
-                    {
-                        width: '50%',
-                        stack: [
-                            { text: 'Informasi & Detail Barang', style: 'sectionTitle' },
-                            {
-                                table: {
-                                    widths: [80, 5, '*'],
-                                    body: [
-                                        ['Nama Barang', ':', createWrappedTextForNamaBarang(data.barang?.nama_barang || '-')],
-                                        ['Harga Barang', ':', createWrappedText(data.barang?.harga_barang || '-', 40)],
-                                        ['Asuransi', ':', createWrappedText(data.barang?.asuransi || '-', 40)],
-                                        ['Packing', ':', createWrappedText(data.barang?.packing || '-', 40)],
-                                        ['Surat Jalan Balik', ':', createWrappedText(data.barang?.surat_jalan_balik || '-', 40)],
-                                    ]
+            // Cek apakah layanan adalah Kirim Motor
+            ((layanan) => {
+                const isKirimMotor = layanan === 'Kirim Motor' || layanan === 'KIRIM_MOTOR';
+
+                return {
+                    columns: [
+                        {
+                            width: '50%',
+                            stack: [
+                                { text: 'Informasi & Detail Barang', style: 'sectionTitle' },
+                                {
+                                    table: {
+                                        widths: [80, 5, '*'],
+                                        body: [
+                                            [
+                                                isKirimMotor ? 'Model Motor' : 'Nama Barang',
+                                                ':',
+                                                isKirimMotor
+                                                    ? createWrappedTextForNamaBarang(data.motor?.model_motor || '-')
+                                                    : createWrappedTextForNamaBarang(data.barang?.nama_barang || '-')
+                                            ],
+                                            ['Harga Barang', ':', createWrappedText(data.barang?.harga_barang || '-', 40)],
+                                            ['Asuransi', ':', createWrappedText(data.barang?.asuransi || '-', 40)],
+                                            ['Packing', ':', createWrappedText(data.barang?.packing || '-', 40)],
+                                            ['Surat Jalan Balik', ':', createWrappedText(data.barang?.surat_jalan_balik || '-', 40)],
+                                        ]
+                                    },
+                                    layout: 'noBorders',
+                                    margin: [0, 0, 0, 2],
                                 },
-                                layout: 'noBorders',
-                                margin: [0, 0, 0, 2],
-                            },
-                        ],
-                    },
-                    {
-                        width: '50%',
-                        stack: [
-                            {
-                                table: {
-                                    widths: [80, 5, '*'],
-                                    body: [
-                                        ['Jumlah Koli', ':', createWrappedText(data.barang?.jumlah_koli || '-', 40)],
-                                        ['Berat Akt.', ':', createWrappedText(data.barang?.berat_aktual || '-', 40)],
-                                        ['Volume Berat', ':', createWrappedText(data.barang?.berat_volume || '-', 40)],
-                                        ['Kubikasi', ':', createWrappedText(data.barang?.kubikasi || '-', 40)],
-                                        ['Catatan', ':', createWrappedTextForNamaBarang(data.barang?.catatan || '-')],
-                                    ]
+                            ],
+                        },
+                        {
+                            width: '50%',
+                            stack: [
+                                {
+                                    table: {
+                                        widths: [80, 5, '*'],
+                                        body: (() => {
+                                            const rows = [
+                                                [
+                                                    isKirimMotor ? 'Tipe Motor' : 'Jumlah Koli',
+                                                    ':',
+                                                    isKirimMotor
+                                                        ? createWrappedText(data.motor?.motor_type || '-', 40)
+                                                        : createWrappedText(data.barang?.jumlah_koli || '-', 40)
+                                                ],
+                                                [
+                                                    isKirimMotor ? 'Besaran CC' : 'Berat Akt.',
+                                                    ':',
+                                                    isKirimMotor
+                                                        ? createWrappedText(data.motor?.besaran_cc || '-', 40)
+                                                        : createWrappedText(data.barang?.berat_aktual || '-', 40)
+                                                ],
+                                                [
+                                                    isKirimMotor ? 'Nomor Polisi' : 'Volume Berat',
+                                                    ':',
+                                                    isKirimMotor
+                                                        ? createWrappedText(data.motor?.no_polisi_motor || '-', 40)
+                                                        : createWrappedText(data.barang?.berat_volume || '-', 40)
+                                                ],
+                                            ];
+
+                                            // Kubikasi hanya untuk non-Kirim Motor
+                                            if (!isKirimMotor) {
+                                                rows.push(['Kubikasi', ':', createWrappedText(data.barang?.kubikasi || '-', 40)]);
+                                            }
+
+                                            // Catatan - berbeda sumber untuk Kirim Motor
+                                            rows.push([
+                                                'Catatan',
+                                                ':',
+                                                isKirimMotor
+                                                    ? createWrappedTextForNamaBarang(data.motor?.motor_notes || '-')
+                                                    : createWrappedTextForNamaBarang(data.barang?.catatan || '-')
+                                            ]);
+
+                                            return rows;
+                                        })()
+                                    },
+                                    layout: 'noBorders',
+                                    margin: [0, 23, 0, 7],
                                 },
-                                layout: 'noBorders',
-                                margin: [0, 23, 0, 7],
-                            },
-                        ],
+                            ],
+                        },
+                    ],
+                    columnGap: 20,
+                    margin: [0, 0, 0, 10],
+                };
+            })(data.layanan),
+            // TABEL DIMENSI (QTY) - hanya untuk layanan selain Kirim Motor
+            ...((layanan) => {
+                const isKirimMotor = layanan === 'Kirim Motor' || layanan === 'KIRIM_MOTOR';
+                if (isKirimMotor) {
+                    return []; // Hilangkan tabel dimensi untuk Kirim Motor
+                }
+                return [{
+                    table: {
+                        widths: [50, 80, 80, 80, 80],
+                        body: ((ringkasanArr) => {
+                            const header = [
+                                { text: 'QTY', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
+                                { text: 'BERAT (kg)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
+                                { text: 'PANJANG (cm)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
+                                { text: 'LEBAR (cm)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
+                                { text: 'TINGGI (cm)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
+                            ];
+                            const rows = Array.isArray(ringkasanArr) && ringkasanArr.length > 0
+                                ? ringkasanArr.map((item) => [
+                                    { text: (item?.qty ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                                    { text: (item?.berat ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                                    { text: (item?.panjang ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                                    { text: (item?.lebar ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                                    { text: (item?.tinggi ?? '-').toString(), alignment: 'center', fontSize: 10 },
+                                ])
+                                : [[
+                                    { text: '-', alignment: 'center', fontSize: 10 },
+                                    { text: '-', alignment: 'center', fontSize: 10 },
+                                    { text: '-', alignment: 'center', fontSize: 10 },
+                                    { text: '-', alignment: 'center', fontSize: 10 },
+                                    { text: '-', alignment: 'center', fontSize: 10 },
+                                ]];
+                            return [header, ...rows];
+                        })(data.ringkasan)
                     },
-                ],
-                columnGap: 20,
-                margin: [0, 0, 0, 10],
-            },
-            // TABEL DIMENSI (QTY)
-            {
-                table: {
-                    widths: [50, 80, 80, 80, 80],
-                    body: ((ringkasanArr) => {
-                        const header = [
-                            { text: 'QTY', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
-                            { text: 'BERAT (kg)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
-                            { text: 'PANJANG (cm)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
-                            { text: 'LEBAR (cm)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
-                            { text: 'TINGGI (cm)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
-                        ];
-                        const rows = Array.isArray(ringkasanArr) && ringkasanArr.length > 0
-                            ? ringkasanArr.map((item) => [
-                                { text: (item?.qty ?? '-').toString(), alignment: 'center', fontSize: 10 },
-                                { text: (item?.berat ?? '-').toString(), alignment: 'center', fontSize: 10 },
-                                { text: (item?.panjang ?? '-').toString(), alignment: 'center', fontSize: 10 },
-                                { text: (item?.lebar ?? '-').toString(), alignment: 'center', fontSize: 10 },
-                                { text: (item?.tinggi ?? '-').toString(), alignment: 'center', fontSize: 10 },
-                            ])
-                            : [[
-                                { text: '-', alignment: 'center', fontSize: 10 },
-                                { text: '-', alignment: 'center', fontSize: 10 },
-                                { text: '-', alignment: 'center', fontSize: 10 },
-                                { text: '-', alignment: 'center', fontSize: 10 },
-                                { text: '-', alignment: 'center', fontSize: 10 },
-                            ]];
-                        return [header, ...rows];
-                    })(data.ringkasan)
-                },
-                layout: 'lightHorizontalLines',
-                margin: [0, 0, 0, 8],
-            },
+                    layout: 'lightHorizontalLines',
+                    margin: [0, 0, 0, 8],
+                }];
+            })(data.layanan),
             // CATATAN PENTING
             {
                 text: 'Berat dan dimensi dapat berubah setelah dilakukan proses timbang dan ukur ulang.',

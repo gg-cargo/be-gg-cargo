@@ -2473,6 +2473,13 @@ export class OrdersService {
                 berat_volume: beratVolume,
                 kubikasi: kubikasi,
             },
+            motor: {
+                model_motor: order.model_motor || null,
+                motor_type: order.motor_type || null,
+                besaran_cc: order.besaran_cc || null,
+                no_polisi_motor: order.no_polisi_motor || null,
+                motor_notes: order.motor_notes || null,
+            },
             customs_notes: order.customs_notes || null,
             ringkasan: shipmentItems, // Array item shipment satu-satu
         };
