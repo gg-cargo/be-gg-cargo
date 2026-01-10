@@ -4967,52 +4967,67 @@ export class OrdersService {
      */
     private async updateOrderShipmentsFromPieces(orderId: number, transaction: Transaction): Promise<void> {
         try {
-            // Ambil semua pieces yang sudah di-reweight untuk order ini
-            const pieces = await this.orderPieceModel.findAll({
-                where: {
-                    order_id: orderId,
-                    reweight_status: 1
-                },
-                attributes: ['berat', 'panjang', 'lebar', 'tinggi'],
+            // Ambil semua shipments untuk order ini
+            const shipments = await this.orderShipmentModel.findAll({
+                where: { order_id: orderId },
+                attributes: ['id'],
                 transaction
             });
 
-            if (pieces.length === 0) return;
+            if (shipments.length === 0) return;
 
-            // Hitung total weight dan volume
-            let totalWeight = 0;
-            let totalVolume = 0;
+            // Update setiap shipment berdasarkan pieces yang terkait
+            for (const shipment of shipments) {
+                const shipmentId = shipment.getDataValue('id');
 
-            pieces.forEach((piece) => {
-                const berat = Number(piece.getDataValue('berat')) || 0;
-                const panjang = Number(piece.getDataValue('panjang')) || 0;
-                const lebar = Number(piece.getDataValue('lebar')) || 0;
-                const tinggi = Number(piece.getDataValue('tinggi')) || 0;
+                // Ambil pieces yang terkait dengan shipment ini dan sudah di-reweight
+                const pieces = await this.orderPieceModel.findAll({
+                    where: {
+                        order_id: orderId,
+                        order_shipment_id: shipmentId,
+                        reweight_status: 1
+                    },
+                    attributes: ['berat', 'panjang', 'lebar', 'tinggi'],
+                    transaction
+                });
 
-                totalWeight += berat;
-                if (panjang && lebar && tinggi) {
-                    totalVolume += this.calculateVolume(panjang, lebar, tinggi);
-                }
-            });
+                if (pieces.length === 0) continue;
 
-            // Update order_shipments dengan data terbaru
-            await this.orderShipmentModel.update(
-                {
-                    berat: totalWeight,
-                    panjang: pieces[0]?.getDataValue('panjang') || 0,
-                    lebar: pieces[0]?.getDataValue('lebar') || 0,
-                    tinggi: pieces[0]?.getDataValue('tinggi') || 0,
-                    berat_reweight: totalWeight,
-                    panjang_reweight: pieces[0]?.getDataValue('panjang') || 0,
-                    lebar_reweight: pieces[0]?.getDataValue('lebar') || 0,
-                    tinggi_reweight: pieces[0]?.getDataValue('tinggi') || 0,
-                    qty_reweight: pieces.length,
-                },
-                {
-                    where: { order_id: orderId },
-                    transaction,
-                }
-            );
+                // Hitung total berat per shipment (hanya dari pieces yang terkait dengan shipment ini)
+                let totalWeight = 0;
+                let totalVolume = 0;
+
+                pieces.forEach((piece) => {
+                    const berat = Number(piece.getDataValue('berat')) || 0;
+                    const panjang = Number(piece.getDataValue('panjang')) || 0;
+                    const lebar = Number(piece.getDataValue('lebar')) || 0;
+                    const tinggi = Number(piece.getDataValue('tinggi')) || 0;
+
+                    totalWeight += berat; // ✅ Hanya pieces yang terkait dengan shipment ini
+                    if (panjang && lebar && tinggi) {
+                        totalVolume += this.calculateVolume(panjang, lebar, tinggi);
+                    }
+                });
+
+                // Update shipment ini dengan berat total dari pieces yang terkait saja
+                await this.orderShipmentModel.update(
+                    {
+                        berat: totalWeight,  // ✅ Berat total per shipment
+                        panjang: pieces[0]?.getDataValue('panjang') || 0,
+                        lebar: pieces[0]?.getDataValue('lebar') || 0,
+                        tinggi: pieces[0]?.getDataValue('tinggi') || 0,
+                        berat_reweight: totalWeight,
+                        panjang_reweight: pieces[0]?.getDataValue('panjang') || 0,
+                        lebar_reweight: pieces[0]?.getDataValue('lebar') || 0,
+                        tinggi_reweight: pieces[0]?.getDataValue('tinggi') || 0,
+                        qty_reweight: pieces.length,
+                    },
+                    {
+                        where: { id: shipmentId }, // ✅ Update per shipment, bukan semua shipments
+                        transaction,
+                    }
+                );
+            }
 
         } catch (error) {
             console.error('Error updating order shipments from pieces:', error);
