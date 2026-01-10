@@ -1090,9 +1090,6 @@ export class OrdersService {
                         transaction,
                     }
                 );
-
-                // Update order shipments dengan data terbaru
-                await this.updateOrderShipmentsFromPieces(orderId, transaction);
             } else {
                 // Jika bypass dinonaktifkan, reset reweight status pieces yang belum di-reweight manual
                 const updateResult = await this.orderPieceModel.update(
@@ -6475,10 +6472,7 @@ export class OrdersService {
                 }
             );
 
-            // 6. Update order shipments dengan data terbaru
-            await this.updateOrderShipmentsFromPieces(orderId, transaction);
-
-            // 7. Auto-create invoice
+            // 6. Auto-create invoice
             let invoiceData: { invoice_no: string; invoice_id: number; total_amount: number; } | null = null;
             try {
                 invoiceData = await this.autoCreateInvoice(orderId, transaction);
