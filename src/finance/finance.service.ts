@@ -716,7 +716,7 @@ export class FinanceService {
                         no_account: invoiceAccNo,
                         account_name: invoiceBeneficiaryName
                     },
-                    attributes: ['no_account', 'account_name', 'bank_name'],
+                    attributes: ['id', 'no_account', 'account_name', 'bank_name'],
                     raw: true
                 });
 
@@ -724,18 +724,22 @@ export class FinanceService {
                     // Tampilkan hanya bank yang dipilih
                     banks = [selectedBank];
                 } else {
-                    // Jika tidak ditemukan, tampilkan semua banks (fallback)
-                    banks = await this.bankModel.findAll({
-                        attributes: ['no_account', 'account_name', 'bank_name'],
+                    // Jika tidak ditemukan, ambil bank pertama sebagai default (fallback)
+                    const firstBank = await this.bankModel.findOne({
+                        attributes: ['id', 'no_account', 'account_name', 'bank_name'],
+                        order: [['id', 'ASC']],
                         raw: true
                     });
+                    banks = firstBank ? [firstBank] : [];
                 }
             } else {
-                // Jika belum ada bank yang dipilih, tampilkan semua banks
-                banks = await this.bankModel.findAll({
-                    attributes: ['no_account', 'account_name', 'bank_name'],
+                // Jika belum ada bank yang dipilih, ambil bank pertama sebagai default
+                const firstBank = await this.bankModel.findOne({
+                    attributes: ['id', 'no_account', 'account_name', 'bank_name'],
+                    order: [['id', 'ASC']],
                     raw: true
                 });
+                banks = firstBank ? [firstBank] : [];
             }
 
             // Calculate totals
@@ -810,6 +814,7 @@ export class FinanceService {
                     kode_unik_pembayaran: invoice.getDataValue('kode_unik'),
                     status_pembayaran: invoice.getDataValue('konfirmasi_bayar') ? 'Sudah Bayar' : 'Belum Bayar',
                     info_rekening_bank: banks.map((bank: any) => ({
+                        id: bank.id,
                         no_account: bank.no_account,
                         account_name: bank.account_name,
                         bank_name: bank.bank_name
@@ -1134,7 +1139,7 @@ export class FinanceService {
                         no_account: invoiceAccNo,
                         account_name: invoiceBeneficiaryName
                     },
-                    attributes: ['no_account', 'account_name', 'bank_name'],
+                    attributes: ['id', 'no_account', 'account_name', 'bank_name'],
                     raw: true
                 });
 
@@ -1142,18 +1147,22 @@ export class FinanceService {
                     // Tampilkan hanya bank yang dipilih
                     banks = [selectedBank];
                 } else {
-                    // Jika tidak ditemukan, tampilkan semua banks (fallback)
-                    banks = await this.bankModel.findAll({
-                        attributes: ['no_account', 'account_name', 'bank_name'],
+                    // Jika tidak ditemukan, ambil bank pertama sebagai default (fallback)
+                    const firstBank = await this.bankModel.findOne({
+                        attributes: ['id', 'no_account', 'account_name', 'bank_name'],
+                        order: [['id', 'ASC']],
                         raw: true
                     });
+                    banks = firstBank ? [firstBank] : [];
                 }
             } else {
-                // Jika belum ada bank yang dipilih, tampilkan semua banks
-                banks = await this.bankModel.findAll({
+                // Jika belum ada bank yang dipilih, ambil bank pertama sebagai default
+                const firstBank = await this.bankModel.findOne({
                     attributes: ['id', 'no_account', 'account_name', 'bank_name'],
+                    order: [['id', 'ASC']],
                     raw: true
                 });
+                banks = firstBank ? [firstBank] : [];
             }
 
             // Format date
