@@ -700,13 +700,11 @@ export class FinanceService {
             const invoice = order.getDataValue('orderInvoice');
             const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
 
-            // Get bank information if bank_name exists
-            let bankInfo: any = null;
-            if (invoice.getDataValue('bank_name')) {
-                bankInfo = await this.bankModel.findOne({
-                    where: { bank_name: invoice.getDataValue('bank_name') }
-                });
-            }
+            // Get all banks data
+            const banks = await this.bankModel.findAll({
+                attributes: ['no_account', 'account_name', 'bank_name'],
+                raw: true
+            });
 
             // Calculate totals
             const subtotalLayanan = invoiceDetails.reduce((sum, detail) => {
@@ -779,17 +777,11 @@ export class FinanceService {
                     total_akhir_tagihan: totalAkhir,
                     kode_unik_pembayaran: invoice.getDataValue('kode_unik'),
                     status_pembayaran: invoice.getDataValue('konfirmasi_bayar') ? 'Sudah Bayar' : 'Belum Bayar',
-                    info_rekening_bank: bankInfo ? {
-                        nama_bank: bankInfo.getDataValue('bank_name'),
-                        nama_pemilik_rek: bankInfo.getDataValue('account_name'),
-                        no_rekening: bankInfo.getDataValue('no_account'),
-                        swift_code: invoice.getDataValue('swift_code') || ''
-                    } : {
-                        nama_bank: invoice.getDataValue('bank_name'),
-                        nama_pemilik_rek: invoice.getDataValue('beneficiary_name'),
-                        no_rekening: invoice.getDataValue('acc_no'),
-                        swift_code: invoice.getDataValue('swift_code') || ''
-                    }
+                    info_rekening_bank: banks.map((bank: any) => ({
+                        no_account: bank.no_account,
+                        account_name: bank.account_name,
+                        bank_name: bank.bank_name
+                    }))
                 }
             };
 
@@ -1094,6 +1086,12 @@ export class FinanceService {
                 where: { order_id: order.id }
             });
 
+            // Get all banks data
+            const banks = await this.bankModel.findAll({
+                attributes: ['no_account', 'account_name', 'bank_name'],
+                raw: true
+            });
+
             // Format date
             const formatDate = (dateStr: string) => {
                 const d = new Date(dateStr);
@@ -1198,12 +1196,11 @@ export class FinanceService {
                     gross_up: invoice.getDataValue('isGrossUp') === 1,
                     total_all: totalAll,
 
-                    pay_information: {
-                        beneficiary_name: invoice.getDataValue('beneficiary_name'),
-                        bank_name: invoice.getDataValue('bank_name'),
-                        acc_no: invoice.getDataValue('acc_no'),
-                        swift_code: invoice.getDataValue('swift_code')
-                    },
+                    pay_information: banks.map((bank: any) => ({
+                        no_account: bank.no_account,
+                        account_name: bank.account_name,
+                        bank_name: bank.bank_name
+                    })),
                     invoice_notes: invoice.getDataValue('notes')
                 }
             };

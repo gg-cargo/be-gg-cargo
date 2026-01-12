@@ -217,20 +217,53 @@ export async function generateInvoicePDF(data: any): Promise<string> {
             {
                 stack: [
                     { text: 'INFORMASI PEMBAYARAN', style: 'sectionTitle', margin: [0, 0, 0, 5] },
-                    {
+                    // Loop semua bank dari array info_rekening_bank
+                    ...(Array.isArray(data.invoice_details.info_rekening_bank) && data.invoice_details.info_rekening_bank.length > 0
+                        ? data.invoice_details.info_rekening_bank.map((bank: any, index: number) => ({
+                            stack: [
+                                {
+                                    text: `${bank.bank_name || '-'}`,
+                                    fontSize: 10,
+                                    bold: true,
+                                    margin: [0, index === 0 ? 0 : 10, 0, 5],
+                                },
+                                {
+                                    table: {
+                                        widths: [120, 5, '*'],
+                                        body: [
+                                            ['Nama Rekening', ':', bank.account_name || '-'],
+                                            ['No. Rekening', ':', bank.no_account || '-'],
+                                        ]
+                                    },
+                                    layout: 'noBorders',
+                                    margin: [0, 0, 0, 2],
+                                },
+                            ]
+                        }))
+                        : [{
+                            table: {
+                                widths: [120, 5, '*'],
+                                body: [
+                                    ['Nama Bank', ':', '-'],
+                                    ['Nama Rekening', ':', '-'],
+                                    ['No. Rekening', ':', '-'],
+                                ]
+                            },
+                            layout: 'noBorders',
+                            margin: [0, 0, 0, 2],
+                        }]
+                    ),
+                    // Notes (jika ada)
+                    ...(data.invoice_details.notes ? [{
                         table: {
                             widths: [120, 5, '*'],
                             body: [
-                                ['Nama Bank', ':', data.invoice_details.info_rekening_bank.nama_bank || '-'],
-                                ['Nama Rekening', ':', data.invoice_details.info_rekening_bank.nama_pemilik_rek || '-'],
-                                ['No. Rekening', ':', data.invoice_details.info_rekening_bank.no_rekening || '-'],
-                                ['Kode Swift', ':', data.invoice_details.info_rekening_bank.swift_code || '-'],
                                 ['Notes', ':', data.invoice_details.notes || '-'],
                             ]
                         },
                         layout: 'noBorders',
-                        margin: [0, 0, 0, 2],
-                    },
+                        margin: [0, 10, 0, 2],
+                    }] : []),
                 ],
                 margin: [0, 0, 0, 15],
             },
