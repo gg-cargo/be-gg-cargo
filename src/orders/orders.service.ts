@@ -1201,10 +1201,10 @@ export class OrdersService {
 
                         // Buat subject dan body email
                         const emailSubject = `Invoice ${noTracking}`;
-                        const emailBody = `<p>Yth Customer GG Kargo Mr/Mrs. ${billingName}</p>
+                        const emailBody = `<p>Yth Customer 99Delivery Mr/Mrs. ${billingName}</p>
 <p>Kami infokan tagihan(invoice) Anda sudah terbit, Berikut adalah tagihan Anda dengan nomor tracking ${noTracking} sebesar<b>Rp${totalHarga.toLocaleString('id-ID')}.</b></p>
 <p>Harap segera lakukan proses pembayaran atau konfirmasi harga pada kami.</p>
-<p><b>Pembayaran dapat dilakukan melalui:<br/>Virtual Account yang terdapat pada Aplikasi GG Kargo</b></p>
+<p><b>Pembayaran dapat dilakukan melalui:<br/>Virtual Account yang terdapat pada Aplikasi 99Delivery</b></p>
 <p>Terima kasih atas kerja samanya.</p>`;
 
                         // Kirim email invoice
@@ -6588,10 +6588,10 @@ export class OrdersService {
 
                         // Buat subject dan body email
                         const emailSubject = `Invoice ${noTracking}`;
-                        const emailBody = `<p>Yth Customer GG Kargo Mr/Mrs. ${billingName}</p>
+                        const emailBody = `<p>Yth Customer 99Delivery Mr/Mrs. ${billingName}</p>
 <p>Kami infokan tagihan(invoice) Anda sudah terbit, Berikut adalah tagihan Anda dengan nomor tracking ${noTracking} sebesar<b>Rp${totalHarga.toLocaleString('id-ID')}.</b></p>
 <p>Harap segera lakukan proses pembayaran atau konfirmasi harga pada kami.</p>
-<p><b>Pembayaran dapat dilakukan melalui:<br/>Virtual Account yang terdapat pada Aplikasi GG Kargo</b></p>
+<p><b>Pembayaran dapat dilakukan melalui:<br/>Virtual Account yang terdapat pada Aplikasi 99Delivery</b></p>
 <p>Terima kasih atas kerja samanya.</p>`;
 
                         // Kirim email invoice

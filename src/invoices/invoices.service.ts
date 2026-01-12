@@ -413,10 +413,10 @@ export class InvoicesService {
             const emailSubject = `Invoice ${noTracking}`;
 
             // 4. Buat body email (HTML format)
-            const bodyEmail = `<p>Yth Customer GG Kargo Mr/Mrs. ${billingName}</p>
+            const bodyEmail = `<p>Yth Customer 99Delivery Mr/Mrs. ${billingName}</p>
 <p>Kami infokan tagihan(invoice) Anda sudah terbit, Berikut adalah tagihan Anda dengan nomor tracking ${noTracking} sebesar<b>Rp${harga.toLocaleString('id-ID')}.</b></p>
 <p>Harap segera lakukan proses pembayaran atau konfirmasi harga pada kami.</p>
-<p><b>Pembayaran dapat dilakukan melalui:<br/>Virtual Account yang terdapat pada Aplikasi GG Kargo</b></p>
+<p><b>Pembayaran dapat dilakukan melalui:<br/>Virtual Account yang terdapat pada Aplikasi 99Delivery</b></p>
 <p>Terima kasih atas kerja samanya.</p>`;
 
             // 5. Buat body WhatsApp (plain text format)
@@ -427,10 +427,10 @@ Tagihan Anda sudah terbit dengan nomor invoice ${invoiceNo}, harap segera lakuka
 Total Tagihan Invoice : *Rp${harga.toLocaleString('id-ID')}*
 
 Mohon dapat dilakukan pembayaran melalui:
-Virtual Account yang terdapat pada aplikasi GG Kargo
+Virtual Account yang terdapat pada aplikasi 99Delivery
 
 Terima kasih atas kerja samanya.
-GG Kargo`;
+99Delivery`;
 
             // 6. Buat response
             const invoiceData: InvoiceSendDataDto = {
