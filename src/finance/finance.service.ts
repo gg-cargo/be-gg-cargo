@@ -700,11 +700,43 @@ export class FinanceService {
             const invoice = order.getDataValue('orderInvoice');
             const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
 
-            // Get all banks data
-            const banks = await this.bankModel.findAll({
-                attributes: ['no_account', 'account_name', 'bank_name'],
-                raw: true
-            });
+            // Get bank data - jika invoice sudah punya bank yang dipilih, tampilkan hanya bank tersebut
+            // Jika belum, tampilkan semua banks
+            let banks: any[] = [];
+            const invoiceBankName = invoice.getDataValue('bank_name');
+            const invoiceAccNo = invoice.getDataValue('acc_no');
+            const invoiceBeneficiaryName = invoice.getDataValue('beneficiary_name');
+
+            // Cek apakah invoice sudah punya bank yang dipilih (ada bank_name, acc_no, dan beneficiary_name)
+            if (invoiceBankName && invoiceAccNo && invoiceBeneficiaryName) {
+                // Cari bank yang sesuai dengan data di invoice
+                const selectedBank = await this.bankModel.findOne({
+                    where: {
+                        bank_name: invoiceBankName,
+                        no_account: invoiceAccNo,
+                        account_name: invoiceBeneficiaryName
+                    },
+                    attributes: ['no_account', 'account_name', 'bank_name'],
+                    raw: true
+                });
+
+                if (selectedBank) {
+                    // Tampilkan hanya bank yang dipilih
+                    banks = [selectedBank];
+                } else {
+                    // Jika tidak ditemukan, tampilkan semua banks (fallback)
+                    banks = await this.bankModel.findAll({
+                        attributes: ['no_account', 'account_name', 'bank_name'],
+                        raw: true
+                    });
+                }
+            } else {
+                // Jika belum ada bank yang dipilih, tampilkan semua banks
+                banks = await this.bankModel.findAll({
+                    attributes: ['no_account', 'account_name', 'bank_name'],
+                    raw: true
+                });
+            }
 
             // Calculate totals
             const subtotalLayanan = invoiceDetails.reduce((sum, detail) => {
@@ -1086,11 +1118,43 @@ export class FinanceService {
                 where: { order_id: order.id }
             });
 
-            // Get all banks data
-            const banks = await this.bankModel.findAll({
-                attributes: ['no_account', 'account_name', 'bank_name'],
-                raw: true
-            });
+            // Get bank data - jika invoice sudah punya bank yang dipilih, tampilkan hanya bank tersebut
+            // Jika belum, tampilkan semua banks
+            let banks: any[] = [];
+            const invoiceBankName = invoice.getDataValue('bank_name');
+            const invoiceAccNo = invoice.getDataValue('acc_no');
+            const invoiceBeneficiaryName = invoice.getDataValue('beneficiary_name');
+
+            // Cek apakah invoice sudah punya bank yang dipilih (ada bank_name, acc_no, dan beneficiary_name)
+            if (invoiceBankName && invoiceAccNo && invoiceBeneficiaryName) {
+                // Cari bank yang sesuai dengan data di invoice
+                const selectedBank = await this.bankModel.findOne({
+                    where: {
+                        bank_name: invoiceBankName,
+                        no_account: invoiceAccNo,
+                        account_name: invoiceBeneficiaryName
+                    },
+                    attributes: ['no_account', 'account_name', 'bank_name'],
+                    raw: true
+                });
+
+                if (selectedBank) {
+                    // Tampilkan hanya bank yang dipilih
+                    banks = [selectedBank];
+                } else {
+                    // Jika tidak ditemukan, tampilkan semua banks (fallback)
+                    banks = await this.bankModel.findAll({
+                        attributes: ['no_account', 'account_name', 'bank_name'],
+                        raw: true
+                    });
+                }
+            } else {
+                // Jika belum ada bank yang dipilih, tampilkan semua banks
+                banks = await this.bankModel.findAll({
+                    attributes: ['id', 'no_account', 'account_name', 'bank_name'],
+                    raw: true
+                });
+            }
 
             // Format date
             const formatDate = (dateStr: string) => {
@@ -1197,6 +1261,7 @@ export class FinanceService {
                     total_all: totalAll,
 
                     pay_information: banks.map((bank: any) => ({
+                        id: bank.id,
                         no_account: bank.no_account,
                         account_name: bank.account_name,
                         bank_name: bank.bank_name
@@ -1226,6 +1291,7 @@ export class FinanceService {
             payment_method,
             paid_attachment_url,
             paid_from_bank,
+            selected_bank_id,
             contract_quotation,
             billing_items,
             discount_voucher_contract,
@@ -1459,6 +1525,25 @@ export class FinanceService {
                         gross_up: gross_up ? 1 : 0
                     }, { transaction: t });
                     updateHistory.push('Gross up diperbarui');
+                }
+
+                // 12.1. Update Selected Bank (Bank Perusahaan untuk Ditagihkan)
+                if (selected_bank_id !== undefined) {
+                    const selectedBank = await this.bankModel.findByPk(selected_bank_id, { transaction: t });
+
+                    if (!selectedBank) {
+                        throw new Error('Bank yang dipilih tidak ditemukan');
+                    }
+
+                    // Update invoice dengan data bank yang dipilih
+                    await invoice.update({
+                        bank_name: selectedBank.getDataValue('bank_name'),
+                        acc_no: selectedBank.getDataValue('no_account'),
+                        beneficiary_name: selectedBank.getDataValue('account_name'),
+                        // swift_code tetap menggunakan yang ada di invoice atau bisa ditambahkan field baru jika perlu
+                    }, { transaction: t });
+
+                    updateHistory.push(`Bank ditagihkan diubah ke: ${selectedBank.getDataValue('bank_name')} (${selectedBank.getDataValue('no_account')})`);
                 }
 
                 // 13. Hitung dan Update Total Harga Order

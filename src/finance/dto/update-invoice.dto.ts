@@ -64,6 +64,11 @@ export class UpdateInvoiceDto {
     @IsString()
     paid_from_bank?: string;
 
+    // Selected Bank for Billing (Bank Perusahaan)
+    @IsOptional()
+    @IsNumber()
+    selected_bank_id?: number;
+
     // Contract & Quotation
     @IsOptional()
     @IsString()
