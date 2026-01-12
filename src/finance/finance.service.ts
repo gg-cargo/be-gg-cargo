@@ -1137,6 +1137,11 @@ export class FinanceService {
                         layanan: order.getDataValue('layanan'),
                         item_summary: {
                             nama_barang: order.getDataValue('nama_barang'),
+                            model_motor: order.getDataValue('model_motor'),
+                            motor_type: order.getDataValue('motor_type'),
+                            besaran_cc: order.getDataValue('besaran_cc'),
+                            no_polisi_motor: order.getDataValue('no_polisi_motor'),
+                            motor_notes: order.getDataValue('motor_notes'),
                             jumlah_koli: pieces.length,
                             berat_actual_kg: parseFloat(order.getDataValue('total_berat')) || 0,
                             berat_volume_kg: parseFloat(order.getDataValue('total_berat')) || 0, // Assuming same as actual weight
