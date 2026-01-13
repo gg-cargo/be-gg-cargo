@@ -6008,9 +6008,9 @@ export class OrdersService {
             const statusPickup = order.getDataValue('status_pickup');
             const isGagalPickup = order.getDataValue('is_gagal_pickup');
 
-            if ((statusPickup && statusPickup !== 'siap pickup') || isGagalPickup === 1) {
-                throw new BadRequestException('Order tidak dalam status yang dapat ditugaskan untuk pickup');
-            }
+            // if ((statusPickup && statusPickup !== 'siap pickup') || isGagalPickup === 1) {
+            //     throw new BadRequestException('Order tidak dalam status yang dapat ditugaskan untuk pickup');
+            // }
 
             // 2. Parse lokasi order
             let orderLocation: DriverLocationDto = { lat: 0, lng: 0 };
