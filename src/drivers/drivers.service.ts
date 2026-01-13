@@ -1047,14 +1047,15 @@ export class DriversService {
             // 8. Commit transaction
             await transaction.commit();
 
-            await this.sendDriverAssignmentWhatsapp({
-                phone: driverPhone,
-                driverName,
-                taskType: assignDriverDto.task_type,
-                orderId: order.getDataValue('id'),
-                orderTracking,
-                assignerName,
-            });
+            // Pengiriman WhatsApp ke driver saat penugasan dimatikan sesuai permintaan
+            // await this.sendDriverAssignmentWhatsapp({
+            //     phone: driverPhone,
+            //     driverName,
+            //     taskType: assignDriverDto.task_type,
+            //     orderId: order.getDataValue('id'),
+            //     orderTracking,
+            //     assignerName,
+            // });
 
             return {
                 message: `Kurir berhasil ditugaskan untuk ${assignDriverDto.task_type}`,
