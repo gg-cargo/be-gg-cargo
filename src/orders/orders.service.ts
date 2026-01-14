@@ -2876,9 +2876,9 @@ export class OrdersService {
                 attributes: [
                     [fn('MONTH', col('created_at')), 'bulan'],
                     [fn('COUNT', col('id')), 'total_pengiriman'],
-                    [fn('SUM', literal(`CASE WHEN layanan = 'Sewa Truk' THEN 1 ELSE 0 END`)), 'total_sewa_truck'],
+                    [fn('SUM', literal(`CASE WHEN layanan = 'Sewa truck' THEN 1 ELSE 0 END`)), 'total_sewa_truck'],
                     [fn('SUM', literal(`CASE WHEN layanan = 'Kirim Motor' THEN 1 ELSE 0 END`)), 'total_kirim_motor'],
-                    [fn('SUM', literal(`CASE WHEN layanan = 'Internasional' THEN 1 ELSE 0 END`)), 'total_internasional'],
+                    [fn('SUM', literal(`CASE WHEN layanan = 'International' THEN 1 ELSE 0 END`)), 'total_internasional'],
                 ],
                 where: literal(`YEAR(created_at) = ${filterYear}`),
                 group: [fn('MONTH', col('created_at'))],
