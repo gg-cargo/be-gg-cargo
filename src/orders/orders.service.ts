@@ -2432,6 +2432,9 @@ export class OrdersService {
             });
         }
 
+        // Hindari floating point noise (mis. 888.499999999 -> 889)
+        totalWeight = Math.round(totalWeight);
+
         const volumeWeight = totalVolume * 250;
         const kubikasi = totalVolume.toFixed(2);
         const beratVolume = volumeWeight.toFixed(2);
@@ -5145,17 +5148,15 @@ export class OrdersService {
                         where: { id: shipmentId }
                     });
                 } else {
-                    // Update dengan data yang sudah diperbaiki
+                    // Update dengan data yang sudah diperbaiki: turunkan qty 1,
+                    // dan jaga qty_reweight agar tidak melebihi qty baru
                     const newQty = currentQty - 1;
-                    let newQtyReweight = correctedQtyReweight;
-                    if (correctedQtyReweight > 0) {
-                        newQtyReweight = correctedQtyReweight - 1;
-                    }
+                    const newQtyReweight = Math.min(correctedQtyReweight, newQty);
 
                     await this.orderShipmentModel.update(
                         {
                             qty_reweight: newQtyReweight,
-                            qty: newQtyReweight
+                            qty: newQty
                         },
                         { where: { id: shipmentId } }
                     );
@@ -5172,12 +5173,21 @@ export class OrdersService {
                     const newQty = currentQty - 1;
 
                     // 🔍 CALCULATE REAL-TIME: Hitung qty_reweight baru setelah delete
-                    const newRealQtyReweight = Math.max(0, realQtyReweight - 1);
+                    // Jika piece yang dihapus memiliki reweight_status = 1, kurangi qty_reweight
+                    // Jika tidak, qty_reweight tetap (tidak dikurangi)
+                    // Tapi pastikan qty_reweight tidak melebihi qty baru
+                    let newRealQtyReweight = realQtyReweight;
+                    if (reweightStatus === 1) {
+                        // Piece yang dihapus memiliki reweight_status = 1, kurangi qty_reweight
+                        newRealQtyReweight = Math.max(0, realQtyReweight - 1);
+                    }
+                    // Pastikan qty_reweight tidak melebihi qty baru
+                    newRealQtyReweight = Math.min(newRealQtyReweight, newQty);
 
                     await this.orderShipmentModel.update(
                         {
                             qty_reweight: newRealQtyReweight,
-                            qty: newRealQtyReweight
+                            qty: newQty
                         },
                         { where: { id: shipmentId } }
                     );
