@@ -165,27 +165,77 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                 margin: [0, 15, 0, 10],
             },
             // TABEL ITEM
-            {
-                table: {
-                    widths: ['*', 'auto', 'auto', 'auto'],
-                    body: [
-                        [
-                            { text: 'DESKRIPSI', style: 'tableHeader', fillColor: '#C6EAD6' },
-                            { text: 'UOM', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
-                            { text: 'UNIT PRICE', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
-                            { text: 'TOTAL HARGA', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
-                        ],
-                        ...data.invoice_details.item_tagihan.map((item: any) => [
+            (() => {
+                const isInternational = data?.invoice_details?.detail_pengiriman?.layanan === 'International';
+
+                const headers = isInternational
+                    ? [
+                        { text: 'DESKRIPSI', style: 'tableHeader', fillColor: '#C6EAD6' },
+                        { text: 'UOM', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
+                        { text: 'UNIT PRICE (IDR)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
+                        { text: 'TOTAL HARGA (IDR)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
+                        { text: 'UNIT PRICE (SGD)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
+                        { text: 'TOTAL (SGD)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
+                        { text: 'KURS (IDR/SGD)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
+                    ]
+                    : [
+                        { text: 'DESKRIPSI', style: 'tableHeader', fillColor: '#C6EAD6' },
+                        { text: 'UOM', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
+                        { text: 'UNIT PRICE', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
+                        { text: 'TOTAL HARGA', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
+                    ];
+
+                const widths = isInternational
+                    ? ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto']
+                    : ['*', 'auto', 'auto', 'auto'];
+
+                const formatSgd = (amount: number | undefined) => {
+                    if (amount === undefined || amount === null || isNaN(Number(amount))) return '-';
+                    return new Intl.NumberFormat('en-SG', {
+                        style: 'currency',
+                        currency: 'SGD',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                    }).format(Number(amount));
+                };
+
+                const formatIdrNumber = (amount: number | undefined) => {
+                    if (amount === undefined || amount === null || isNaN(Number(amount))) return '-';
+                    return new Intl.NumberFormat('id-ID').format(Number(amount));
+                };
+
+                const body = [
+                    headers,
+                    ...data.invoice_details.item_tagihan.map((item: any) => {
+                        if (isInternational) {
+                            return [
+                                { text: item.deskripsi, fontSize: 9 },
+                                { text: `${item.qty} ${item.uom}`, fontSize: 9, alignment: 'center' },
+                                { text: formatCurrency(item.harga_satuan), fontSize: 9, alignment: 'right' },
+                                { text: formatCurrency(item.total), fontSize: 9, alignment: 'right' },
+                                { text: formatSgd(item.unit_price_sgd), fontSize: 9, alignment: 'right' },
+                                { text: formatSgd(item.total_price_sgd), fontSize: 9, alignment: 'right' },
+                                { text: formatIdrNumber(item.exchange_rate_idr), fontSize: 9, alignment: 'right' },
+                            ];
+                        }
+                        return [
                             { text: item.deskripsi, fontSize: 9 },
                             { text: `${item.qty} ${item.uom}`, fontSize: 9, alignment: 'center' },
                             { text: formatCurrency(item.harga_satuan), fontSize: 9, alignment: 'right' },
                             { text: formatCurrency(item.total), fontSize: 9, alignment: 'right' },
-                        ])
-                    ],
-                },
-                layout: 'lightHorizontalLines',
-                margin: [0, 0, 0, 10],
-            },
+                        ];
+                    }),
+                ];
+
+                return {
+                    table: {
+                        widths,
+                        body,
+                    },
+                    layout: 'lightHorizontalLines',
+                    margin: [0, 0, 0, 10],
+                };
+            })(),
             // SUMMARY CHARGES
             {
                 stack: [

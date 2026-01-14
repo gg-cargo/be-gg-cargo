@@ -700,10 +700,7 @@ export class FinanceService {
             const invoice = order.getDataValue('orderInvoice');
             const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
             const isInternational = order.getDataValue('layanan') === 'International';
-            const billedCurrency = (invoice.getDataValue('billed_currency') || (isInternational ? 'SGD' : 'IDR')) as string;
-            const billedAmount = invoice.getDataValue('billed_amount') !== undefined && invoice.getDataValue('billed_amount') !== null
-                ? Number(invoice.getDataValue('billed_amount'))
-                : undefined;
+            const billedCurrency = 'IDR';
 
             // Get bank data - jika invoice sudah punya bank yang dipilih, tampilkan hanya bank tersebut
             // Jika belum, tampilkan semua banks
@@ -748,34 +745,26 @@ export class FinanceService {
             }
 
             // Calculate totals
-            // Untuk layanan International: semua angka harus SGD dan tidak boleh menampilkan IDR.
-            // Jika billed_amount tersedia, gunakan billed_amount sebagai 1 item tagihan (override invoiceDetails).
-            const resolvedItemTagihan = (() => {
-                if (isInternational && typeof billedAmount === 'number' && !isNaN(billedAmount)) {
-                    return [
-                        {
-                            deskripsi: 'Pengiriman International',
-                            qty: 1,
-                            uom: 'pcs',
-                            harga_satuan: billedAmount,
-                            total: billedAmount,
-                        },
-                    ];
-                }
-                return invoiceDetails.map(detail => {
-                    const unitPrice = detail.getDataValue('unit_price') || 0;
-                    const qty = detail.getDataValue('qty') || 0;
-                    const itemTotal = unitPrice * qty;
+            const resolvedItemTagihan = invoiceDetails.map(detail => {
+                const unitPrice = detail.getDataValue('unit_price') || 0;
+                const qty = detail.getDataValue('qty') || 0;
+                const itemTotal = unitPrice * qty;
 
-                    return {
-                        deskripsi: detail.getDataValue('description'),
-                        qty: qty,
-                        uom: detail.getDataValue('uom'),
-                        harga_satuan: unitPrice,
-                        total: isNaN(itemTotal) ? 0 : itemTotal
-                    };
-                });
-            })();
+                const unitPriceSgd = detail.getDataValue('unit_price_sgd');
+                const totalPriceSgd = detail.getDataValue('total_price_sgd');
+                const exchangeRateIdr = detail.getDataValue('exchange_rate_idr');
+
+                return {
+                    deskripsi: detail.getDataValue('description'),
+                    qty: qty,
+                    uom: detail.getDataValue('uom'),
+                    harga_satuan: unitPrice,
+                    total: isNaN(itemTotal) ? 0 : itemTotal,
+                    unit_price_sgd: unitPriceSgd !== null && unitPriceSgd !== undefined ? Number(unitPriceSgd) : undefined,
+                    total_price_sgd: totalPriceSgd !== null && totalPriceSgd !== undefined ? Number(totalPriceSgd) : undefined,
+                    exchange_rate_idr: exchangeRateIdr !== null && exchangeRateIdr !== undefined ? Number(exchangeRateIdr) : undefined,
+                };
+            });
 
             const subtotalLayanan = resolvedItemTagihan.reduce((sum: number, item: any) => {
                 const itemTotal = Number(item.total) || 0;
@@ -1119,10 +1108,7 @@ export class FinanceService {
             const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
             const pieces = order.getDataValue('pieces') || [];
             const isInternational = order.getDataValue('layanan') === 'International';
-            const billedCurrency = (invoice.getDataValue('billed_currency') || (isInternational ? 'SGD' : 'IDR')) as string;
-            const billedAmount = invoice.getDataValue('billed_amount') !== undefined && invoice.getDataValue('billed_amount') !== null
-                ? Number(invoice.getDataValue('billed_amount'))
-                : undefined;
+            const billedCurrency = 'IDR';
 
             // Calculate kubikasi from pieces
             let kubikasi = 0;
@@ -1197,35 +1183,28 @@ export class FinanceService {
             };
 
             // Calculate totals
-            // Untuk layanan International: semua angka harus SGD dan tidak boleh menampilkan IDR.
-            // Jika billed_amount tersedia, gunakan billed_amount sebagai 1 item tagihan (override invoiceDetails).
-            const resolvedBillingItems = (() => {
-                if (isInternational && typeof billedAmount === 'number' && !isNaN(billedAmount)) {
-                    return [
-                        {
-                            description: 'Pengiriman International',
-                            quantity: 1,
-                            uom: 'pcs',
-                            unit_price: billedAmount,
-                            total: billedAmount,
-                            remarks: '',
-                        },
-                    ];
-                }
-                return invoiceDetails.map((detail: any) => {
-                    const unitPrice = detail.getDataValue('unit_price') || 0;
-                    const qty = detail.getDataValue('qty') || 0;
-                    const total = unitPrice * qty;
-                    return {
-                        description: detail.getDataValue('description'),
-                        quantity: qty,
-                        uom: detail.getDataValue('uom'),
-                        unit_price: unitPrice,
-                        total: isNaN(total) ? 0 : total,
-                        remarks: detail.getDataValue('remark'),
-                    };
-                });
-            })();
+            const resolvedBillingItems = invoiceDetails.map((detail: any) => {
+                const unitPrice = detail.getDataValue('unit_price') || 0;
+                const qty = detail.getDataValue('qty') || 0;
+                const total = unitPrice * qty;
+
+                const unitPriceSgd = detail.getDataValue('unit_price_sgd');
+                const totalPriceSgd = detail.getDataValue('total_price_sgd');
+                const exchangeRateIdr = detail.getDataValue('exchange_rate_idr');
+
+                return {
+                    description: detail.getDataValue('description'),
+                    quantity: qty,
+                    uom: detail.getDataValue('uom'),
+                    unit_price: unitPrice,
+                    total: isNaN(total) ? 0 : total,
+                    // field baru khusus international
+                    unit_price_sgd: isInternational && unitPriceSgd !== null ? Number(unitPriceSgd) : undefined,
+                    total_price_sgd: isInternational && totalPriceSgd !== null ? Number(totalPriceSgd) : undefined,
+                    exchange_rate_idr: isInternational && exchangeRateIdr !== null ? Number(exchangeRateIdr) : undefined,
+                    remarks: detail.getDataValue('remark'),
+                };
+            });
 
             const subtotal = resolvedBillingItems.reduce((sum: number, item: any) => {
                 const itemTotal = Number(item.total) || 0;
@@ -1327,8 +1306,6 @@ export class FinanceService {
             paid_attachment_url,
             paid_from_bank,
             selected_bank_id,
-            billed_currency,
-            billed_amount,
             contract_quotation,
             billing_items,
             discount_voucher_contract,
@@ -1438,14 +1415,7 @@ export class FinanceService {
                     // Create payment order record if payment received
                     if (status_payment === 'lunas') {
                         const paymentOrderId = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                        const invoiceBilledAmount = invoice.getDataValue('billed_amount');
-                        const billedAmountNumber = invoiceBilledAmount !== undefined && invoiceBilledAmount !== null
-                            ? Number(invoiceBilledAmount)
-                            : undefined;
-                        const resolvedPaymentAmount = payment_amount
-                            ?? (isInternational && typeof billedAmountNumber === 'number' && !isNaN(billedAmountNumber)
-                                ? billedAmountNumber
-                                : order.getDataValue('total_harga'));
+                        const resolvedPaymentAmount = payment_amount ?? order.getDataValue('total_harga');
 
                         await this.paymentOrderModel.create({
                             id: paymentOrderId,
@@ -1510,53 +1480,31 @@ export class FinanceService {
                         const qty = typeof item.quantity === 'string' ? parseFloat(item.quantity) : (item.quantity || 0);
                         const unitPrice = typeof item.unit_price === 'string' ? parseFloat(item.unit_price) : (item.unit_price || 0);
 
+                        // Khusus international: simpan juga info SGD & kurs di detail
+                        const unitPriceSgd = item.unit_price_sgd !== undefined && item.unit_price_sgd !== null
+                            ? Number(item.unit_price_sgd)
+                            : null;
+                        const totalPriceSgd = item.total_price_sgd !== undefined && item.total_price_sgd !== null
+                            ? Number(item.total_price_sgd)
+                            : null;
+                        const exchangeRateIdr = item.exchange_rate_idr !== undefined && item.exchange_rate_idr !== null
+                            ? Number(item.exchange_rate_idr)
+                            : null;
+
                         await this.orderInvoiceDetailModel.create({
                             invoice_id: invoice.id,
                             description: item.description,
                             qty: qty,
                             uom: item.uom,
                             unit_price: unitPrice,
+                            unit_price_sgd: isInternational ? unitPriceSgd : null,
+                            total_price_sgd: isInternational ? (totalPriceSgd ?? (unitPriceSgd !== null ? unitPriceSgd * qty : null)) : null,
+                            exchange_rate_idr: isInternational ? exchangeRateIdr : null,
                             remark: item.remarks || ''
-                        }, { transaction: t });
+                        } as any, { transaction: t });
                     }
 
                     updateHistory.push('Billing items diperbarui');
-                }
-
-                // 9.1. International: billed dalam SGD (manual input nominal)
-                // - Currency wajib SGD
-                // - Jika billed_amount diisi dan billing_items tidak dikirim, buat 1 item tagihan default (SGD)
-                if (isInternational && (billed_currency !== undefined || billed_amount !== undefined)) {
-                    const resolvedCurrency = billed_currency || 'SGD';
-                    if (resolvedCurrency !== 'SGD') {
-                        throw new BadRequestException('Untuk layanan International, billed_currency wajib SGD');
-                    }
-                    if (billed_amount === undefined || billed_amount === null || Number.isNaN(Number(billed_amount))) {
-                        throw new BadRequestException('Untuk layanan International, billed_amount wajib diisi (nominal SGD)');
-                    }
-
-                    await invoice.update({
-                        billed_currency: 'SGD',
-                        billed_amount: Number(billed_amount),
-                    }, { transaction: t });
-                    updateHistory.push(`Billed International di-set ke SGD ${Number(billed_amount).toLocaleString('en-SG')}`);
-
-                    // Jika finance tidak mengirim billing_items, kita buat 1 baris item supaya PDF/response konsisten (SGD semua)
-                    if (!billing_items || billing_items.length === 0) {
-                        await this.orderInvoiceDetailModel.destroy({
-                            where: { invoice_id: invoice.id },
-                            transaction: t
-                        });
-                        await this.orderInvoiceDetailModel.create({
-                            invoice_id: invoice.id,
-                            description: 'Pengiriman International',
-                            qty: 1,
-                            uom: 'pcs',
-                            unit_price: Number(billed_amount),
-                            remark: '',
-                        } as any, { transaction: t });
-                        updateHistory.push('Billing items International dibuat otomatis 1 baris (SGD)');
-                    }
                 }
 
                 // 10. Update Additional Charges

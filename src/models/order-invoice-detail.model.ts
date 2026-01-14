@@ -45,6 +45,27 @@ export class OrderInvoiceDetail extends Model {
     unit_price: number;
 
     @Column({
+        type: DataType.DECIMAL(18, 2),
+        allowNull: true,
+        comment: 'Harga per unit dalam SGD (khusus international)',
+    })
+    unit_price_sgd: string;
+
+    @Column({
+        type: DataType.DECIMAL(18, 2),
+        allowNull: true,
+        comment: 'Total baris dalam SGD (khusus international)',
+    })
+    total_price_sgd: string;
+
+    @Column({
+        type: DataType.DECIMAL(18, 2),
+        allowNull: true,
+        comment: 'Kurs IDR untuk 1 SGD pada saat billing item dibuat',
+    })
+    exchange_rate_idr: string;
+
+    @Column({
         type: DataType.TEXT,
         allowNull: false,
     })
