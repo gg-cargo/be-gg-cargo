@@ -3745,17 +3745,22 @@ export class OrdersService {
                             oldLebar !== newLebar || oldTinggi !== newTinggi);
 
                         if (dimensiChanged) {
-                            // 1. Cari shipment yang cocok dengan dimensi baru atau buat baru TERLEBIH DAHULU
+                            // Simpan shipment ID lama sebelum memindahkan piece
+                            const oldShipmentId = existingPiece.getDataValue('order_shipment_id');
+
+                            // 1. Kurangi qty dari shipment lama SEBELUM memindahkan piece
+                            if (oldShipmentId) {
+                                await this.reduceShipmentQtyByShipmentId(oldShipmentId);
+                            }
+
+                            // 2. Cari shipment yang cocok dengan dimensi baru atau buat baru
                             const newShipmentId = await this.findOrCreateShipmentForDimensions(orderId, newBerat, newPanjang, newLebar, newTinggi);
 
-                            // 2. Update shipment_id di orderPiece SEBELUM hapus shipment lama
+                            // 3. Update shipment_id di orderPiece ke shipment baru
                             await this.orderPieceModel.update(
                                 { order_shipment_id: newShipmentId },
                                 { where: { id: actionData.piece_id! } }
                             );
-
-                            // 3. Baru kurangi qty dari shipment lama (setelah piece sudah pindah)
-                            await this.reduceShipmentQty(orderId, actionData.piece_id!);
                         }
 
                         // Update piece dengan data baru
@@ -4245,7 +4250,6 @@ export class OrdersService {
                     pieces_detail: pieces.map((piece: any, index: number) => ({
                         id: piece.getDataValue('id'),
                         piece_id: piece.getDataValue('piece_id'),
-                        qty: 1, // Each piece = 1 qty
                         berat: parseFloat(piece.getDataValue('berat')) || 0,
                         panjang: parseFloat(piece.getDataValue('panjang')) || 0,
                         lebar: parseFloat(piece.getDataValue('lebar')) || 0,
@@ -5178,6 +5182,80 @@ export class OrdersService {
                         { where: { id: shipmentId } }
                     );
                 }
+            }
+        }
+    }
+
+    /**
+     * Helper: Kurangi qty dari shipment berdasarkan shipment ID langsung
+     * Digunakan saat memindahkan piece dari shipment lama ke shipment baru
+     */
+    private async reduceShipmentQtyByShipmentId(shipmentId: number): Promise<void> {
+        const shipment = await this.orderShipmentModel.findByPk(shipmentId);
+        if (!shipment) return;
+
+        const currentQty = shipment.getDataValue('qty') || 0;
+
+        // 🔍 CALCULATE REAL-TIME: Hitung qty_reweight dari orderPiece yang sebenarnya
+        const realQtyReweight = await this.orderPieceModel.count({
+            where: {
+                order_shipment_id: shipmentId,
+                reweight_status: 1
+            }
+        });
+
+        // 🛡️ DEFENSIVE: Cek data inkonsisten
+        if (realQtyReweight > currentQty) {
+            this.logger.warn(`Data inkonsisten ditemukan pada shipment ${shipmentId}: qty=${currentQty}, real_qty_reweight=${realQtyReweight}. Memperbaiki data...`);
+
+            // Perbaiki data dengan set qty_reweight = qty (maksimal yang mungkin)
+            await this.orderShipmentModel.update(
+                { qty_reweight: currentQty },
+                { where: { id: shipmentId } }
+            );
+
+            // Update variable untuk logika selanjutnya
+            const correctedQtyReweight = currentQty;
+
+            if (currentQty <= 1) {
+                // Hapus shipment
+                await this.orderShipmentModel.destroy({
+                    where: { id: shipmentId }
+                });
+            } else {
+                // Update dengan data yang sudah diperbaiki
+                const newQty = currentQty - 1;
+                let newQtyReweight = correctedQtyReweight;
+                if (correctedQtyReweight > 0) {
+                    newQtyReweight = correctedQtyReweight - 1;
+                }
+
+                await this.orderShipmentModel.update(
+                    {
+                        qty_reweight: newQtyReweight,
+                        qty: newQtyReweight
+                    },
+                    { where: { id: shipmentId } }
+                );
+            }
+        } else {
+            // Data normal, lanjutkan logika biasa
+            if (currentQty <= 1) {
+                // Jika qty asli tinggal 1 atau kurang, hapus shipment
+                await this.orderShipmentModel.destroy({
+                    where: { id: shipmentId }
+                });
+            } else {
+                // 🔍 CALCULATE REAL-TIME: Hitung qty_reweight baru setelah reduce
+                const newRealQtyReweight = Math.max(0, realQtyReweight - 1);
+
+                await this.orderShipmentModel.update(
+                    {
+                        qty_reweight: newRealQtyReweight,
+                        qty: newRealQtyReweight
+                    },
+                    { where: { id: shipmentId } }
+                );
             }
         }
     }
