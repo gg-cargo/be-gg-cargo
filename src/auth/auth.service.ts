@@ -114,7 +114,7 @@ export class AuthService {
       try {
         await this.sendMailgunEmail({
           to: [email],
-          subject: 'OTP Verifikasi - GG KARGO',
+          subject: 'OTP Verifikasi - 99 Delivery',
           html: this.generateOTPEmailHtml(user.getDataValue('name'), otp),
         });
         this.logger.log(`OTP sent via email to ${email}`);
@@ -351,7 +351,7 @@ export class AuthService {
       try {
         await this.sendMailgunEmail({
           to: [user.getDataValue('email')],
-          subject: 'OTP Baru - GG KARGO',
+          subject: 'OTP Baru - 99 Delivery',
           html: this.generateOTPEmailHtml(user.getDataValue('name'), otp),
         });
         this.logger.log(`OTP resent via email to ${user.getDataValue('email')}`);
@@ -584,7 +584,7 @@ export class AuthService {
     }
 
     const formData = new FormData();
-    formData.append('from', emailData.from || 'GG KARGO <no-reply@99delivery.id>');
+    formData.append('from', emailData.from || '99 Delivery <no-reply@99delivery.id>');
     formData.append('to', emailData.to.join(','));
     formData.append('h:Content-Type', 'text/html; charset=UTF-8');
 
@@ -642,12 +642,12 @@ export class AuthService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>GG KARGO</h1>
+            <h1>99 Delivery</h1>
             <p>Verifikasi Kode OTP</p>
           </div>
           <div class="content">
             <p>Halo <strong>${name}</strong>,</p>
-            <p>Terima kasih telah melakukan registrasi di GG KARGO. Gunakan kode OTP berikut untuk verifikasi akun Anda:</p>
+            <p>Terima kasih telah melakukan registrasi di 99 Delivery. Gunakan kode OTP berikut untuk verifikasi akun Anda:</p>
             
             <div class="otp-box">
               <p style="margin: 0; color: #666;">Kode OTP Anda:</p>
@@ -662,7 +662,7 @@ export class AuthService {
             </ul>
           </div>
           <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} GG KARGO. Hak Cipta Dilindungi.</p>
+            <p>&copy; ${new Date().getFullYear()} 99 Delivery. Hak Cipta Dilindungi.</p>
             <p>Email ini dikirim secara otomatis, mohon tidak membalas email ini.</p>
           </div>
         </div>

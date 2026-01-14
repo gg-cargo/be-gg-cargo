@@ -7,7 +7,7 @@ export class HealthController {
         return {
             status: 'ok',
             timestamp: new Date().toISOString(),
-            service: 'GG Kargo API',
+            service: '99 Delivery API',
             version: '1.0.0'
         };
     }

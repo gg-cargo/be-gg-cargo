@@ -72,7 +72,7 @@ export class InvoicesService {
                 cc: cc_emails,
                 subject: emailSubject,
                 html: emailContent,
-                from: 'GG Kargo <no-reply@99delivery.id>'
+                from: '99 Delivery <no-reply@99delivery.id>'
             });
 
             // 5. Log pengiriman email (opsional)

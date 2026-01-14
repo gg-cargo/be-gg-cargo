@@ -375,7 +375,7 @@ export async function generateOrderLabelsPDF(order: OrderForLabels, pieceIds: st
         compress: false, // Tidak compress untuk kualitas maksimal
         info: {
             title: `Labels - ${order.no_tracking}`,
-            author: 'GG Kargo',
+            author: '99 Delivery',
         }
     } as any;
 

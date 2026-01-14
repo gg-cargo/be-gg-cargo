@@ -192,7 +192,7 @@ export async function generateResiPDF(data: any): Promise<string> {
         },
         background: [
             {
-                text: 'GG KARGO',
+                text: '99 Delivery',
                 color: '#e0e0e0',
                 opacity: 1,
                 fontSize: 80,
@@ -434,7 +434,7 @@ export async function generateResiPDF(data: any): Promise<string> {
                 absolutePosition: { x: 0, y: 750 },
                 width: 520,
                 stack: [
-                    { text: 'Resi diproses oleh sistem GG Kargo', style: 'footerItalic' },
+                    { text: 'Resi diproses oleh sistem 99 Delivery', style: 'footerItalic' },
                 ],
             },
         ],
