@@ -5223,17 +5223,15 @@ export class OrdersService {
                     where: { id: shipmentId }
                 });
             } else {
-                // Update dengan data yang sudah diperbaiki
+                // Update dengan data yang sudah diperbaiki: turunkan qty 1,
+                // dan jaga qty_reweight agar tidak melebihi qty baru
                 const newQty = currentQty - 1;
-                let newQtyReweight = correctedQtyReweight;
-                if (correctedQtyReweight > 0) {
-                    newQtyReweight = correctedQtyReweight - 1;
-                }
+                const newQtyReweight = Math.min(correctedQtyReweight, newQty);
 
                 await this.orderShipmentModel.update(
                     {
                         qty_reweight: newQtyReweight,
-                        qty: newQtyReweight
+                        qty: newQty
                     },
                     { where: { id: shipmentId } }
                 );
@@ -5246,13 +5244,16 @@ export class OrdersService {
                     where: { id: shipmentId }
                 });
             } else {
-                // 🔍 CALCULATE REAL-TIME: Hitung qty_reweight baru setelah reduce
-                const newRealQtyReweight = Math.max(0, realQtyReweight - 1);
+                // Normal case: kurangi qty 1 untuk shipment lama.
+                // qty_reweight tetap mengikuti hitungan real (tidak otomatis -1),
+                // tapi dipaksa tidak boleh melebihi qty baru.
+                const newQty = currentQty - 1;
+                const newQtyReweight = Math.min(realQtyReweight, newQty);
 
                 await this.orderShipmentModel.update(
                     {
-                        qty_reweight: newRealQtyReweight,
-                        qty: newRealQtyReweight
+                        qty_reweight: newQtyReweight,
+                        qty: newQty
                     },
                     { where: { id: shipmentId } }
                 );
