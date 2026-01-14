@@ -38,9 +38,19 @@ export async function generateInvoicePDF(data: any): Promise<string> {
         return d.toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
     };
 
-    // Format currency
+    // Format currency (default IDR: tetap angka tanpa simbol; SGD: tampil currency)
+    const invoiceCurrency: string = data?.invoice_details?.currency || 'IDR';
     const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('id-ID').format(amount);
+        const safeAmount = Number(amount) || 0;
+        if (invoiceCurrency === 'SGD') {
+            return new Intl.NumberFormat('en-SG', {
+                style: 'currency',
+                currency: 'SGD',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }).format(safeAmount);
+        }
+        return new Intl.NumberFormat('id-ID').format(safeAmount);
     };
 
     // Get logo base64

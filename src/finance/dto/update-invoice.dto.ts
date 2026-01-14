@@ -6,6 +6,11 @@ export enum PaymentStatus {
     LUNAS = 'lunas'
 }
 
+export enum BilledCurrency {
+    IDR = 'IDR',
+    SGD = 'SGD',
+}
+
 export class BillingItemDto {
     @IsString()
     description: string;
@@ -68,6 +73,15 @@ export class UpdateInvoiceDto {
     @IsOptional()
     @IsNumber()
     selected_bank_id?: number;
+
+    // Billed Currency & Amount (khusus international: input manual oleh finance)
+    @IsOptional()
+    @IsEnum(BilledCurrency)
+    billed_currency?: BilledCurrency;
+
+    @IsOptional()
+    @IsNumber()
+    billed_amount?: number;
 
     // Contract & Quotation
     @IsOptional()

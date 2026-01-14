@@ -40,6 +40,21 @@ export class OrderInvoice extends Model {
     payment_terms: string;
 
     @Column({
+        type: DataType.STRING(3),
+        allowNull: true,
+        defaultValue: 'IDR',
+        comment: 'Mata uang yang ditagihkan (contoh: IDR, SGD)',
+    })
+    billed_currency: string;
+
+    @Column({
+        type: DataType.DECIMAL(18, 2),
+        allowNull: true,
+        comment: 'Nominal yang ditagihkan sesuai billed_currency (untuk international input manual)',
+    })
+    billed_amount: string;
+
+    @Column({
         type: DataType.INTEGER,
         allowNull: false,
         defaultValue: 0,
