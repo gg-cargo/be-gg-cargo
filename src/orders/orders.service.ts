@@ -3751,19 +3751,20 @@ export class OrdersService {
                             // Simpan shipment ID lama sebelum memindahkan piece
                             const oldShipmentId = existingPiece.getDataValue('order_shipment_id');
 
-                            // 1. Kurangi qty dari shipment lama SEBELUM memindahkan piece
-                            if (oldShipmentId) {
-                                await this.reduceShipmentQtyByShipmentId(oldShipmentId);
-                            }
-
-                            // 2. Cari shipment yang cocok dengan dimensi baru atau buat baru
+                            // 1. Cari shipment yang cocok dengan dimensi baru atau buat baru
                             const newShipmentId = await this.findOrCreateShipmentForDimensions(orderId, newBerat, newPanjang, newLebar, newTinggi);
 
-                            // 3. Update shipment_id di orderPiece ke shipment baru
+                            // 2. Pindahkan piece ke shipment baru terlebih dahulu
+                            // (untuk menghindari kasus shipment lama terhapus lalu FK cascade menghapus piece)
                             await this.orderPieceModel.update(
                                 { order_shipment_id: newShipmentId },
                                 { where: { id: actionData.piece_id! } }
                             );
+
+                            // 3. Baru kurangi qty dari shipment lama (kalau memang berbeda)
+                            if (oldShipmentId && oldShipmentId !== newShipmentId) {
+                                await this.reduceShipmentQtyByShipmentId(oldShipmentId);
+                            }
                         }
 
                         // Update piece dengan data baru
