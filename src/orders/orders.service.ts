@@ -1186,7 +1186,10 @@ export class OrdersService {
             // 6. Auto-send invoice email setelah commit transaction berhasil
             let emailSent = false;
             let emailError: string | null = null;
-            if (isBypassEnabled && invoiceData && invoiceData.invoice_no) {
+            // NOTE: Auto email invoice dimatikan default.
+            // Set env AUTO_SEND_INVOICE_EMAIL=true untuk mengaktifkan kembali.
+            const autoSendInvoiceEmailEnabled = 'false';
+            if (autoSendInvoiceEmailEnabled && isBypassEnabled && invoiceData && invoiceData.invoice_no) {
                 try {
                     // Ambil email penerima dari order
                     const emailPenerima = order.getDataValue('email_penerima');
@@ -6667,7 +6670,10 @@ export class OrdersService {
             // 11. Auto-send invoice email setelah commit transaction berhasil
             let emailSent = false;
             let emailError: string | null = null;
-            if (invoiceData && invoiceData.invoice_no) {
+            // NOTE: Auto email invoice dimatikan default.
+            // Set env AUTO_SEND_INVOICE_EMAIL=true untuk mengaktifkan kembali.
+            const autoSendInvoiceEmailEnabled = 'false';
+            if (autoSendInvoiceEmailEnabled && invoiceData && invoiceData.invoice_no) {
                 try {
                     // Ambil email penerima dari order
                     const emailPenerima = order.getDataValue('email_penerima');
