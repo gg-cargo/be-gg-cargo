@@ -18,7 +18,9 @@ export class UpdateVendorDto {
   @IsOptional()
   @IsString()
   @MaxLength(50, { message: 'Kode vendor maksimal 50 karakter' })
-  @Matches(/^[A-Z0-9]+$/, { message: 'Kode vendor harus huruf besar dan angka saja' })
+  // Contoh valid: VND-004, ABC123, ABC-123-XYZ
+  // Hanya boleh huruf besar, angka, dan pemisah '-'
+  @Matches(/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/, { message: "Kode vendor harus huruf besar, angka, dan pemisah '-' saja" })
   kode_vendor?: string;
 
   @IsOptional()
