@@ -22,6 +22,9 @@ export async function generateDeliveryNotePDF(payload: {
     piece_ids?: string[];
     no_seal?: string[] | string;
 }): Promise<string> {
+    // Hindari floating point noise pada tampilan berat (mis. 889.9981209182)
+    const beratTotalDisplay = Math.round(Number(payload?.summary?.berat_total || 0));
+
     const fonts = {
         Roboto: {
             normal: path.join(process.cwd(), 'fonts/Roboto-Regular.ttf'),
@@ -134,7 +137,7 @@ export async function generateDeliveryNotePDF(payload: {
                     { text: '1', alignment: 'center' },
                     { text: 'Barang' },
                     { text: String(payload.summary.qty), alignment: 'right' },
-                    { text: `${payload.summary.berat_total.toFixed ? payload.summary.berat_total.toFixed(2) : payload.summary.berat_total} Kg`, alignment: 'right' },
+                    { text: `${beratTotalDisplay} Kg`, alignment: 'right' },
                 ],
             ]
         },
@@ -168,7 +171,7 @@ export async function generateDeliveryNotePDF(payload: {
         { text: o.asal || '-', noWrap: false, style: 'cellWrap' },
         { text: o.tujuan || '-', noWrap: false, style: 'cellWrap' },
         { text: String(o.jumlah_koli), alignment: 'right', noWrap: false, style: 'cellWrap' },
-        { text: String(o.berat_barang), alignment: 'right', noWrap: false, style: 'cellWrap' },
+        { text: String(Math.round(Number(o.berat_barang || 0))), alignment: 'right', noWrap: false, style: 'cellWrap' },
     ]);
 
     const ordersTable = {
