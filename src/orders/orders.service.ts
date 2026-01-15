@@ -5646,10 +5646,7 @@ export class OrdersService {
                     case 'vendor':
                         statusFilter = {
                             [Op.and]: [
-                                { status: 'In Transit' },
                                 { vendor_id: { [Op.not]: null } },
-                                { current_hub: { [Op.not]: null } },
-                                // vendor_tracking_number tidak boleh kosong/null
                                 { vendor_tracking_number: { [Op.not]: null } },
                                 { vendor_tracking_number: { [Op.ne]: '' } }
                             ]
@@ -5726,6 +5723,14 @@ export class OrdersService {
                 };
             }
 
+            // 4.1 Filter vendor_tracking_number spesifik (exact match)
+            let vendorTrackingFilter = {};
+            if (query.vendor_tracking_number) {
+                vendorTrackingFilter = {
+                    vendor_tracking_number: query.vendor_tracking_number
+                };
+            }
+
             // 5. Buat filter layanan
             let layananFilter = {};
             // 5.1. Buat filter berdasarkan tipe (prioritas lebih tinggi dari layanan)
@@ -5776,6 +5781,7 @@ export class OrdersService {
                     areaFilter,
                     statusFilter,
                     searchFilter,
+                    vendorTrackingFilter,
                     layananFilter,
                     tipeFilter,
                     nextHubFilter,

@@ -57,6 +57,11 @@ export class OpsOrdersQueryDto {
         return value;
     })
     all_hubs?: boolean;
+
+    @IsOptional()
+    @IsString({ message: 'Vendor tracking number harus berupa string' })
+    @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+    vendor_tracking_number?: string;
 }
 
 export class CustomerDto {
