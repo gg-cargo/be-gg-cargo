@@ -76,6 +76,8 @@ export async function generateDeliveryNotePDF(payload: DeliveryNotePayload): Pro
     try {
         console.log('Generating delivery note PDF with payload:', payload);
 
+        const beratTotalDisplay = Math.round(Number(payload?.summary?.berat_total || 0));
+
         const fonts = {
             Roboto: {
                 normal: path.join(process.cwd(), 'fonts/Roboto-Regular.ttf'),
@@ -182,7 +184,7 @@ export async function generateDeliveryNotePDF(payload: DeliveryNotePayload): Pro
                 { text: `Packing: ${payload.packing || 'Tidak'}`, margin: [0, 0, 0, 8] },
                 { text: `Surat Jalan Balik: ${payload.surat_jalan_balik || 'Tidak'}`, margin: [0, 0, 0, 8] },
                 { text: `Jumlah Koli: ${payload.summary.qty} of ${payload.summary.qty} Koli`, margin: [0, 0, 0, 8] },
-                { text: `Total Berat: ${payload.summary.berat_total} Kg`, margin: [0, 0, 0, 8] },
+                { text: `Total Berat: ${beratTotalDisplay} Kg`, margin: [0, 0, 0, 8] },
             ],
             margin: [0, 0, 0, 20],
         } as any;
