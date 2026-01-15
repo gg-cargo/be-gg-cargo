@@ -5622,7 +5622,8 @@ export class OrdersService {
                         statusFilter = {
                             [Op.and]: [
                                 { reweight_status: 1 },
-                                { status: { [Op.notIn]: ['In Transit', 'Delivered', 'Out for Delivery'] } }
+                                { status: { [Op.notIn]: ['In Transit', 'Delivered', 'Out for Delivery'] } },
+                                { vendor_tracking_number: { [Op.or]: [null, ''] } },
                             ]
                         };
                         break;
