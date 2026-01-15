@@ -5647,8 +5647,8 @@ export class OrdersService {
                         statusFilter = {
                             [Op.and]: [
                                 { vendor_id: { [Op.not]: null } },
-                                // { vendor_tracking_number: { [Op.not]: null } },
-                                // { vendor_tracking_number: { [Op.ne]: '' } }
+                                { vendor_tracking_number: { [Op.not]: null } },
+                                { vendor_tracking_number: { [Op.ne]: '' } }
                             ]
                         };
                         break;
