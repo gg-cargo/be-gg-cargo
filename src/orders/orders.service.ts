@@ -5054,7 +5054,11 @@ export class OrdersService {
         try {
             const result = await this.orderPieceModel.findOne({
                 attributes: [
-                    [fn('MAX', col('piece_id')), 'maxPieceId']
+                    // IMPORTANT:
+                    // Jangan pakai MAX(piece_id) karena piece_id adalah string (lexicographical),
+                    // contoh: "P12-9" dianggap lebih besar dari "P12-10" sehingga counter jadi duplikat.
+                    // Ambil MAX dari angka counter-nya saja.
+                    [fn('MAX', literal(`CAST(SUBSTRING_INDEX(piece_id, '-', -1) AS UNSIGNED)`)), 'maxCounter']
                 ],
                 where: {
                     order_id: orderId,
@@ -5065,8 +5069,8 @@ export class OrdersService {
                 raw: true
             }) as any;
 
-            if (result && result.maxPieceId) {
-                const lastCounter = parseInt(result.maxPieceId.split('-')[1]) || 0;
+            if (result && result.maxCounter !== null && result.maxCounter !== undefined) {
+                const lastCounter = Number(result.maxCounter) || 0;
                 return lastCounter + 1;
             } else {
                 return 1;
