@@ -3315,9 +3315,9 @@ export class OrdersService {
             const orderId = order.getDataValue('id');
             this.logger.log(`Found order: ${orderId} with status: ${order.getDataValue('status')}`);
 
-            // 3. Validasi status order (tidak bisa dibatalkan jika sudah dalam proses atau selesai)
+            // 3. Validasi status order (tidak bisa dibatalkan jika sudah dalam proses pengiriman / selesai)
             const currentStatus = order.getDataValue('status');
-            if (currentStatus === 'Ready for Pickup' || currentStatus === 'Picked Up' || currentStatus === 'In Transit' || currentStatus === 'Out for Delivery' || currentStatus === 'Delivered' || currentStatus === 'Cancelled') {
+            if (currentStatus === 'In Transit' || currentStatus === 'Out for Delivery' || currentStatus === 'Delivered' || currentStatus === 'Cancelled') {
                 this.logger.warn(`Order ${orderId} cannot be cancelled - current status: ${currentStatus}`);
 
                 let errorMessage = '';
@@ -5383,12 +5383,12 @@ export class OrdersService {
                 throw new Error('User tidak ditemukan');
             }
 
-            // // 2. Validasi level user (hanya admin yang boleh menghapus)
-            // const userLevel = user.getDataValue('level');
-            // if (userLevel !== 1) { // Assuming level 1 is admin
-            //     this.logger.error(`User ${user_id} with level ${userLevel} is not authorized to delete orders`);
-            //     throw new Error('Anda tidak memiliki izin untuk menghapus order. Hanya admin yang dapat melakukan operasi ini.');
-            // }
+            // 2. Validasi level user (hanya master yang boleh menghapus)
+            const userLevel = user.getDataValue('level');
+            if (userLevel !== 3) { // Assuming level 3 is master
+                this.logger.error(`User ${user_id} with level ${userLevel} is not authorized to delete orders`);
+                throw new Error('Anda tidak memiliki izin untuk menghapus order. Hanya master yang dapat melakukan operasi ini.');
+            }
 
             // 3. Cari order berdasarkan no_resi
             const order = await this.orderModel.findOne({
