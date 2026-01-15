@@ -4177,7 +4177,9 @@ export class OrdersService {
                     'no_telepon_penerima',
                     'email_penerima',
                     // Additional data
-                    'total_harga'
+                    'total_harga',
+                    'vendor_id',
+                    'vendor_tracking_number'
                 ]
             });
 
@@ -4225,7 +4227,9 @@ export class OrdersService {
                         reweight_status: order.getDataValue('reweight_status') || 0,
                         layanan: order.getDataValue('layanan') || 'Regular',
                         created_at: order.getDataValue('created_at'),
-                        updated_at: order.getDataValue('updated_at')
+                        updated_at: order.getDataValue('updated_at'),
+                        vendor_id: order.getDataValue('vendor_id'),
+                        vendor_tracking_number: order.getDataValue('vendor_tracking_number')
                     },
                     shipper: {
                         name: order.getDataValue('nama_pengirim'),

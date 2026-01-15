@@ -12,6 +12,8 @@ export class OrderDetailResponseDto {
             layanan: string;
             created_at: Date;
             updated_at: Date;
+            vendor_id: number;
+            vendor_tracking_number: string;
         };
         shipper: {
             name: string;
