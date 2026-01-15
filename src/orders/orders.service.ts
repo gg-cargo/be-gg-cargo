@@ -5647,8 +5647,8 @@ export class OrdersService {
                         statusFilter = {
                             [Op.and]: [
                                 { vendor_id: { [Op.not]: null } },
-                                { vendor_tracking_number: { [Op.not]: null } },
-                                { vendor_tracking_number: { [Op.ne]: '' } }
+                                // { vendor_tracking_number: { [Op.not]: null } },
+                                // { vendor_tracking_number: { [Op.ne]: '' } }
                             ]
                         };
                         break;
@@ -5669,12 +5669,20 @@ export class OrdersService {
 
             if (!showAllHubs) {
                 if (['order kirim', 'menunggu pengiriman', 'completed', 'outbound', 'vendor'].includes(query.status as string)) {
-                    if (requestedHubId) {
-                        areaFilter = { current_hub: requestedHubId };
-                    } else if (userHubId) {
-                        areaFilter = { current_hub: userHubId };
-                    } else if (userServiceCenterId) {
-                        areaFilter = { current_hub: userServiceCenterId };
+                    // Khusus status "vendor": order bisa berada di current_hub ATAU masih di hub_source_id
+                    // (agar bisa menangkap order vendor yang belum berpindah current_hub).
+                    const areaHubId = requestedHubId || userHubId || userServiceCenterId;
+                    if (areaHubId) {
+                        if (query.status === 'vendor') {
+                            areaFilter = {
+                                [Op.or]: [
+                                    { current_hub: areaHubId },
+                                    { hub_source_id: areaHubId }
+                                ]
+                            };
+                        } else {
+                            areaFilter = { current_hub: areaHubId };
+                        }
                     }
                 }
 
