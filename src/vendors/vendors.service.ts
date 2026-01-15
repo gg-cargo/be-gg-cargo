@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Vendor } from '../models/vendor.model';
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { CreateVendorResponseDto } from './dto/create-vendor-response.dto';
 import { ListVendorsQueryDto, ListVendorsResponseDto, VendorListItemDto, PaginationDto } from './dto/list-vendors.dto';
+import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { Op } from 'sequelize';
 
 @Injectable()
@@ -162,6 +163,106 @@ export class VendorsService {
                 nama_vendor: vendor.getDataValue('nama_vendor'),
                 status_vendor: 'Aktif'
             }
+        };
+    }
+
+    async updateVendor(id: number, dto: UpdateVendorDto) {
+        if (!id || isNaN(Number(id))) {
+            throw new BadRequestException('ID vendor tidak valid');
+        }
+
+        const vendor = await this.vendorModel.findByPk(id);
+        if (!vendor) {
+            throw new NotFoundException('Vendor tidak ditemukan');
+        }
+
+        // Validasi unik: kode_vendor (jika diubah)
+        if (dto.kode_vendor) {
+            const existingKode = await this.vendorModel.findOne({
+                where: {
+                    kode_vendor: dto.kode_vendor,
+                    id: { [Op.ne]: id },
+                },
+            });
+            if (existingKode) {
+                throw new ConflictException(`Kode vendor ${dto.kode_vendor} sudah digunakan`);
+            }
+        }
+
+        // Validasi unik: pic_email (jika diubah)
+        if (dto.pic_email) {
+            const normalizedEmail = dto.pic_email.toLowerCase().trim();
+            const existingPicEmail = await this.vendorModel.findOne({
+                where: {
+                    pic_email: normalizedEmail,
+                    id: { [Op.ne]: id },
+                },
+            });
+            if (existingPicEmail) {
+                throw new ConflictException(`Email PIC ${dto.pic_email} sudah terdaftar`);
+            }
+        }
+
+        const updateData: any = {
+            updated_at: new Date(),
+        };
+
+        if (dto.nama_vendor !== undefined) updateData.nama_vendor = dto.nama_vendor.trim();
+        if (dto.kode_vendor !== undefined) updateData.kode_vendor = dto.kode_vendor;
+        if (dto.alamat_vendor !== undefined) updateData.alamat_vendor = dto.alamat_vendor?.trim() || null;
+        if (dto.pic_nama !== undefined) updateData.pic_nama = dto.pic_nama.trim();
+        if (dto.pic_telepon !== undefined) updateData.pic_telepon = dto.pic_telepon.trim();
+        if (dto.pic_email !== undefined) updateData.pic_email = dto.pic_email.toLowerCase().trim();
+        if (dto.jenis_layanan !== undefined) updateData.jenis_layanan = dto.jenis_layanan.length > 0 ? dto.jenis_layanan : null;
+        if (dto.status_vendor !== undefined) updateData.status_vendor = dto.status_vendor;
+        if (dto.area_coverage !== undefined) updateData.area_coverage = dto.area_coverage;
+        if (dto.catatan !== undefined) updateData.catatan = dto.catatan?.trim() || null;
+
+        await this.vendorModel.update(updateData, { where: { id } });
+
+        return {
+            message: 'Vendor berhasil diupdate',
+            data: {
+                id,
+                ...updateData,
+            },
+        };
+    }
+
+    /**
+     * Soft delete: nonaktifkan vendor agar tidak merusak relasi ke orders.
+     */
+    async deleteVendor(id: number) {
+        if (!id || isNaN(Number(id))) {
+            throw new BadRequestException('ID vendor tidak valid');
+        }
+
+        const vendor = await this.vendorModel.findByPk(id, {
+            attributes: ['id', 'nama_vendor', 'aktif', 'status_vendor'],
+        });
+        if (!vendor) {
+            throw new NotFoundException('Vendor tidak ditemukan');
+        }
+
+        if (vendor.getDataValue('aktif') === 0) {
+            return {
+                message: `Vendor ${vendor.getDataValue('nama_vendor')} sudah nonaktif`,
+                data: { id, aktif: 0, status_vendor: vendor.getDataValue('status_vendor') },
+            };
+        }
+
+        await this.vendorModel.update(
+            {
+                aktif: 0,
+                status_vendor: 'Nonaktif',
+                updated_at: new Date(),
+            },
+            { where: { id } }
+        );
+
+        return {
+            message: `Vendor ${vendor.getDataValue('nama_vendor')} berhasil dihapus (dinonaktifkan)`,
+            data: { id, aktif: 0, status_vendor: 'Nonaktif' },
         };
     }
 

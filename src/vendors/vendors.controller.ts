@@ -3,6 +3,7 @@ import {
     Post,
     Get,
     Patch,
+    Delete,
     Body,
     Query,
     Param,
@@ -15,6 +16,7 @@ import { VendorsService } from './vendors.service';
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { CreateVendorResponseDto } from './dto/create-vendor-response.dto';
 import { ListVendorsQueryDto, ListVendorsResponseDto } from './dto/list-vendors.dto';
+import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('vendors')
@@ -52,6 +54,25 @@ export class VendorsController {
         @Param('id', ParseIntPipe) id: number,
     ) {
         return this.vendorsService.approveVendor(id);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id')
+    @HttpCode(HttpStatus.OK)
+    async updateVendor(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() dto: UpdateVendorDto,
+    ) {
+        return this.vendorsService.updateVendor(id, dto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Delete(':id')
+    @HttpCode(HttpStatus.OK)
+    async deleteVendor(
+        @Param('id', ParseIntPipe) id: number,
+    ) {
+        return this.vendorsService.deleteVendor(id);
     }
 }
 

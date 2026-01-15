@@ -1,0 +1,68 @@
+import {
+  IsString,
+  IsEmail,
+  IsOptional,
+  IsArray,
+  IsIn,
+  MaxLength,
+  Matches,
+  ArrayMinSize,
+} from 'class-validator';
+
+export class UpdateVendorDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(255, { message: 'Nama vendor maksimal 255 karakter' })
+  nama_vendor?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50, { message: 'Kode vendor maksimal 50 karakter' })
+  @Matches(/^[A-Z0-9]+$/, { message: 'Kode vendor harus huruf besar dan angka saja' })
+  kode_vendor?: string;
+
+  @IsOptional()
+  @IsString()
+  alamat_vendor?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255, { message: 'Nama PIC maksimal 255 karakter' })
+  pic_nama?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9+\-\s()]+$/, { message: 'Format telepon tidak valid' })
+  @MaxLength(50, { message: 'Telepon maksimal 50 karakter' })
+  pic_telepon?: string;
+
+  @IsOptional()
+  @IsEmail({}, { message: 'Format email PIC tidak valid' })
+  @MaxLength(255, { message: 'Email PIC maksimal 255 karakter' })
+  pic_email?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true, message: 'Setiap jenis layanan harus berupa string' })
+  @ArrayMinSize(1, { message: 'Jenis layanan minimal 1 jenis' })
+  jenis_layanan?: string[];
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['Aktif', 'Nonaktif', 'Dalam Proses'], {
+    message: 'Status vendor harus: Aktif, Nonaktif, atau Dalam Proses',
+  })
+  status_vendor?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Area coverage minimal 1 area' })
+  @IsString({ each: true, message: 'Setiap area harus berupa string' })
+  area_coverage?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000, { message: 'Catatan maksimal 1000 karakter' })
+  catatan?: string;
+}
+
