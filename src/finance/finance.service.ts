@@ -85,18 +85,25 @@ export class FinanceService {
         }
 
         try {
-            // 1. Get total invoice amount from orders
-            const totalInvoiceAmount = await this.orderModel.sum('total_harga', {
+            // 1. Get total invoice amount from orders (sudah ditagih + lunas)
+            const totalInvoiceAmount = Math.round((await this.orderModel.sum('total_harga', {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
                         [Op.in]: [INVOICE_STATUS.SUDAH_DITAGIH, INVOICE_STATUS.LUNAS]
                     }
                 }
-            }) || 0;
+            }) || 0));
+
+            // 1.1 Get total invoice amount for all invoice statuses
+            const totalInvoiceAllStatusAmount = Math.round((await this.orderModel.sum('total_harga', {
+                where: {
+                    ...orderWhereCondition,
+                }
+            }) || 0));
 
             // 2. Get total paid amount from orders
-            const totalPaidAmount = await this.orderModel.sum('total_harga', {
+            const totalPaidAmount = Math.round((await this.orderModel.sum('total_harga', {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
@@ -105,10 +112,10 @@ export class FinanceService {
                     isUnpaid: 0,
                     isPartialPaid: 0
                 }
-            }) || 0;
+            }) || 0));
 
             // 3. Get total unpaid amount (sisaAmount)
-            const totalUnpaidAmount = await this.orderModel.sum('sisaAmount', {
+            const totalUnpaidAmount = Math.round((await this.orderModel.sum('sisaAmount', {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
@@ -119,10 +126,10 @@ export class FinanceService {
                         { isPartialPaid: 1 }
                     ]
                 }
-            }) || 0;
+            }) || 0));
 
             // 4. Get total partial paid amount
-            const totalPartialPaidAmount = await this.orderModel.sum('sisaAmount', {
+            const totalPartialPaidAmount = Math.round((await this.orderModel.sum('sisaAmount', {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: {
@@ -130,7 +137,7 @@ export class FinanceService {
                     },
                     isPartialPaid: 1
                 }
-            }) || 0;
+            }) || 0));
 
             // 5. Get order counts by billing status
             const orderCountsByBillingStatus = await this.getOrderCountsByBillingStatus(orderWhereCondition);
@@ -148,29 +155,37 @@ export class FinanceService {
             const paymentOrderStats = await this.getPaymentOrderStatistics(whereCondition);
 
             // 10. Get total pembayaran untuk draft (belum ditagih)
-            const totalDraftAmount = await this.orderModel.sum('total_harga', {
+            const totalDraftAmount = Math.round((await this.orderModel.sum('total_harga', {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: INVOICE_STATUS.BELUM_DITAGIH
                 }
-            }) || 0;
+            }) || 0));
 
-            const totalBelumProsesAmount = await this.orderModel.sum('total_harga', {
+            const totalBelumProsesAmount = Math.round((await this.orderModel.sum('total_harga', {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: INVOICE_STATUS.BELUM_PROSES
                 }
-            }) || 0;
+            }) || 0));
 
             // 11. Get total pembayaran untuk pending (sudah ditagih)
-            const totalPendingAmount = await this.orderModel.sum('total_harga', {
+            const totalPendingAmount = Math.round((await this.orderModel.sum('total_harga', {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: INVOICE_STATUS.SUDAH_DITAGIH
                 }
-            }) || 0;
+            }) || 0));
 
-            // 12. Get count untuk draft dan pending
+            // 12. Get total pembayaran untuk lunas
+            const totalLunasAmount = Math.round((await this.orderModel.sum('total_harga', {
+                where: {
+                    ...orderWhereCondition,
+                    invoiceStatus: INVOICE_STATUS.LUNAS
+                }
+            }) || 0));
+
+            // 13. Get count untuk draft, pending, lunas, dan belum proses
             const draftCount = await this.orderModel.count({
                 where: {
                     ...orderWhereCondition,
@@ -182,6 +197,13 @@ export class FinanceService {
                 where: {
                     ...orderWhereCondition,
                     invoiceStatus: INVOICE_STATUS.SUDAH_DITAGIH
+                }
+            });
+
+            const lunasCount = await this.orderModel.count({
+                where: {
+                    ...orderWhereCondition,
+                    invoiceStatus: INVOICE_STATUS.LUNAS
                 }
             });
 
@@ -198,6 +220,7 @@ export class FinanceService {
                 data: {
                     periode: start_date && end_date ? `${start_date} to ${end_date}` : 'All time',
                     total_invoice_amount: totalInvoiceAmount,
+                    total_invoice_amount_all_status: totalInvoiceAllStatusAmount,
                     total_paid_amount: totalPaidAmount,
                     total_unpaid_amount: totalUnpaidAmount,
                     total_partial_paid_amount: totalPartialPaidAmount,
@@ -215,6 +238,10 @@ export class FinanceService {
                         sudah_ditagih: {
                             count: pendingCount,
                             amount: totalPendingAmount
+                        },
+                        sudah_lunas: {
+                            count: lunasCount,
+                            amount: totalLunasAmount
                         },
                         belum_proses: {
                             count: belumProsesCount,
