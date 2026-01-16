@@ -4288,7 +4288,7 @@ export class OrdersService {
         this.validateQtyLimitsForEstimate(item_details.items);
 
         // Validasi layanan jika diisi
-        const validServices = ['Ekonomi', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk'];
+        const validServices = ['Kirim Hemat', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk'];
         if (service_options.layanan && !validServices.includes(service_options.layanan)) {
             throw new BadRequestException('Layanan tidak valid');
         }
@@ -4355,10 +4355,10 @@ export class OrdersService {
             let errorMessage = '';
 
             switch (layanan) {
-                case 'Ekonomi':
+                case 'Kirim Hemat':
                     basePrice = chargeableWeight * 3000; // Rp3.000/kg
                     estimatedDays = 4;
-                    serviceDescription = 'Layanan ekonomi dengan estimasi 3-4+ hari';
+                    serviceDescription = 'Layanan kirim hemat dengan estimasi 3-4+ hari';
                     break;
 
                 case 'Reguler':
@@ -4437,7 +4437,7 @@ export class OrdersService {
 
         // Jika layanan tidak diisi, hitung untuk semua layanan yang relevan
         if (!service_options.layanan) {
-            const servicesToCalculate = ['Ekonomi', 'Reguler', 'Paket', 'Express'];
+            const servicesToCalculate = ['Kirim Hemat', 'Reguler', 'Paket', 'Express'];
             const allServices = servicesToCalculate.map(service => calculateServicePrice(service));
 
             // Hitung biaya tambahan dan diskon untuk setiap layanan

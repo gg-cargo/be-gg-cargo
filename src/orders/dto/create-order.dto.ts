@@ -1,9 +1,9 @@
 import { IsString, IsNotEmpty, IsEnum, IsBoolean, IsNumber, IsOptional, IsArray, ValidateNested, IsPositive, IsDate, IsDateString, Max, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 
-// Ekonomi', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk
+// Kirim Hemat', 'Reguler', 'Kirim Motor', 'Paket', 'Express', 'Sewa Truk
 export enum LayananType {
-    EKONOMI = 'Ekonomi',
+    KIRIM_HEMAT = 'Kirim Hemat',
     REGULER = 'Reguler',
     PAKET = 'Paket',
     EXPRESS = 'Express',

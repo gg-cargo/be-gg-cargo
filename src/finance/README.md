@@ -95,7 +95,7 @@ Get invoice details by invoice number.
 ### 7. Get Revenue Summary by Service
 **GET** `/finance/revenue/summary-by-service`
 
-Get revenue statistics summary grouped by service type (Ekonomi, Reguler, Express, Paket, etc.).
+Get revenue statistics summary grouped by service type (Kirim Hemat, Reguler, Express, Paket, etc.).
 
 #### Query Parameters
 | Parameter | Type | Required | Description |
@@ -119,7 +119,7 @@ GET /finance/revenue/summary-by-service?start_date=2025-07-01&end_date=2025-07-3
         "periode": "2025-07-01 to 2025-07-31",
         "summary_by_service": [
             {
-                "layanan": "Ekonomi",
+                "layanan": "Kirim Hemat",
                 "jumlah_order": 500,
                 "total_pendapatan": 75000000,
                 "rata_rata_pendapatan_per_order": 150000,
@@ -173,4 +173,4 @@ curl -X GET \
 - **Calculations**: 
   - Average revenue per order = Total revenue / Number of orders
   - Grand totals calculated from all service types
-- **Available Services**: Ekonomi, Reguler, Express, Paket, Sewa Truk, Kirim Motor 
+- **Available Services**: Kirim Hemat, Reguler, Express, Paket, Sewa Truk, Kirim Motor

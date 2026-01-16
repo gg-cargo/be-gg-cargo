@@ -17,6 +17,6 @@ export class RevenueSummaryByServiceDto {
 
     @IsOptional()
     @IsString()
-    @IsIn(['Ekonomi', 'Reguler', 'Express', 'Paket', 'Sewa Truk', 'Kirim Motor'])
+    @IsIn(['Kirim Hemat', 'Reguler', 'Express', 'Paket', 'Sewa Truk', 'Kirim Motor'])
     layanan?: string;
 } 
