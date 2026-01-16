@@ -5771,8 +5771,13 @@ export class OrdersService {
                 }
             } else if (query.layanan) {
                 // Hanya gunakan filter layanan jika tipe tidak diisi
+                const layananInput = String(query.layanan).trim();
+                const layananList = Object.values(LayananType);
+                if (!layananList.includes(layananInput as LayananType)) {
+                    throw new BadRequestException('Layanan tidak valid');
+                }
                 layananFilter = {
-                    layanan: { [Op.like]: `%${query.layanan}%` }
+                    layanan: layananInput
                 };
             }
 
