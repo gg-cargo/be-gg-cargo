@@ -603,6 +603,14 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Delete('reweight-proof/:file_log_id')
+    async deleteReweightProof(
+        @Param('file_log_id', ParseIntPipe) fileLogId: number,
+    ): Promise<{ message: string; success: boolean }> {
+        return this.ordersService.deleteReweightProof(fileLogId);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Patch(':no_resi/forward-to-vendor')
     async forwardToVendor(
         @Param('no_resi') noResi: string,

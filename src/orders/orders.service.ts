@@ -7139,6 +7139,37 @@ export class OrdersService {
     }
 
     /**
+     * Hapus bukti foto reweight berdasarkan file_log_id
+     */
+    async deleteReweightProof(fileLogId: number): Promise<{ message: string; success: boolean }> {
+        try {
+            const deletedCount = await this.fileLogModel.destroy({
+                where: {
+                    id: fileLogId,
+                    used_for: { [Op.like]: 'bulk_reweight_proof_order_id_%' },
+                },
+            });
+
+            if (!deletedCount) {
+                throw new NotFoundException(`File log dengan ID ${fileLogId} tidak ditemukan`);
+            }
+
+            return {
+                message: 'Bukti foto reweight berhasil dihapus',
+                success: true,
+            };
+        } catch (error) {
+            this.logger.error(`Error deleting reweight proof ${fileLogId}: ${error.message}`, error.stack);
+
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Terjadi kesalahan saat menghapus bukti foto reweight');
+        }
+    }
+
+    /**
      * Calculate invoice amounts
      */
     private calculateInvoiceAmounts(shipmentData: any, createOrderDto: CreateOrderDto): {
