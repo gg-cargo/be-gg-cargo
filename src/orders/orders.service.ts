@@ -6963,6 +6963,7 @@ export class OrdersService {
                 reweight_by: { id: number | null; name: string | null };
                 alasan_koreksi: string | null;
                 catatan: string | null;
+                status_reweight: number | null;
                 dimensi_sekarang: Array<{ piece_id: number; berat: number; panjang: number; lebar: number; tinggi: number }>;
                 dimensi_baru: Array<{ piece_id: number; berat: number; panjang: number; lebar: number; tinggi: number }>;
             }>();
@@ -6995,6 +6996,7 @@ export class OrdersService {
                         },
                         alasan_koreksi: request.getDataValue('alasan_koreksi') || null,
                         catatan: request.getDataValue('note') || null,
+                        status_reweight: request.getDataValue('status') ?? null,
                         dimensi_sekarang: [],
                         dimensi_baru: [],
                     });
