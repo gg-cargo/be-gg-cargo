@@ -471,6 +471,23 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Delete(':no_tracking/reweight-corrections')
+    async deleteReweightCorrectionsByTracking(
+        @Param('no_tracking') noTracking: string,
+    ) {
+        return this.ordersService.deleteReweightCorrectionsByTracking(noTracking);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_tracking/reweight-corrections/approve')
+    async approveReweightCorrectionsByTracking(
+        @Param('no_tracking') noTracking: string,
+        @Body() body: { approved_by_user_id: number },
+    ) {
+        return this.ordersService.approveReweightCorrectionsByTracking(noTracking, body?.approved_by_user_id);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Post('pieces/bulk-reweight')
     @UseInterceptors(FilesInterceptor('images', 5, {
         storage: diskStorage({

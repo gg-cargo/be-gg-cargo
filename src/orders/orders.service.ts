@@ -41,7 +41,7 @@ import { OrderInvoiceDetail } from '../models/order-invoice-detail.model';
 import { Bank } from '../models/bank.model';
 import { Level } from '../models/level.model';
 import { FileLog } from '../models/file-log.model';
-import { ReweightCorrectionRequest } from '../models/reweight-correction-request.model';
+import { ReweightCorrectionRequest, REWEIGHT_CORRECTION_STATUS } from '../models/reweight-correction-request.model';
 import { OrderDeliveryNote } from '../models/order-delivery-note.model';
 import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
@@ -6926,14 +6926,90 @@ export class OrdersService {
     async getAllReweightCorrectionRequests(): Promise<{ message: string; success: boolean; data: any[] }> {
         try {
             const requests = await this.reweightCorrectionRequestModel.findAll({
+                include: [
+                    {
+                        model: this.orderModel,
+                        as: 'order',
+                        attributes: ['no_tracking', 'hub_source_id'],
+                        required: false,
+                    },
+                    {
+                        model: this.userModel,
+                        as: 'requester',
+                        attributes: ['id', 'name'],
+                        required: false,
+                    },
+                ],
                 order: [['created_at', 'DESC']],
-                raw: true,
             });
+
+            const groupedByTracking = new Map<string, {
+                no_tracking: string | null;
+                hub_asal: string | null;
+                reweight_by: { id: number | null; name: string | null };
+                alasan_koreksi: string | null;
+                catatan: string | null;
+                dimensi_sekarang: Array<{ piece_id: number; berat: number; panjang: number; lebar: number; tinggi: number }>;
+                dimensi_baru: Array<{ piece_id: number; berat: number; panjang: number; lebar: number; tinggi: number }>;
+            }>();
+
+            const hubIds = Array.from(new Set(requests
+                .map((request) => request.getDataValue('order')?.getDataValue('hub_source_id'))
+                .filter((id) => typeof id === 'number'))) as number[];
+            const hubs = hubIds.length > 0
+                ? await this.hubModel.findAll({
+                    where: { id: hubIds },
+                    attributes: ['id', 'nama'],
+                    raw: true,
+                })
+                : [];
+            const hubIdToName = new Map<number, string>(hubs.map((hub) => [hub.id as number, hub.nama]));
+
+            for (const request of requests) {
+                const noTracking = request.getDataValue('order')?.getDataValue('no_tracking') || null;
+                const hubSourceId = request.getDataValue('order')?.getDataValue('hub_source_id');
+                const key = noTracking || 'UNKNOWN';
+
+                if (!groupedByTracking.has(key)) {
+                    const requester = request.getDataValue('requester');
+                    groupedByTracking.set(key, {
+                        no_tracking: noTracking,
+                        hub_asal: typeof hubSourceId === 'number' ? (hubIdToName.get(hubSourceId) || null) : null,
+                        reweight_by: {
+                            id: requester?.getDataValue('id') ?? null,
+                            name: requester?.getDataValue('name') ?? null,
+                        },
+                        alasan_koreksi: request.getDataValue('alasan_koreksi') || null,
+                        catatan: request.getDataValue('note') || null,
+                        dimensi_sekarang: [],
+                        dimensi_baru: [],
+                    });
+                }
+
+                const group = groupedByTracking.get(key)!;
+                const pieceId = request.getDataValue('piece_id');
+
+                group.dimensi_sekarang.push({
+                    piece_id: pieceId,
+                    berat: request.getDataValue('current_berat'),
+                    panjang: request.getDataValue('current_panjang'),
+                    lebar: request.getDataValue('current_lebar'),
+                    tinggi: request.getDataValue('current_tinggi'),
+                });
+
+                group.dimensi_baru.push({
+                    piece_id: pieceId,
+                    berat: request.getDataValue('new_berat'),
+                    panjang: request.getDataValue('new_panjang'),
+                    lebar: request.getDataValue('new_lebar'),
+                    tinggi: request.getDataValue('new_tinggi'),
+                });
+            }
 
             return {
                 message: 'Berhasil mengambil semua reweight correction requests',
                 success: true,
-                data: requests,
+                data: Array.from(groupedByTracking.values()),
             };
         } catch (error) {
             this.logger.error(`Error getting all reweight correction requests: ${error.message}`, error.stack);
@@ -6964,6 +7040,181 @@ export class OrdersService {
             }
 
             throw new InternalServerErrorException('Terjadi kesalahan saat mengambil detail reweight correction request');
+        }
+    }
+
+    /**
+     * Setujui semua reweight correction requests berdasarkan no_tracking
+     * dan update dimensi piece sesuai dimensi baru di request.
+     */
+    async approveReweightCorrectionsByTracking(
+        noTracking: string,
+        approvedByUserId: number
+    ): Promise<{ message: string; success: boolean; data: any }> {
+        try {
+            if (!approvedByUserId || isNaN(Number(approvedByUserId))) {
+                throw new BadRequestException('approved_by_user_id wajib diisi dan harus berupa angka');
+            }
+
+            const approver = await this.userModel.findByPk(approvedByUserId);
+            if (!approver) {
+                throw new NotFoundException('User approver tidak ditemukan');
+            }
+
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noTracking },
+                attributes: ['id', 'no_tracking'],
+            });
+            if (!order) {
+                throw new NotFoundException(`Order dengan no_tracking ${noTracking} tidak ditemukan`);
+            }
+
+            const orderId = order.getDataValue('id');
+            const requests = await this.reweightCorrectionRequestModel.findAll({
+                where: {
+                    order_id: orderId,
+                    status: REWEIGHT_CORRECTION_STATUS.PENDING,
+                },
+                order: [['created_at', 'ASC']],
+            });
+
+            if (!requests.length) {
+                throw new BadRequestException(`Tidak ada reweight correction request pending untuk no_tracking ${noTracking}`);
+            }
+
+            const now = new Date();
+            const requestIds: number[] = [];
+            let updatedPieces = 0;
+
+            for (const request of requests) {
+                const pieceId = request.getDataValue('piece_id');
+                const existingPiece = await this.orderPieceModel.findByPk(pieceId);
+                if (!existingPiece) {
+                    throw new NotFoundException(`Piece dengan ID ${pieceId} tidak ditemukan`);
+                }
+
+                const oldBerat = existingPiece.getDataValue('berat');
+                const oldPanjang = existingPiece.getDataValue('panjang');
+                const oldLebar = existingPiece.getDataValue('lebar');
+                const oldTinggi = existingPiece.getDataValue('tinggi');
+
+                const newBerat = request.getDataValue('new_berat');
+                const newPanjang = request.getDataValue('new_panjang');
+                const newLebar = request.getDataValue('new_lebar');
+                const newTinggi = request.getDataValue('new_tinggi');
+
+                const dimensiChanged = (
+                    oldBerat !== newBerat ||
+                    oldPanjang !== newPanjang ||
+                    oldLebar !== newLebar ||
+                    oldTinggi !== newTinggi
+                );
+
+                if (dimensiChanged) {
+                    const oldShipmentId = existingPiece.getDataValue('order_shipment_id');
+                    const newShipmentId = await this.findOrCreateShipmentForDimensions(orderId, newBerat, newPanjang, newLebar, newTinggi);
+
+                    // Pindahkan piece ke shipment baru terlebih dahulu
+                    await this.orderPieceModel.update(
+                        { order_shipment_id: newShipmentId },
+                        { where: { id: pieceId } }
+                    );
+
+                    // Kurangi qty shipment lama jika berbeda
+                    if (oldShipmentId && oldShipmentId !== newShipmentId) {
+                        await this.reduceShipmentQtyByShipmentId(oldShipmentId);
+                    }
+                }
+
+                // Update dimensi piece
+                await this.orderPieceModel.update(
+                    {
+                        berat: newBerat,
+                        panjang: newPanjang,
+                        lebar: newLebar,
+                        tinggi: newTinggi,
+                        reweight_status: 1,
+                        reweight_by: approvedByUserId,
+                        updatedAt: now,
+                    },
+                    { where: { id: pieceId } }
+                );
+
+                requestIds.push(request.getDataValue('id'));
+                updatedPieces += 1;
+            }
+
+            // Update status request menjadi APPROVED
+            await this.reweightCorrectionRequestModel.update(
+                {
+                    status: REWEIGHT_CORRECTION_STATUS.APPROVED,
+                    approved_by: approvedByUserId,
+                    approved_at: now,
+                    updated_at: now,
+                },
+                { where: { id: { [Op.in]: requestIds } } }
+            );
+
+            return {
+                message: 'Reweight correction requests berhasil disetujui',
+                success: true,
+                data: {
+                    order_id: orderId,
+                    no_tracking: noTracking,
+                    approved_by: approver.getDataValue('name'),
+                    updated_pieces: updatedPieces,
+                    request_ids: requestIds,
+                },
+            };
+        } catch (error) {
+            this.logger.error(`Error approving reweight corrections for ${noTracking}: ${error.message}`, error.stack);
+
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Terjadi kesalahan saat menyetujui reweight correction requests');
+        }
+    }
+
+    /**
+     * Hapus semua reweight correction requests berdasarkan no_tracking
+     */
+    async deleteReweightCorrectionsByTracking(noTracking: string): Promise<{ message: string; success: boolean; data: { deleted_count: number } }> {
+        try {
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noTracking },
+                attributes: ['id'],
+            });
+
+            if (!order) {
+                throw new NotFoundException(`Order dengan no_tracking ${noTracking} tidak ditemukan`);
+            }
+
+            const orderId = order.getDataValue('id');
+            const deletedCount = await this.reweightCorrectionRequestModel.destroy({
+                where: { order_id: orderId },
+            });
+
+            if (!deletedCount) {
+                throw new NotFoundException(`Tidak ada reweight correction request untuk no_tracking ${noTracking}`);
+            }
+
+            return {
+                message: 'Reweight correction requests berhasil dihapus',
+                success: true,
+                data: {
+                    deleted_count: deletedCount,
+                },
+            };
+        } catch (error) {
+            this.logger.error(`Error deleting reweight corrections for ${noTracking}: ${error.message}`, error.stack);
+
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Terjadi kesalahan saat menghapus reweight correction requests');
         }
     }
 
