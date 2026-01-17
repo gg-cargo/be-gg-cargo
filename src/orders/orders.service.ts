@@ -6859,19 +6859,7 @@ export class OrdersService {
 
             // Jika tidak ada piece yang berubah, berikan pesan info
             if (piecesToUpdate.length === 0) {
-                return {
-                    message: 'Tidak ada perubahan data yang diajukan. Semua piece memiliki data yang sama.',
-                    success: true,
-                    data: {
-                        order_id: orderId,
-                        requested_by: requestingUser.getDataValue('name'),
-                        requested_at: new Date().toISOString(),
-                        note: editReweightRequestDto.note || '',
-                        status: 'No Changes Required',
-                        estimated_approval_time: null,
-                        requests: [],
-                    }
-                };
+                throw new BadRequestException('Tidak ada perubahan data yang diajukan. Semua piece memiliki data yang sama.');
             }
 
             // 6. Buat record di reweight_correction_requests untuk setiap item koreksi yang berubah
