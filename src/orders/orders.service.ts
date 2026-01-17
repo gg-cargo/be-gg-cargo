@@ -6783,7 +6783,7 @@ export class OrdersService {
 
             const reweightStatus = order.getDataValue('reweight_status');
             if (reweightStatus !== 1) {
-                throw new BadRequestException('Order tidak dalam status reweight final. Hanya order dengan reweight final yang dapat dikoreksi');
+                throw new BadRequestException('Order belum disubmit. Hanya order yang sudah final yang dapat dikoreksi');
             }
 
             // 2. Validasi semua piece dalam request ada di order dan sudah di-reweight final
