@@ -6942,6 +6942,12 @@ export class OrdersService {
                         required: false,
                     },
                     {
+                        model: this.orderPieceModel,
+                        as: 'piece',
+                        attributes: ['piece_id'],
+                        required: false,
+                    },
+                    {
                         model: this.userModel,
                         as: 'requester',
                         attributes: ['id', 'name'],
@@ -6995,7 +7001,8 @@ export class OrdersService {
                 }
 
                 const group = groupedByTracking.get(key)!;
-                const pieceId = request.getDataValue('piece_id');
+                const pieceId = request.getDataValue('piece')?.getDataValue('piece_id')
+                    || request.getDataValue('piece_id');
 
                 group.dimensi_sekarang.push({
                     piece_id: pieceId,
