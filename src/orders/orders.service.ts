@@ -6921,6 +6921,53 @@ export class OrdersService {
     }
 
     /**
+     * Ambil semua data reweight correction requests
+     */
+    async getAllReweightCorrectionRequests(): Promise<{ message: string; success: boolean; data: any[] }> {
+        try {
+            const requests = await this.reweightCorrectionRequestModel.findAll({
+                order: [['created_at', 'DESC']],
+                raw: true,
+            });
+
+            return {
+                message: 'Berhasil mengambil semua reweight correction requests',
+                success: true,
+                data: requests,
+            };
+        } catch (error) {
+            this.logger.error(`Error getting all reweight correction requests: ${error.message}`, error.stack);
+            throw new InternalServerErrorException('Terjadi kesalahan saat mengambil data reweight correction requests');
+        }
+    }
+
+    /**
+     * Ambil detail reweight correction request berdasarkan ID
+     */
+    async getReweightCorrectionRequestById(id: number): Promise<{ message: string; success: boolean; data: any }> {
+        try {
+            const request = await this.reweightCorrectionRequestModel.findByPk(id, { raw: true });
+            if (!request) {
+                throw new NotFoundException(`Reweight correction request dengan ID ${id} tidak ditemukan`);
+            }
+
+            return {
+                message: 'Berhasil mengambil detail reweight correction request',
+                success: true,
+                data: request,
+            };
+        } catch (error) {
+            this.logger.error(`Error getting reweight correction request ${id}: ${error.message}`, error.stack);
+
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Terjadi kesalahan saat mengambil detail reweight correction request');
+        }
+    }
+
+    /**
      * Menghitung summary statistics untuk dashboard OPS
      */
     private async calculateSummaryStatistics(areaFilter: any): Promise<SummaryStatisticsDto> {

@@ -457,6 +457,20 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Get('reweight-corrections')
+    async getAllReweightCorrectionRequests() {
+        return this.ordersService.getAllReweightCorrectionRequests();
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get('reweight-corrections/:id')
+    async getReweightCorrectionRequestById(
+        @Param('id', ParseIntPipe) id: number,
+    ) {
+        return this.ordersService.getReweightCorrectionRequestById(id);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Post('pieces/bulk-reweight')
     @UseInterceptors(FilesInterceptor('images', 5, {
         storage: diskStorage({
