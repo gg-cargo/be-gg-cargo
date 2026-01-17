@@ -6786,7 +6786,15 @@ export class OrdersService {
                 throw new BadRequestException('Order belum disubmit. Hanya order yang sudah final yang dapat dikoreksi');
             }
 
-            // 2. Validasi semua piece dalam request ada di order dan sudah di-reweight final
+            // 2. Validasi tidak ada request koreksi yang sudah ada untuk order ini
+            const existingCorrectionCount = await this.reweightCorrectionRequestModel.count({
+                where: { order_id: orderId },
+            });
+            if (existingCorrectionCount > 0) {
+                throw new BadRequestException('Permintaan koreksi reweight untuk order ini sudah ada');
+            }
+
+            // 3. Validasi semua piece dalam request ada di order dan sudah di-reweight final
             const piecesInOrder: Record<number, any> = {};
             const allPieces = await this.orderPieceModel.findAll({ where: { order_id: orderId } });
             for (const p of allPieces) {
@@ -6807,13 +6815,13 @@ export class OrdersService {
                 }
             }
 
-            // 3. Validasi user yang mengajukan permintaan
+            // 4. Validasi user yang mengajukan permintaan
             const requestingUser = await this.userModel.findByPk(userId);
             if (!requestingUser) {
                 throw new NotFoundException('User yang mengajukan permintaan tidak ditemukan');
             }
 
-            // 4. Validasi hak akses (admin hub atau staf ops)
+            // 5. Validasi hak akses (admin hub atau staf ops)
             const userLevel = requestingUser.getDataValue('level');
             const userHubId = requestingUser.getDataValue('hub_id');
             const userServiceCenterId = requestingUser.getDataValue('service_center_id');
@@ -6822,7 +6830,7 @@ export class OrdersService {
                 throw new BadRequestException('User tidak memiliki hak akses untuk mengajukan koreksi reweight');
             }
 
-            // 5. Validasi data baru tidak sama dengan data lama (hanya untuk piece yang benar-benar berubah)
+            // 6. Validasi data baru tidak sama dengan data lama (hanya untuk piece yang benar-benar berubah)
             const piecesToUpdate: Array<{ piece_id: number; current_data: any; new_data: any; }> = [];
 
             for (const item of editReweightRequestDto.pieces) {
