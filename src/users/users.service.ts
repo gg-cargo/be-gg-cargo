@@ -15,6 +15,7 @@ import { ChangeMyPasswordResponseDto } from './dto/change-my-password-response.d
 import { UserDetailResponseDto } from './dto/user-detail-response.dto';
 import { UpdateLocationDto, UpdateLocationResponseDto } from './dto/update-location.dto';
 import { Op, Sequelize } from 'sequelize';
+import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -200,7 +201,7 @@ export class UsersService {
         // Generate kode referral otomatis jika level sales (13)
         let kodeReferral: string | null = null;
         if (createUserDto.level_id === 13) {
-            kodeReferral = await this.generateUniqueReferralCode('SALES');
+            kodeReferral = await this.generateUniqueReferralCode();
         }
 
         // Create user
@@ -815,7 +816,7 @@ export class UsersService {
     /**
      * Generate kode referral untuk user sales
      */
-    async generateReferralCode(userId: number, prefix: string = 'SALES'): Promise<any> {
+    async generateReferralCode(userId: number): Promise<any> {
         // Cek apakah user sudah punya kode referral
         const user = await this.userModel.findByPk(userId, {
             attributes: ['id', 'name', 'kode_referral', 'level'],
@@ -843,7 +844,7 @@ export class UsersService {
         }
 
         // Generate kode referral baru
-        const kodeReferral = await this.generateUniqueReferralCode(prefix);
+        const kodeReferral = await this.generateUniqueReferralCode();
 
         // Update user dengan kode referral
         await this.userModel.update(
@@ -862,36 +863,22 @@ export class UsersService {
     }
 
     /**
-     * Generate unique referral code dengan format: PREFIX + 3 digit number
-     * Contoh: SALES001, SALESPLG001, dll
+     * Generate unique referral code acak tanpa prefix.
+     * Contoh: 8 karakter alfanumerik uppercase.
      */
-    private async generateUniqueReferralCode(prefix: string = 'SALES'): Promise<string> {
-        // Normalize prefix (uppercase, remove spaces)
-        const normalizedPrefix = prefix.trim().toUpperCase().replace(/\s+/g, '');
-
-        // Cari kode referral terakhir dengan prefix yang sama
-        const existingCodes = await this.userModel.findAll({
-            where: {
-                kode_referral: { [Op.like]: `${normalizedPrefix}%` },
-            },
-            order: [['id', 'DESC']],
-            limit: 1,
-        });
-
-        let nextNumber = 1;
-        if (existingCodes.length > 0) {
-            const lastCode = existingCodes[0].getDataValue('kode_referral');
-            if (lastCode) {
-                // Extract number dari kode (e.g., "SALES001" -> 1, "SALESPLG123" -> 123)
-                const match = lastCode.match(/\d+$/);
-                if (match) {
-                    nextNumber = parseInt(match[0], 10) + 1;
-                }
+    private async generateUniqueReferralCode(): Promise<string> {
+        const maxAttempts = 20;
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            const randomCode = randomBytes(4).toString('hex').toUpperCase();
+            const existing = await this.userModel.findOne({
+                where: { kode_referral: randomCode },
+                attributes: ['id'],
+            });
+            if (!existing) {
+                return randomCode;
             }
         }
-
-        // Format: SALES001, SALES002, SALESPLG001, etc.
-        return `${normalizedPrefix}${String(nextNumber).padStart(3, '0')}`;
+        throw new ConflictException('Gagal membuat kode referral unik, coba lagi');
     }
 
     /**

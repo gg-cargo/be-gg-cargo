@@ -6,7 +6,6 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangeMyPasswordDto } from './dto/change-my-password.dto';
 import { LinkSalesDto } from './dto/link-sales.dto';
-import { GenerateReferralCodeDto } from './dto/generate-referral-code.dto';
 import { UnassignedCustomersQueryDto } from './dto/unassigned-customers.dto';
 import { BulkAssignSalesDto } from './dto/bulk-assign-sales.dto';
 import { CustomerSalesAssignmentsQueryDto } from './dto/customer-sales-assignments.dto';
@@ -68,14 +67,13 @@ export class UsersController {
     /**
      * Generate kode referral untuk user sales
      */
-    @Post('generate-referral-code')
+    @Get('generate-referral-code')
     @HttpCode(HttpStatus.OK)
     async generateReferralCode(
         @Request() req,
-        @Body() generateReferralCodeDto: GenerateReferralCodeDto,
     ): Promise<any> {
         const userId = req.user.id;
-        return this.usersService.generateReferralCode(userId, generateReferralCodeDto.prefix);
+        return this.usersService.generateReferralCode(userId);
     }
 
     /**
