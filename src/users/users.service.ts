@@ -826,17 +826,17 @@ export class UsersService {
         }
 
         // Validasi level (hanya sales yang bisa generate)
-        if (user.level !== 13) {
+        if (user.getDataValue('level') !== 13) {
             throw new BadRequestException('Hanya user dengan level sales yang dapat generate kode referral');
         }
 
         // Jika sudah punya kode, return yang existing
-        if (user.kode_referral) {
+        if (user.getDataValue('kode_referral')) {
             return {
                 success: true,
                 message: 'User sudah memiliki kode referral',
                 data: {
-                    kode_referral: user.kode_referral,
+                    kode_referral: user.getDataValue('kode_referral'),
                     is_new: false,
                 },
             };

@@ -704,6 +704,10 @@ export class FinanceService {
                 where: { no_tracking: noResi },
                 include: [
                     {
+                        model: this.orderPieceModel,
+                        as: 'pieces'
+                    },
+                    {
                         model: this.orderInvoiceModel,
                         as: 'orderInvoice',
                         include: [
@@ -831,6 +835,7 @@ export class FinanceService {
                         kelurahan_pengirim: order.getDataValue('kelurahan_pengirim'),
                         kodepos_pengirim: order.getDataValue('kodepos_pengirim'),
                         no_telepon_pengirim: order.getDataValue('no_telepon_pengirim'),
+                        jumlah_koli: order.getDataValue('pieces')?.length || 0,
                         penerima: order.getDataValue('nama_penerima'),
                         alamat_penerima: order.getDataValue('alamat_penerima'),
                         provinsi_penerima: order.getDataValue('provinsi_penerima'),

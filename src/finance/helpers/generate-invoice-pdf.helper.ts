@@ -171,6 +171,7 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                 const headers = isInternational
                     ? [
                         { text: 'DESKRIPSI', style: 'tableHeader', fillColor: '#C6EAD6' },
+                        { text: 'KOLI', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
                         { text: 'UOM', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
                         { text: 'UNIT PRICE (IDR)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
                         { text: 'TOTAL HARGA (IDR)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
@@ -180,14 +181,15 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                     ]
                     : [
                         { text: 'DESKRIPSI', style: 'tableHeader', fillColor: '#C6EAD6' },
+                        { text: 'KOLI', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
                         { text: 'UOM', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
                         { text: 'UNIT PRICE', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
                         { text: 'TOTAL HARGA', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
                     ];
 
                 const widths = isInternational
-                    ? ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto']
-                    : ['*', 'auto', 'auto', 'auto'];
+                    ? ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto']
+                    : ['*', 'auto', 'auto', 'auto', 'auto'];
 
                 const formatSgd = (amount: number | undefined) => {
                     if (amount === undefined || amount === null || isNaN(Number(amount))) return '-';
@@ -207,9 +209,11 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                 const body = [
                     headers,
                     ...data.invoice_details.item_tagihan.map((item: any) => {
+                        const jumlahKoli = data?.invoice_details?.detail_pengiriman?.jumlah_koli;
                         if (isInternational) {
                             return [
                                 { text: item.deskripsi, fontSize: 9 },
+                                { text: jumlahKoli ?? '-', fontSize: 9, alignment: 'center' },
                                 { text: `${item.qty} ${item.uom}`, fontSize: 9, alignment: 'center' },
                                 { text: formatCurrency(item.harga_satuan), fontSize: 9, alignment: 'right' },
                                 { text: formatCurrency(item.total), fontSize: 9, alignment: 'right' },
@@ -220,17 +224,19 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                         }
                         return [
                             { text: item.deskripsi, fontSize: 9 },
+                            { text: jumlahKoli ?? '-', fontSize: 9, alignment: 'center' },
                             { text: `${item.qty} ${item.uom}`, fontSize: 9, alignment: 'center' },
                             { text: formatCurrency(item.harga_satuan), fontSize: 9, alignment: 'right' },
                             { text: formatCurrency(item.total), fontSize: 9, alignment: 'right' },
                         ];
                     }),
                 ];
+                const filteredBody = body.filter(Boolean);
 
                 return {
                     table: {
                         widths,
-                        body,
+                        body: filteredBody,
                     },
                     layout: 'lightHorizontalLines',
                     margin: [0, 0, 0, 10],
