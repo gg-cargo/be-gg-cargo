@@ -6031,6 +6031,7 @@ export class OrdersService {
                         delivery_driver_status: deliveryStatusMap.get(orderId) ?? null,
                         status_deliver: order.getDataValue('status_deliver'),
                         invoice_status: order.getDataValue('invoiceStatus'),
+                        status_tagihan: order.getDataValue('invoiceStatus'),
                         status_pickup: order.getDataValue('status_pickup')
                     };
                 })

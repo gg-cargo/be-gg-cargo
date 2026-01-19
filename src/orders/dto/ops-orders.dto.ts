@@ -95,6 +95,7 @@ export class OrderOpsDto {
     vendor_tracking_number?: string;
     pickup_driver_status?: number | null;
     delivery_driver_status?: number | null;
+    status_tagihan?: string;
 }
 
 export class PaginationDto {
