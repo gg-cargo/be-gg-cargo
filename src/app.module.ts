@@ -29,6 +29,7 @@ import { GeocodingModule } from './geocoding/geocoding.module';
 import { OcrModule } from './ocr/ocr.module';
 import { VendorsModule } from './vendors/vendors.module';
 import { PiecesModule } from './pieces/pieces.module';
+import { BeacukaiBridgeModule } from './bridge/beacukai-bridge.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { PiecesModule } from './pieces/pieces.module';
     OcrModule,
     VendorsModule,
     PiecesModule,
+    BeacukaiBridgeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
