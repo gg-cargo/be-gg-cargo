@@ -9,7 +9,7 @@ export class BeacukaiBridgeService {
     private readonly wsdlUrl = 'https://xpdcargo.id/modulCN23/beacukai/WSBarangKiriman.wsdl';
     private readonly authId = 'opssuppo^$xpdc2027';
     private readonly authSign = 'T1RBek5qVXhNalUxTFRJMQ0K';
-    private readonly timeoutMs = 15000;
+    private readonly timeoutMs = 60000;
     private clientPromise: Promise<soap.Client> | null = null;
 
     async kirim(xml: string): Promise<string> {
