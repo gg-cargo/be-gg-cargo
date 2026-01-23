@@ -807,6 +807,11 @@ export class FinanceService {
                 return sum + (isNaN(itemTotal) ? 0 : itemTotal);
             }, 0);
 
+            const roundAmount = (value: any) => {
+                const num = Number(value) || 0;
+                return billedCurrency === 'IDR' ? Math.round(num) : Math.round(num * 100) / 100;
+            };
+
             const diskon = invoice.getDataValue('discount') || 0;
             const ppn = invoice.getDataValue('ppn') || 0;
             const pph = invoice.getDataValue('pph') || 0;
@@ -852,11 +857,11 @@ export class FinanceService {
                         layanan: order.getDataValue('layanan')
                     },
                     item_tagihan: itemTagihan,
-                    subtotal_layanan: subtotalLayanan,
-                    diskon: diskon,
-                    ppn: ppn,
-                    pph: pph,
-                    total_akhir_tagihan: totalAkhir,
+                    subtotal_layanan: roundAmount(subtotalLayanan),
+                    diskon: roundAmount(diskon),
+                    ppn: roundAmount(ppn),
+                    pph: roundAmount(pph),
+                    total_akhir_tagihan: roundAmount(totalAkhir),
                     kode_unik_pembayaran: invoice.getDataValue('kode_unik'),
                     status_pembayaran: invoice.getDataValue('konfirmasi_bayar') ? 'Sudah Bayar' : 'Belum Bayar',
                     info_rekening_bank: banks.map((bank: any) => ({
@@ -1253,6 +1258,11 @@ export class FinanceService {
                 return sum + (isNaN(itemTotal) ? 0 : itemTotal);
             }, 0);
 
+            const roundAmount = (value: any) => {
+                const num = Number(value) || 0;
+                return billedCurrency === 'IDR' ? Math.round(num) : Math.round(num * 100) / 100;
+            };
+
             const ppnAmount = invoice.getDataValue('ppn') || 0;
             const pphAmount = invoice.getDataValue('pph') || 0;
             const discountVoucherContract = invoice.getDataValue('discount') || 0;
@@ -1304,17 +1314,17 @@ export class FinanceService {
                     billing_items: isInternational ? resolvedBillingItems : resolvedBillingItems
                         .filter((item: any) => item.description === 'Biaya Pengiriman Barang'),
 
-                    discount_voucher_contract: invoice.getDataValue('discount') || 0,
+                    discount_voucher_contract: roundAmount(discountVoucherContract),
                     additional_fees: isInternational ? [] : resolvedBillingItems
                         .filter((item: any) => item.description !== 'Biaya Pengiriman Barang'),
-                    asuransi_amount: invoice.getDataValue('asuransi') || 0,
-                    packing_amount: invoice.getDataValue('packing') || 0,
+                    asuransi_amount: roundAmount(asuransiAmount),
+                    packing_amount: roundAmount(packingAmount),
                     pph_percentage: 2,
-                    pph_amount: pphAmount,
+                    pph_amount: roundAmount(pphAmount),
                     ppn_percentage: 11,
-                    ppn_amount: ppnAmount,
+                    ppn_amount: roundAmount(ppnAmount),
                     gross_up: invoice.getDataValue('isGrossUp') === 1,
-                    total_all: totalAll,
+                    total_all: roundAmount(totalAll),
 
                     pay_information: banks.map((bank: any) => ({
                         id: bank.id,
