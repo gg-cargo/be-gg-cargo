@@ -604,7 +604,7 @@ export class FinanceService {
                     status_tagihan: shipment.getDataValue('invoiceStatus'),
                     tgl_tagihan: shipment.getDataValue('orderInvoice')?.getDataValue('invoice_date') || shipment.getDataValue('date_submit'),
                     dibuat_oleh: shipment.getDataValue('orderUser')?.getDataValue('name') || 'Unknown',
-                    total_harga: shipment.getDataValue('total_harga') || 0,
+                    total_harga: Math.round(Number(shipment.getDataValue('total_harga')) || 0),
                     sisa_tagihan: shipment.getDataValue('sisaAmount') || 0,
                 };
             });
