@@ -699,7 +699,7 @@ export class FinanceService {
 
     async getInvoiceByResi(noResi: string) {
         try {
-            const roundToTwo = (value: any): number => {
+            const roundToTwoInvoice = (value: any): number => {
                 const num = Number(value);
                 if (!Number.isFinite(num)) return 0;
                 return Math.round(num * 100) / 100;
@@ -840,7 +840,7 @@ export class FinanceService {
                         kelurahan_pengirim: order.getDataValue('kelurahan_pengirim'),
                         kodepos_pengirim: order.getDataValue('kodepos_pengirim'),
                         no_telepon_pengirim: order.getDataValue('no_telepon_pengirim'),
-                        jumlah_koli: roundToTwo(order.getDataValue('pieces')?.length || 0),
+                        jumlah_koli: roundToTwoInvoice(order.getDataValue('pieces')?.length || 0),
                         penerima: order.getDataValue('nama_penerima'),
                         alamat_penerima: order.getDataValue('alamat_penerima'),
                         provinsi_penerima: order.getDataValue('provinsi_penerima'),
@@ -1116,7 +1116,7 @@ export class FinanceService {
 
     async getInvoiceByInvoiceNo(invoiceNo: string) {
         try {
-            const roundToTwo = (value: any): number => {
+            const roundToTwoInvoice = (value: any): number => {
                 const num = Number(value);
                 if (!Number.isFinite(num)) return 0;
                 return Math.round(num * 100) / 100;
@@ -1236,7 +1236,7 @@ export class FinanceService {
 
                 return {
                     description: detail.getDataValue('description'),
-                    quantity: qty,
+                    quantity: roundToTwoInvoice(qty),
                     uom: detail.getDataValue('uom'),
                     unit_price: unitPrice,
                     total: isNaN(total) ? 0 : total,
@@ -1288,10 +1288,10 @@ export class FinanceService {
                             besaran_cc: order.getDataValue('besaran_cc'),
                             no_polisi_motor: order.getDataValue('no_polisi_motor'),
                             motor_notes: order.getDataValue('motor_notes'),
-                            jumlah_koli: roundToTwo(pieces.length),
-                            berat_actual_kg: roundToTwo(parseFloat(order.getDataValue('total_berat')) || 0),
-                            berat_volume_kg: roundToTwo(parseFloat(order.getDataValue('total_berat')) || 0), // Assuming same as actual weight
-                            berat_kubikasi_m3: roundToTwo(kubikasi)
+                            jumlah_koli: roundToTwoInvoice(pieces.length),
+                            berat_actual_kg: roundToTwoInvoice(parseFloat(order.getDataValue('total_berat')) || 0),
+                            berat_volume_kg: roundToTwoInvoice(parseFloat(order.getDataValue('total_berat')) || 0), // Assuming same as actual weight
+                            berat_kubikasi_m3: roundToTwoInvoice(kubikasi)
                         },
                         status_pengiriman: order.getDataValue('status'),
                         consignee: {

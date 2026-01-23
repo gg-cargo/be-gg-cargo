@@ -171,7 +171,7 @@ export async function generateDeliveryNotePDF(payload: {
         { text: o.asal || '-', noWrap: false, style: 'cellWrap' },
         { text: o.tujuan || '-', noWrap: false, style: 'cellWrap' },
         { text: String(o.jumlah_koli), alignment: 'right', noWrap: false, style: 'cellWrap' },
-        { text: String(Math.round(Number(o.berat_barang || 0))), alignment: 'right', noWrap: false, style: 'cellWrap' },
+        { text: (Math.round(Number(o.berat_barang || 0) * 100) / 100).toFixed(2), alignment: 'right', noWrap: false, style: 'cellWrap' },
     ]);
 
     const ordersTable = {

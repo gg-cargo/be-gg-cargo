@@ -1983,14 +1983,14 @@ export class DriversService {
                 const detail_koli = orderPieces.slice(0, 10).map((piece: any) => ({
                     id: piece.id || '',
                     piece_id: piece.piece_id || '',
-                    berat: Number(piece.berat) || 0,
-                    panjang: Number(piece.panjang) || 0,
-                    lebar: Number(piece.lebar) || 0,
-                    tinggi: Number(piece.tinggi) || 0,
+                berat: Math.round((Number(piece.berat) || 0) * 100) / 100,
+                panjang: Math.round((Number(piece.panjang) || 0) * 100) / 100,
+                lebar: Math.round((Number(piece.lebar) || 0) * 100) / 100,
+                tinggi: Math.round((Number(piece.tinggi) || 0) * 100) / 100,
                 }));
 
                 barangInfoMap.set(orderId, {
-                    jumlah_koli,
+                jumlah_koli: Math.round(jumlah_koli * 100) / 100,
                     total_berat_kg: Number(total_berat_kg.toFixed(2)),
                     detail_koli: detail_koli.length > 0 ? detail_koli : undefined,
                 });

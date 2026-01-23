@@ -633,6 +633,11 @@ export class OrdersService {
         const transaction = await this.orderModel.sequelize!.transaction();
 
         try {
+            const roundToTwo = (value: any): number => {
+                const num = Number(value);
+                if (!Number.isFinite(num)) return 0;
+                return Math.round(num * 100) / 100;
+            };
             const { total_koli, total_berat, total_kubikasi } = updateItemDetailsDto;
 
             // 1. Validasi Order
@@ -686,15 +691,17 @@ export class OrdersService {
             };
 
             if (order.getDataValue('layanan') == 'Sewa truck') {
-                responseData.jumlah_koli = total_koli !== undefined ? total_koli : parseInt(order.sewaTruckKoli || '0');
-                responseData.total_berat = total_berat !== undefined ? total_berat : parseFloat(order.sewaTruckBerat || '0');
+                responseData.jumlah_koli = roundToTwo(total_koli !== undefined ? total_koli : parseInt(order.sewaTruckKoli || '0'));
+                responseData.total_berat = roundToTwo(total_berat !== undefined ? total_berat : parseFloat(order.sewaTruckBerat || '0'));
             } else {
-                responseData.jumlah_koli = total_koli !== undefined ? total_koli : order.countUpdateKoli;
-                responseData.total_berat = total_berat !== undefined ? total_berat : parseFloat(order.total_berat || '0');
+                responseData.jumlah_koli = roundToTwo(total_koli !== undefined ? total_koli : order.countUpdateKoli);
+                responseData.total_berat = roundToTwo(total_berat !== undefined ? total_berat : parseFloat(order.total_berat || '0'));
             }
 
             // Ambil total_kubikasi dari database (baik yang baru diupdate atau yang sudah ada)
-            responseData.total_kubikasi = total_kubikasi !== undefined ? total_kubikasi : parseFloat(order.total_kubikasi?.toString() || '0');
+            responseData.total_kubikasi = roundToTwo(
+                total_kubikasi !== undefined ? total_kubikasi : parseFloat(order.total_kubikasi?.toString() || '0')
+            );
 
             return {
                 message: 'Detail barang master berhasil diperbarui',
@@ -2439,8 +2446,8 @@ export class OrdersService {
         totalWeight = Math.round(totalWeight);
 
         const volumeWeight = totalVolume * 250;
-        const kubikasi = totalVolume.toFixed(2);
-        const beratVolume = volumeWeight.toFixed(2);
+        const kubikasi = (Math.round(totalVolume * 100) / 100).toFixed(2);
+        const beratVolume = (Math.round(volumeWeight * 100) / 100).toFixed(2);
 
         // 5. Siapkan data untuk PDF
         const dataPDF: any = {
@@ -2475,7 +2482,7 @@ export class OrdersService {
                 surat_jalan_balik: order.surat_jalan_balik || 'Tidak',
                 catatan: order.customs_notes || order.remark_sales || '-',
                 jumlah_koli: totalQty,
-                berat_aktual: totalWeight,
+                berat_aktual: (Math.round(totalWeight * 100) / 100).toFixed(2),
                 berat_volume: beratVolume,
                 kubikasi: kubikasi,
             },
@@ -4252,19 +4259,19 @@ export class OrdersService {
                         postal_code: order.getDataValue('kodepos_penerima')
                     },
                     summary_metrics: {
-                        jumlah_koli: jumlahKoli,
-                        berat_aktual_kg: Math.round(beratAktual * 100) / 100, // Round to 2 decimals
+                        jumlah_koli: Math.round(jumlahKoli * 100) / 100,
+                        berat_aktual_kg: Math.round(beratAktual * 100) / 100,
                         berat_volume_kg: Math.round(beratVolume * 100) / 100,
-                        kubikasi_m3: Math.round(kubikasi * 1000) / 1000, // Round to 3 decimals
-                        total_harga: parseFloat(order.getDataValue('total_harga')) || 0
+                        kubikasi_m3: Math.round(kubikasi * 100) / 100,
+                        total_harga: Math.round((parseFloat(order.getDataValue('total_harga')) || 0) * 100) / 100
                     },
                     pieces_detail: pieces.map((piece: any, index: number) => ({
                         id: piece.getDataValue('id'),
                         piece_id: piece.getDataValue('piece_id'),
-                        berat: parseFloat(piece.getDataValue('berat')) || 0,
-                        panjang: parseFloat(piece.getDataValue('panjang')) || 0,
-                        lebar: parseFloat(piece.getDataValue('lebar')) || 0,
-                        tinggi: parseFloat(piece.getDataValue('tinggi')) || 0,
+                        berat: Math.round((parseFloat(piece.getDataValue('berat')) || 0) * 100) / 100,
+                        panjang: Math.round((parseFloat(piece.getDataValue('panjang')) || 0) * 100) / 100,
+                        lebar: Math.round((parseFloat(piece.getDataValue('lebar')) || 0) * 100) / 100,
+                        tinggi: Math.round((parseFloat(piece.getDataValue('tinggi')) || 0) * 100) / 100,
                         reweight_status: piece.getDataValue('reweight_status') || 0,
                         pickup_status: piece.getDataValue('pickup_status') || 0
                     }))
