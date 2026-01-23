@@ -210,7 +210,10 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                     headers,
                     ...data.invoice_details.item_tagihan.map((item: any) => {
                         const jumlahKoli = data?.invoice_details?.detail_pengiriman?.jumlah_koli;
-                        const jumlahKoliText = jumlahKoli === undefined || jumlahKoli === null ? '-' : `${jumlahKoli} pcs`;
+                        const jumlahKoliNumber = Number(jumlahKoli);
+                        const jumlahKoliText = Number.isFinite(jumlahKoliNumber)
+                            ? `${jumlahKoliNumber.toFixed(2)} pcs`
+                            : '-';
                         if (isInternational) {
                             return [
                                 { text: item.deskripsi, fontSize: 9 },
