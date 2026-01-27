@@ -1332,7 +1332,7 @@ export class FinanceService {
                         account_name: bank.account_name,
                         bank_name: bank.bank_name
                     })),
-                    invoice_notes: invoice.getDataValue('notes')
+                    invoice_notes: order.getDataValue('customs_notes')
                 }
             };
 
