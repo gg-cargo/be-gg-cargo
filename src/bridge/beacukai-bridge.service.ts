@@ -8,7 +8,7 @@ export class BeacukaiBridgeService {
     private readonly logger = new Logger(BeacukaiBridgeService.name);
     private readonly wsdlUrl = 'https://xpdcargo.id/modulCN23/beacukai/WSBarangKiriman.wsdl';
     private readonly authId = 'opssuppo^$xpdc2027';
-    private readonly authSign = 'T1RBek5qVXhNalUxTFRJMQ0K';
+    private readonly authSign = 'TURrd016WTFNVEkxTFRJMg0K';
     private readonly timeoutMs = 60000;
     private clientPromise: Promise<soap.Client> | null = null;
 
