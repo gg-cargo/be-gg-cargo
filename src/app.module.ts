@@ -30,6 +30,9 @@ import { OcrModule } from './ocr/ocr.module';
 import { VendorsModule } from './vendors/vendors.module';
 import { PiecesModule } from './pieces/pieces.module';
 import { BeacukaiBridgeModule } from './bridge/beacukai-bridge.module';
+import { MasterRoutesModule } from './master-routes/master-routes.module';
+import { RouteGatesModule } from './route-gates/route-gates.module';
+import { DeparturesModule } from './departures/departures.module';
 
 @Module({
   imports: [
@@ -63,6 +66,12 @@ import { BeacukaiBridgeModule } from './bridge/beacukai-bridge.module';
     VendorsModule,
     PiecesModule,
     BeacukaiBridgeModule,
+    // master routes & related
+    MasterRoutesModule,
+    // route gates
+    RouteGatesModule,
+    // departures
+    DeparturesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
