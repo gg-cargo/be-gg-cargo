@@ -6,11 +6,6 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class RouteGatesController {
   constructor(private readonly service: RouteGatesService) {}
 
-  @Get('dataset')
-  async dataset(@Query('bbox') bbox?: string) {
-    const data = await this.service.dataset(bbox);
-    return { success: true, message: 'Route gates dataset', data };
-  }
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/gates')

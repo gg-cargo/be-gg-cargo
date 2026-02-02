@@ -5,9 +5,10 @@ import { MasterRoutesService } from './master-routes.service';
 import { MasterRoute } from '../models/master-route.model';
 import { RouteGate } from '../models/route-gate.model';
 import { RoutePolyline } from '../models/route-polyline.model';
+import { RouteGatesModule } from '../route-gates/route-gates.module';
 
 @Module({
-  imports: [SequelizeModule.forFeature([MasterRoute, RouteGate, RoutePolyline])],
+  imports: [SequelizeModule.forFeature([MasterRoute, RouteGate, RoutePolyline]), RouteGatesModule],
   controllers: [MasterRoutesController],
   providers: [MasterRoutesService],
   exports: [MasterRoutesService],

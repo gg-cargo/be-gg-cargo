@@ -3,10 +3,11 @@ import { MasterRoutesService } from './master-routes.service';
 import { CreateMasterRouteDto } from './dto/create-master-route.dto';
 import { UpdateMasterRouteDto } from './dto/update-master-route.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RouteGatesService } from '../route-gates/route-gates.service';
 
 @Controller('master/routes')
 export class MasterRoutesController {
-  constructor(private readonly masterRoutesService: MasterRoutesService) {}
+  constructor(private readonly masterRoutesService: MasterRoutesService, private readonly routeGatesService: RouteGatesService) {}
 
   @Get()
   async list(
@@ -31,6 +32,12 @@ export class MasterRoutesController {
     } catch (err) {
       throw new HttpException('Failed to create master route', HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  @Get('dataset')
+  async dataset(@Query('bbox') bbox?: string) {
+    const data = await this.routeGatesService.dataset(bbox);
+    return { success: true, message: 'Route gates dataset', data };
   }
 
   @Get(':id')
