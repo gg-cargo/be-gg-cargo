@@ -51,9 +51,25 @@ export async function generateDeliveryNotePDF(payload: {
         : undefined;
 
     // Siapkan konten QR dari seluruh daftar piece_id (satu QR saja)
-    const qrContent = (payload.piece_ids && payload.piece_ids.length > 0)
-        ? JSON.stringify({ type: 'piece_ids', dn: payload.no_delivery_note, ids: payload.piece_ids })
-        : undefined;
+    // Jika data terlalu besar untuk QR, fallback ke summary (count + sample ids)
+    let qrContent: string | undefined = undefined;
+    if (payload.piece_ids && payload.piece_ids.length > 0) {
+        const full = JSON.stringify({ type: 'piece_ids', dn: payload.no_delivery_note, ids: payload.piece_ids });
+        // pdfmake QR implementation has size limits depending on encoding; keep a safe threshold
+        const MAX_QR_LENGTH = 800; // safe default (~bytes/characters)
+        if (full.length <= MAX_QR_LENGTH) {
+            qrContent = full;
+        } else {
+            // fallback: include count and sample (first 20 ids) to keep QR compact
+            const sample = payload.piece_ids.slice(0, 20);
+            qrContent = JSON.stringify({
+                type: 'piece_ids_summary',
+                dn: payload.no_delivery_note,
+                count: payload.piece_ids.length,
+                sample_ids: sample
+            });
+        }
+    }
 
     const headerTop = {
         columns: [
@@ -258,16 +274,24 @@ export async function generateDeliveryNotePDF(payload: {
         defaultStyle: { font: 'Roboto', fontSize: 10 },
     } as any;
 
-    const pdfDoc = printer.createPdfKitDocument(docDefinition);
-    const pdfDir = ensurePdfDir();
-    const fileName = `delivery-note-${payload.no_delivery_note}.pdf`;
-    const filePath = path.join(pdfDir, fileName);
-    const writeStream = fs.createWriteStream(filePath);
-    pdfDoc.pipe(writeStream);
-    pdfDoc.end();
-    await new Promise<void>((resolve, reject) => {
-        writeStream.on('finish', () => resolve());
-        writeStream.on('error', (e) => reject(e));
-    });
-    return `/pdf/${fileName}`;
+    try {
+        const pdfDoc = printer.createPdfKitDocument(docDefinition);
+        const pdfDir = ensurePdfDir();
+        const fileName = `delivery-note-${payload.no_delivery_note}.pdf`;
+        const filePath = path.join(pdfDir, fileName);
+        const writeStream = fs.createWriteStream(filePath);
+        pdfDoc.pipe(writeStream);
+        pdfDoc.end();
+        await new Promise<void>((resolve, reject) => {
+            writeStream.on('finish', () => resolve());
+            writeStream.on('error', (e) => reject(e));
+        });
+        return `/pdf/${fileName}`;
+    } catch (err: any) {
+        // Log minimal non-sensitive error info and rethrow for controller to handle
+        const msg = `Failed to generate delivery note PDF: ${err?.message || String(err)}`;
+        // Use console.error to ensure message appears in logs even if logger not available
+        console.error(msg);
+        throw new Error(msg);
+    }
 }
