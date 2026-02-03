@@ -26,6 +26,12 @@ export class Departure extends Model<Departure> {
   @Column({ type: DataType.INTEGER.UNSIGNED, allowNull: true })
   assigned_route_id: number;
 
+  @Column({ type: DataType.INTEGER.UNSIGNED, allowNull: true })
+  current_hub: number;
+
+  @Column({ type: DataType.INTEGER.UNSIGNED, allowNull: true })
+  next_hub: number;
+
   @Column({ type: DataType.BIGINT, allowNull: true, defaultValue: 0 })
   est_fuel: number;
 

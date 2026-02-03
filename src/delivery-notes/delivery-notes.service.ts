@@ -198,6 +198,8 @@ export class DeliveryNotesService {
             toll_total: 0,
             grand_total: 0,
             status: 'scheduled',
+            current_hub: hubAsal.getDataValue('id'),
+            next_hub: nextHubId
         } as any);
 
         // Insert order_histories untuk setiap order

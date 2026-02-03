@@ -7,12 +7,13 @@ import { TruckList } from '../models/truck-list.model';
 import { User } from '../models/user.model';
 import { MasterRoute } from '../models/master-route.model';
 import { LogGps } from '../models/log-gps.model';
+import { Hub } from '../models/hub.model';
 
 @Module({
-  imports: [SequelizeModule.forFeature([Departure, TruckList, User, MasterRoute, LogGps])],
+  imports: [SequelizeModule.forFeature([Departure, TruckList, User, MasterRoute, LogGps, Hub])],
   controllers: [DeparturesController],
   providers: [DeparturesService],
   exports: [DeparturesService],
 })
-export class DeparturesModule {}
+export class DeparturesModule { }
 
