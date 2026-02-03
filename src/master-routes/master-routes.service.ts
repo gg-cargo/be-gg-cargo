@@ -89,13 +89,13 @@ export class MasterRoutesService {
         continue;
       }
       gates.push({
-        id: g.id,
-        external_id: g.external_id,
-        name: g.name,
-        type: g.type,
-        lat: g.lat,
-        lng: g.lng,
-        toll_fee: (a as any).toll_fee_override ?? g.toll_fee,
+        id: g.getDataValue('id'),
+        external_id: g.getDataValue('external_id'),
+        name: g.getDataValue('name'),
+        type: g.getDataValue('type'),
+        lat: g.getDataValue('lat'),
+        lng: g.getDataValue('lng'),
+        toll_fee: (a as any).toll_fee_override ?? g.getDataValue('toll_fee'),
         sequence_index: (a as any).sequence_index,
       });
     }
