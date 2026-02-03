@@ -81,7 +81,23 @@ export class DeparturesService {
         include: [{ model: RouteGate, as: 'routeGate' }],
         order: [['sequence_index', 'ASC']],
       });
-      (route as any).gates = masterGates.map((mg: any) => mg.getDataValue('routeGate')).filter(Boolean);
+      (route as any).gates = masterGates
+        .map((mg: any) => {
+          const rg = mg.getDataValue('routeGate');
+          if (!rg) return null;
+          return {
+            id: rg.getDataValue ? rg.getDataValue('id') : rg.id,
+            external_id: rg.getDataValue ? rg.getDataValue('external_id') : rg.external_id || null,
+            name: rg.getDataValue ? rg.getDataValue('name') : rg.name,
+            type: rg.getDataValue ? rg.getDataValue('type') : rg.type,
+            lat: rg.getDataValue ? rg.getDataValue('lat') : rg.lat,
+            lng: rg.getDataValue ? rg.getDataValue('lng') : rg.lng,
+            toll_fee: rg.getDataValue ? rg.getDataValue('toll_fee') : rg.toll_fee,
+            sequence_index: mg.getDataValue('sequence_index'),
+            toll_fee_override: mg.getDataValue('toll_fee_override') ?? null,
+          };
+        })
+        .filter(Boolean);
     }
     // get latest gps by driver_id or truck_id (try driver_id)
     let lastPos: { lat: number; lng: number; at: Date } | null = null;
@@ -101,18 +117,21 @@ export class DeparturesService {
     if (route) {
       // route may include gates and polylines via association
       const gates = (route as any).gates || [];
-      
+
       const sortedGates = gates
-        .map((g: any) => ({
-          id: g.getDataValue('id'),
-          external_id: g.getDataValue('external_id') || null,
-          name: g.getDataValue('name'),
-          type: g.getDataValue('type'),
-          lat: g.getDataValue('lat'),
-          lng: g.getDataValue('lng'),
-          toll_fee: g.getDataValue('toll_fee'),
-          sequence_index: g.getDataValue('sequence_index'),
-        }))
+        .map((g: any) => {
+          const get = (obj: any, key: string) => (obj && typeof obj.getDataValue === 'function' ? obj.getDataValue(key) : obj?.[key]);
+          return {
+            id: get(g, 'id'),
+            external_id: get(g, 'external_id') || null,
+            name: get(g, 'name'),
+            type: get(g, 'type'),
+            lat: get(g, 'lat'),
+            lng: get(g, 'lng'),
+            toll_fee: get(g, 'toll_fee_override') ?? get(g, 'toll_fee'),
+            sequence_index: get(g, 'sequence_index'),
+          };
+        })
         .sort((a: any, b: any) => (a.sequence_index || 0) - (b.sequence_index || 0));
 
       routePayload = {
