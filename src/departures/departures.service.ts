@@ -6,6 +6,8 @@ import { User } from '../models/user.model';
 import { MasterRoute } from '../models/master-route.model';
 import { LogGps } from '../models/log-gps.model';
 import { Hub } from '../models/hub.model';
+import { MasterRouteGate } from '../models/master-route-gate.model';
+import { RouteGate } from '../models/route-gate.model';
 
 @Injectable()
 export class DeparturesService {
@@ -25,7 +27,7 @@ export class DeparturesService {
   ) { }
 
   async findAll() {
-    const deps = await this.departureModel.findAll({ order: [['scheduled_at', 'DESC']] , raw: true});
+    const deps = await this.departureModel.findAll({ order: [['scheduled_at', 'DESC']], raw: true });
     if (!deps || deps.length === 0) return deps;
 
     const driverIds = Array.from(new Set(deps.map((d: any) => d.driver_id).filter(Boolean)));
@@ -69,23 +71,68 @@ export class DeparturesService {
   async findOne(id: number) {
     const d = await this.departureModel.findByPk(id);
     if (!d) throw new NotFoundException('Departure not found');
-    const route = d.assigned_route_id ? await this.routeModel.findByPk(d.assigned_route_id) : null;
+    console.log(d.assigned_route_id);
+    let route: any = null;
+    if (d.getDataValue('assigned_route_id')) {
+      route = await this.routeModel.findByPk(d.getDataValue('assigned_route_id'));
+      // fetch master route gates (join via MasterRouteGate -> RouteGate)
+      const masterGates = await MasterRouteGate.findAll({
+        where: { master_route_id: route.id },
+        include: [{ model: RouteGate, as: 'routeGate' }],
+        order: [['sequence_index', 'ASC']],
+      });
+      (route as any).gates = masterGates.map((mg: any) => mg.getDataValue('routeGate')).filter(Boolean);
+    }
     // get latest gps by driver_id or truck_id (try driver_id)
     let lastPos: { lat: number; lng: number; at: Date } | null = null;
-    if (d.driver_id) {
-      const lg = await this.logGpsModel.findOne({ where: { user_id: String(d.driver_id) }, order: [['created_at', 'DESC']] });
+    if (d.getDataValue('driver_id')) {
+      const lg = await this.logGpsModel.findOne({ where: { user_id: String(d.getDataValue('driver_id')) }, order: [['created_at', 'DESC']] });
       if (lg && lg.latlng) {
         const parts = lg.latlng.split(',').map(Number);
         if (parts.length >= 2) lastPos = { lat: parts[0], lng: parts[1], at: lg.created_at };
       }
     }
-    const driver = d.driver_id ? await this.userModel.findByPk(d.driver_id, { attributes: ['id', 'name'], raw: true }) : null;
-    const currentHub = d.current_hub ? await this.hubModel.findByPk(d.current_hub, { attributes: ['id', 'nama'], raw: true }) : null;
-    const nextHub = d.next_hub ? await this.hubModel.findByPk(d.next_hub, { attributes: ['id', 'nama'], raw: true }) : null;
+    const driver = d.getDataValue('driver_id') ? await this.userModel.findByPk(d.getDataValue('driver_id'), { attributes: ['id', 'name'], raw: true }) : null;
+    const currentHub = d.getDataValue('current_hub') ? await this.hubModel.findByPk(d.getDataValue('current_hub'), { attributes: ['id', 'nama'], raw: true }) : null;
+    const nextHub = d.getDataValue('next_hub') ? await this.hubModel.findByPk(d.getDataValue('next_hub'), { attributes: ['id', 'nama'], raw: true }) : null;
+
+    // build route payload if exists
+    let routePayload: any = null;
+    if (route) {
+      // route may include gates and polylines via association
+      const gates = (route as any).gates || [];
+      
+      const sortedGates = gates
+        .map((g: any) => ({
+          id: g.getDataValue('id'),
+          external_id: g.getDataValue('external_id') || null,
+          name: g.getDataValue('name'),
+          type: g.getDataValue('type'),
+          lat: g.getDataValue('lat'),
+          lng: g.getDataValue('lng'),
+          toll_fee: g.getDataValue('toll_fee'),
+          sequence_index: g.getDataValue('sequence_index'),
+        }))
+        .sort((a: any, b: any) => (a.sequence_index || 0) - (b.sequence_index || 0));
+
+      routePayload = {
+        id: (route as any).getDataValue('id'),
+        route_code: (route as any).getDataValue('route_code'),
+        origin_name: (route as any).getDataValue('origin_name'),
+        origin_lat: (route as any).getDataValue('origin_lat'),
+        origin_lng: (route as any).getDataValue('origin_lng'),
+        destination_name: (route as any).getDataValue('destination_name'),
+        destination_lat: (route as any).getDataValue('destination_lat'),
+        destination_lng: (route as any).getDataValue('destination_lng'),
+        default_distance_km: (route as any).getDataValue('default_distance_km'),
+        default_duration_min: (route as any).getDataValue('default_duration_min'),
+        gates: sortedGates,
+      };
+    }
 
     return {
       departure: d,
-      route,
+      route: routePayload,
       lastPos,
       driver_name: driver ? driver.name : null,
       current_hub_name: currentHub ? currentHub.nama : null,
