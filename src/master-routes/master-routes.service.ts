@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/sequelize';
 import { MasterRoute } from '../models/master-route.model';
 import { RouteGate } from '../models/route-gate.model';
 import { RoutePolyline } from '../models/route-polyline.model';
+import { MasterRouteGate } from '../models/master-route-gate.model';
 import { CreateMasterRouteDto } from './dto/create-master-route.dto';
 import { UpdateMasterRouteDto } from './dto/update-master-route.dto';
 import { Op } from 'sequelize';
@@ -17,6 +18,8 @@ export class MasterRoutesService {
     private routeGateModel: typeof RouteGate,
     @InjectModel(RoutePolyline)
     private routePolylineModel: typeof RoutePolyline,
+    @InjectModel(MasterRouteGate)
+    private masterRouteGateModel: typeof MasterRouteGate,
   ) {}
 
   async findAll(params: { page?: number; limit?: number; search?: string; road_constraint?: string }) {
@@ -65,26 +68,31 @@ export class MasterRoutesService {
   }
 
   async findOne(id: number) {
-    const route = await this.masterRouteModel.findByPk(id, {
-      include: [
-        {
-          model: this.routeGateModel,
-          as: 'gates',
-          required: false,
-          order: [['sequence_index', 'ASC']],
-        },
-        {
-          model: this.routePolylineModel,
-          as: 'polylines',
-          required: false,
-        },
-      ],
-    });
+    const route = await this.masterRouteModel.findByPk(id);
     if (!route) throw new NotFoundException('Master route not found');
 
-    // attach latest polyline if any
+    // load assigned gates via join table (ordered)
+    const assignments = await this.masterRouteGateModel.findAll({
+      where: { master_route_id: id },
+      include: [{ model: this.routeGateModel }],
+      order: [['sequence_index', 'ASC']],
+    });
+    const gates = assignments.map((a: any) => {
+      const g = a.routeGate;
+      return {
+        id: g.id,
+        external_id: g.external_id,
+        name: g.name,
+        type: g.type,
+        lat: g.lat,
+        lng: g.lng,
+        toll_fee: a.toll_fee_override ?? g.toll_fee,
+        sequence_index: a.sequence_index,
+      };
+    });
+
     const latestPolyline = await this.routePolylineModel.findOne({ where: { master_route_id: id }, order: [['created_at', 'DESC']] });
-    return { route, latestPolyline };
+    return { route, gates, latestPolyline };
   }
 
   async update(id: number, dto: UpdateMasterRouteDto) {

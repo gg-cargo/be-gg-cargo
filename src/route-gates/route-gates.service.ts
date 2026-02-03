@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
 import { RouteGate } from '../models/route-gate.model';
 import { MasterRoute } from '../models/master-route.model';
+import { MasterRouteGate } from '../models/master-route-gate.model';
 
 @Injectable()
 export class RouteGatesService {
@@ -11,6 +12,8 @@ export class RouteGatesService {
     private routeGateModel: typeof RouteGate,
     @InjectModel(MasterRoute)
     private masterRouteModel: typeof MasterRoute,
+    @InjectModel(MasterRouteGate)
+    private masterRouteGateModel: typeof MasterRouteGate,
   ) {}
 
   async dataset(bbox?: string) {
@@ -34,28 +37,35 @@ export class RouteGatesService {
     const route = await this.masterRouteModel.findByPk(routeId);
     if (!route) throw new NotFoundException('Master route not found');
 
+    // Must link existing route gate by external_id or route_gate_id; do not create dataset entries here
+    let gate: any = null;
     if (payload.external_id) {
-      // find existing gate
-      const gate = await this.routeGateModel.findOne({ where: { external_id: payload.external_id } });
-      if (!gate) throw new NotFoundException('External gate not found');
-      gate.master_route_id = routeId;
-      if (typeof payload.sequence_index === 'number') gate.sequence_index = payload.sequence_index;
-      await gate.save();
-      return gate;
+      gate = await this.routeGateModel.findOne({ where: { external_id: payload.external_id } });
+    } else if (payload.route_gate_id) {
+      gate = await this.routeGateModel.findByPk(payload.route_gate_id);
     }
 
-    // create new gate
-    const { name, lat, lng, type = 'tol', toll_fee = 0, sequence_index = null } = payload;
-    if (!name || !lat || !lng) throw new BadRequestException('name, lat, lng required');
-    const created = await this.routeGateModel.create({
+    if (!gate) {
+      throw new BadRequestException('Provide existing gate via external_id or route_gate_id. Creating new dataset entries here is not allowed.');
+    }
+
+    // create assignment in join table if not exists
+    const existing = await this.masterRouteGateModel.findOne({
+      where: { master_route_id: routeId, route_gate_id: gate.id },
+    });
+    if (existing) {
+      // update sequence/toll override if provided
+      if (typeof payload.sequence_index === 'number') existing.sequence_index = payload.sequence_index;
+      if (typeof payload.toll_fee === 'number') existing.toll_fee_override = payload.toll_fee;
+      await existing.save();
+      return existing;
+    }
+
+    const created = await this.masterRouteGateModel.create({
       master_route_id: routeId,
-      external_id: null,
-      name,
-      type,
-      lat,
-      lng,
-      toll_fee: toll_fee || 0,
-      sequence_index,
+      route_gate_id: gate.id,
+      sequence_index: typeof payload.sequence_index === 'number' ? payload.sequence_index : null,
+      toll_fee_override: typeof payload.toll_fee === 'number' ? payload.toll_fee : null,
       created_at: new Date(),
       updated_at: new Date(),
     } as any);
@@ -63,28 +73,19 @@ export class RouteGatesService {
   }
 
   async updateGate(routeId: number, gateId: number, payload: any) {
-    const gate = await this.routeGateModel.findByPk(gateId);
-    if (!gate) throw new NotFoundException('Gate not found');
-    if (gate.master_route_id !== routeId) {
-      // allow updating even if not linked? enforce link
-      throw new BadRequestException('Gate not linked to this route');
-    }
-    if (typeof payload.toll_fee !== 'undefined') gate.toll_fee = payload.toll_fee;
-    if (typeof payload.sequence_index !== 'undefined') gate.sequence_index = payload.sequence_index;
-    await gate.save();
-    return gate;
+    // update assignment record
+    const assign = await this.masterRouteGateModel.findOne({ where: { master_route_id: routeId, route_gate_id: gateId } });
+    if (!assign) throw new NotFoundException('Gate assignment not found for this route');
+    if (typeof payload.toll_fee !== 'undefined') assign.toll_fee_override = payload.toll_fee;
+    if (typeof payload.sequence_index !== 'undefined') assign.sequence_index = payload.sequence_index;
+    await assign.save();
+    return assign;
   }
 
   async removeGateFromRoute(routeId: number, gateId: number) {
-    const gate = await this.routeGateModel.findByPk(gateId);
-    if (!gate) throw new NotFoundException('Gate not found');
-    if (gate.master_route_id !== routeId) {
-      throw new BadRequestException('Gate not linked to this route');
-    }
-    // disassociate from route (do not delete)
-    gate.master_route_id = null;
-    gate.sequence_index = null;
-    await gate.save();
+    const assign = await this.masterRouteGateModel.findOne({ where: { master_route_id: routeId, route_gate_id: gateId } });
+    if (!assign) throw new NotFoundException('Gate assignment not found for this route');
+    await assign.destroy();
     return { success: true };
   }
 }
