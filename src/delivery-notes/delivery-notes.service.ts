@@ -7,6 +7,7 @@ import { OrderDeliveryNote } from '../models/order-delivery-note.model';
 import { Hub } from '../models/hub.model';
 import { TruckList } from '../models/truck-list.model';
 import { JobAssign } from '../models/job-assign.model';
+import { Departure } from '../models/departure.model';
 import { CreateDeliveryNoteDto, CreateDeliveryNoteResponseDto } from './dto/create-delivery-note.dto';
 import { generateDeliveryNotePDF } from './helpers/generate-delivery-note-pdf.helper';
 import { User } from '../models/user.model';
@@ -32,6 +33,7 @@ export class DeliveryNotesService {
         @InjectModel(Hub) private readonly hubModel: typeof Hub,
         @InjectModel(TruckList) private readonly truckListModel: typeof TruckList,
         @InjectModel(JobAssign) private readonly jobAssignModel: typeof JobAssign,
+        @InjectModel(Departure) private readonly departureModel: typeof Departure,
         @InjectModel(User) private readonly userModel: typeof User,
         @InjectModel(OrderHistory) private readonly orderHistoryModel: typeof OrderHistory,
         @InjectModel(OrderManifestInbound) private readonly orderManifestInboundModel: typeof OrderManifestInbound,
@@ -183,18 +185,19 @@ export class DeliveryNotesService {
             { where: { order_id: { [Op.in]: orderIds } } }
         );
 
-        // Buat job_assigns
-        await this.jobAssignModel.create({
-            no_polisi: dto.no_polisi,
-            number: noDeliveryNote,
-            distance: '0',
-            status: 0,
-            remark: null,
-            waypoints: null,
-            konfirmasi_at: null,
-            completed_at: null,
-            completed_day: null,
-            created_at: new Date(),
+        // Buat departure record (mengganti job_assigns)
+        await this.departureModel.create({
+            truck_id: null, // bisa diisi lookup truckList jika tersedia
+            driver_id: dto.transporter_id,
+            scheduled_at: today,
+            assigned_route_id: null,
+            est_fuel: 0,
+            est_driver1: 0,
+            est_driver2: 0,
+            other_costs: 0,
+            toll_total: 0,
+            grand_total: 0,
+            status: 'scheduled',
         } as any);
 
         // Insert order_histories untuk setiap order
