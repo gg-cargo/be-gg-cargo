@@ -62,6 +62,8 @@ export class MasterRoutesService {
       route_type: dto.route_type || 'one_way',
       road_constraint: dto.road_constraint || 'tol',
       service_zone: dto.service_zone || null,
+      default_distance_km: (dto as any).default_distance ?? (dto as any).default_distance_km ?? 0,
+      default_duration_min: (dto as any).default_duration ?? (dto as any).default_duration_min ?? 0,
       created_by: createdBy || null,
     } as any);
     return created;
@@ -117,5 +119,7 @@ export class MasterRoutesService {
     await route.destroy();
     return { success: true };
   }
+
+  
 }
 

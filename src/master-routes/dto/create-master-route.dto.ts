@@ -36,5 +36,13 @@ export class CreateMasterRouteDto {
   @IsOptional()
   @IsString()
   service_zone?: string;
+
+  @IsOptional()
+  @IsNumber()
+  default_distance?: number;
+
+  @IsOptional()
+  @IsNumber()
+  default_duration?: number;
 }
 
