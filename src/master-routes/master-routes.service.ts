@@ -77,19 +77,28 @@ export class MasterRoutesService {
       include: [{ model: this.routeGateModel }],
       order: [['sequence_index', 'ASC']],
     });
-    const gates = assignments.map((a: any) => {
-      const g = a.routeGate;
-      return {
+    const gates: any[] = [];
+    for (const a of assignments) {
+      let g = (a as any).routeGate;
+      if (!g) {
+        // fallback: load gate record explicitly
+        g = await this.routeGateModel.findByPk((a as any).route_gate_id);
+      }
+      if (!g) {
+        // skip if still missing
+        continue;
+      }
+      gates.push({
         id: g.id,
         external_id: g.external_id,
         name: g.name,
         type: g.type,
         lat: g.lat,
         lng: g.lng,
-        toll_fee: a.toll_fee_override ?? g.toll_fee,
-        sequence_index: a.sequence_index,
-      };
-    });
+        toll_fee: (a as any).toll_fee_override ?? g.toll_fee,
+        sequence_index: (a as any).sequence_index,
+      });
+    }
 
     const latestPolyline = await this.routePolylineModel.findOne({ where: { master_route_id: id }, order: [['created_at', 'DESC']] });
     return { route, gates, latestPolyline };
