@@ -16,11 +16,13 @@ export class MasterTarif extends Model<MasterTarif> {
     declare tariff_id: string;
 
     @Column({
+        type: DataType.STRING,
         allowNull: false
     })
     service_type: string;
 
     @Column({
+        type: DataType.STRING,
         allowNull: false
     })
     sub_service: string;
