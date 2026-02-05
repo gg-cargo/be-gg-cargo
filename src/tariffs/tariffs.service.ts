@@ -83,8 +83,9 @@ export class TariffsService {
             }
 
             if (errors.length > 0) {
+                const errorMessage = errors.map(e => `Row ${e.row} (${e.tariff_name}): ${e.error}`).join('; ');
                 throw new BadRequestException({
-                    message: 'Bulk create failed with validation errors',
+                    message: `Bulk create failed: ${errorMessage}`,
                     errors,
                 });
             }
