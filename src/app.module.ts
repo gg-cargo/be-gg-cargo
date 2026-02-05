@@ -33,6 +33,7 @@ import { BeacukaiBridgeModule } from './bridge/beacukai-bridge.module';
 import { MasterRoutesModule } from './master-routes/master-routes.module';
 import { RouteGatesModule } from './route-gates/route-gates.module';
 import { DeparturesModule } from './departures/departures.module';
+import { TariffsModule } from './tariffs/tariffs.module';
 
 @Module({
   imports: [
@@ -72,6 +73,8 @@ import { DeparturesModule } from './departures/departures.module';
     RouteGatesModule,
     // departures
     DeparturesModule,
+    // tariffs
+    TariffsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
