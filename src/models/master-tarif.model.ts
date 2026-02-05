@@ -16,13 +16,11 @@ export class MasterTarif extends Model<MasterTarif> {
     declare tariff_id: string;
 
     @Column({
-        type: DataType.ENUM('KIRIM_BARANG', 'KIRIM_MOTOR', 'SEWA_TRUK', 'INTERNATIONAL'),
         allowNull: false
     })
     service_type: string;
 
     @Column({
-        type: DataType.ENUM('HEMAT', 'REGULER', 'PAKET', 'EXPRESS'),
         allowNull: false
     })
     sub_service: string;
