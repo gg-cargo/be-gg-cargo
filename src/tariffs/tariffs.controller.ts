@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 
 @Controller('master/tariffs')
 export class TariffsController {
@@ -51,7 +52,7 @@ export class TariffsController {
     @UseInterceptors(
         FileInterceptor('file', {
             storage: diskStorage({
-                destination: './uploads/temp',
+                destination: os.tmpdir(),
                 filename: (req, file, cb) => {
                     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
                     cb(null, `tariff-${uniqueSuffix}${path.extname(file.originalname)}`);
