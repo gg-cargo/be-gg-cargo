@@ -133,11 +133,11 @@ class SurchargeDto {
 
 export class CreateTariffDto {
     @IsNotEmpty()
-    @IsEnum(['KIRIM_BARANG', 'KIRIM_MOTOR', 'SEWA_TRUK', 'INTERNATIONAL'])
+    @IsString()
     service_type: string;
 
     @IsNotEmpty()
-    @IsEnum(['HEMAT', 'REGULER', 'PAKET', 'EXPRESS'])
+    @IsString()
     sub_service: string;
 
     @IsNotEmpty()
