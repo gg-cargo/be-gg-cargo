@@ -83,7 +83,6 @@ export class TariffsService {
             }
 
             if (errors.length > 0) {
-                await transaction.rollback();
                 throw new BadRequestException({
                     message: 'Bulk create failed with validation errors',
                     errors,
