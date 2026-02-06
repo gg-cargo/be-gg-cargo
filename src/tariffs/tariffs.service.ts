@@ -413,7 +413,7 @@ export class TariffsService {
 
     async updateStatus(id: string, dto: UpdateTariffStatusDto) {
         const tariff = await this.findOne(id);
-        tariff.is_active = dto.is_active;
+        tariff.setDataValue('is_active', dto.is_active);
         await tariff.save();
         return tariff;
     }
