@@ -34,6 +34,7 @@ import { MasterRoutesModule } from './master-routes/master-routes.module';
 import { RouteGatesModule } from './route-gates/route-gates.module';
 import { DeparturesModule } from './departures/departures.module';
 import { TariffsModule } from './tariffs/tariffs.module';
+import { MasterServicesModule } from './services-master/services-master.module';
 
 @Module({
   imports: [
@@ -74,7 +75,10 @@ import { TariffsModule } from './tariffs/tariffs.module';
     // departures
     DeparturesModule,
     // tariffs
+    // tariffs
     TariffsModule,
+    // services
+    MasterServicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
