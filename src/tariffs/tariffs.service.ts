@@ -8,7 +8,10 @@ import { TariffVehicleDaily } from '../models/tarif-vehicle-daily.model';
 import { TariffSeaFreight } from '../models/tarif-sea-freight.model';
 import { TariffSurcharge } from '../models/tarif-surcharge.model';
 import { BulkCreateTariffDto, CreateTariffDto } from './dto/bulk-create-tariff.dto';
+import { GetTariffsFilterDto } from './dto/get-tariffs-filter.dto';
+import { UpdateTariffStatusDto } from './dto/update-tariff-status.dto';
 import { Sequelize } from 'sequelize-typescript';
+import { Op } from 'sequelize';
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 
@@ -352,4 +355,182 @@ export class TariffsService {
             throw new BadRequestException('Failed to parse Excel file. Please check the format.');
         }
     }
+
+    async findAll(params: GetTariffsFilterDto) {
+        const { page = 1, limit = 10, search, service_type, customer_id, is_active, start_date, end_date } = params;
+        const offset = (page - 1) * limit;
+
+        const where: any = {};
+
+        if (search) {
+            where[Op.or] = [
+                { tariff_id: { [Op.like]: `%${search}%` } },
+                { tariff_name: { [Op.like]: `%${search}%` } },
+                { origin_zone: { [Op.like]: `%${search}%` } },
+                { destination_zone: { [Op.like]: `%${search}%` } }
+            ];
+        }
+
+        if (service_type) where.service_type = service_type;
+        if (customer_id) where.customer_id = customer_id;
+        if (is_active !== undefined) where.is_active = is_active;
+        if (start_date) where.effective_start = { [Op.gte]: start_date };
+        if (end_date) where.effective_end = { [Op.lte]: end_date };
+
+        const { rows, count } = await this.masterTarifModel.findAndCountAll({
+            where,
+            offset,
+            limit,
+            order: [['created_at', 'DESC']],
+        });
+
+        return {
+            data: rows,
+            total: count,
+            page,
+            limit
+        };
+    }
+
+    async findOne(id: string) {
+        const tariff = await this.masterTarifModel.findByPk(id, {
+            include: [
+                { model: this.tariffWeightTierModel },
+                { model: this.tariffRoutePriceModel },
+                { model: this.tariffDistanceModel },
+                { model: this.tariffVehicleDailyModel },
+                { model: this.tariffSeaFreightModel },
+                { model: this.tariffSurchargeModel }
+            ]
+        });
+
+        if (!tariff) {
+            throw new BadRequestException('Tariff not found');
+        }
+
+        return tariff;
+    }
+
+    async updateStatus(id: string, dto: UpdateTariffStatusDto) {
+        const tariff = await this.findOne(id);
+        tariff.is_active = dto.is_active;
+        await tariff.save();
+        return tariff;
+    }
+
+    async remove(id: string) {
+        const tariff = await this.findOne(id);
+
+        // Soft delete or hard delete? Assuming hard delete for now as per best practice example, 
+        // but typically business apps prefer soft delete. 
+        // However, if we cascade, hard delete cleans up related tables.
+        // Let's assume transaction is needed for safety if we manually delete related, 
+        // but Sequelize constraints might handle it.
+        // For simplicity and strict adherence to typical clean-up:
+
+        await tariff.destroy();
+    }
+
+    async duplicate(id: string) {
+        const original = await this.findOne(id);
+        const transaction = await this.sequelize.transaction();
+
+        try {
+            const newTariffId = this.generateTariffId();
+
+            // Clone master
+            const masterData: any = original.get({ plain: true });
+            delete masterData.tariff_id;
+            delete masterData.createdAt;
+            delete masterData.updatedAt;
+
+            const newTariff = await this.masterTarifModel.create({
+                ...masterData,
+                tariff_id: newTariffId,
+                tariff_name: `${masterData.tariff_name} (Copy)`,
+                is_active: false
+            } as any, { transaction });
+
+            // Clone relations
+            // Weight Tiers
+            if (original.weightTiers?.length) {
+                await Promise.all(original.weightTiers.map(t =>
+                    this.tariffWeightTierModel.create({
+                        ...t.get({ plain: true }),
+                        tier_id: this.generateId('TIER'),
+                        tariff_id: newTariffId,
+                        created_at: undefined, updated_at: undefined
+                    } as any, { transaction })
+                ));
+            }
+
+            // Route Prices
+            if (original.routePrices?.length) {
+                await Promise.all(original.routePrices.map(r =>
+                    this.tariffRoutePriceModel.create({
+                        ...r.get({ plain: true }),
+                        route_price_id: this.generateId('ROUTE'),
+                        tariff_id: newTariffId,
+                        created_at: undefined, updated_at: undefined
+                    } as any, { transaction })
+                ));
+            }
+
+            // Distance
+            if (original.distanceConfigs?.length) {
+                await Promise.all(original.distanceConfigs.map(d =>
+                    this.tariffDistanceModel.create({
+                        ...d.get({ plain: true }),
+                        distance_id: this.generateId('DIST'),
+                        tariff_id: newTariffId,
+                        created_at: undefined, updated_at: undefined
+                    } as any, { transaction })
+                ));
+            }
+
+            // Vehicle Daily
+            if (original.dailyRates?.length) {
+                await Promise.all(original.dailyRates.map(v =>
+                    this.tariffVehicleDailyModel.create({
+                        ...v.get({ plain: true }),
+                        daily_id: this.generateId('DAILY'),
+                        tariff_id: newTariffId,
+                        created_at: undefined, updated_at: undefined
+                    } as any, { transaction })
+                ));
+            }
+
+            // Sea Freight
+            if (original.seaFreights?.length) {
+                await Promise.all(original.seaFreights.map(s =>
+                    this.tariffSeaFreightModel.create({
+                        ...s.get({ plain: true }),
+                        sea_id: this.generateId('SEA'),
+                        tariff_id: newTariffId,
+                        created_at: undefined, updated_at: undefined
+                    } as any, { transaction })
+                ));
+            }
+
+            // Surcharges
+            if (original.surcharges?.length) {
+                await Promise.all(original.surcharges.map(s =>
+                    this.tariffSurchargeModel.create({
+                        ...s.get({ plain: true }),
+                        surcharge_id: this.generateId('SUR'),
+                        tariff_id: newTariffId,
+                        created_at: undefined, updated_at: undefined
+                    } as any, { transaction })
+                ));
+            }
+
+            await transaction.commit();
+            return { new_tariff_id: newTariffId };
+
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
+    }
 }
+

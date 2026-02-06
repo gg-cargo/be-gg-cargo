@@ -2,7 +2,11 @@ import {
     Controller,
     Post,
     Get,
+    Patch,
+    Delete,
     Body,
+    Param,
+    Query,
     UseGuards,
     UseInterceptors,
     UploadedFile,
@@ -15,6 +19,8 @@ import { diskStorage } from 'multer';
 import { Response } from 'express';
 import { TariffsService } from './tariffs.service';
 import { BulkCreateTariffDto } from './dto/bulk-create-tariff.dto';
+import { GetTariffsFilterDto } from './dto/get-tariffs-filter.dto';
+import { UpdateTariffStatusDto } from './dto/update-tariff-status.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
@@ -24,6 +30,39 @@ import * as os from 'os';
 @Controller('master/tariffs')
 export class TariffsController {
     constructor(private readonly tariffsService: TariffsService) { }
+
+    @Get()
+    async findAll(@Query() filterDto: GetTariffsFilterDto) {
+        const result = await this.tariffsService.findAll(filterDto);
+        return { success: true, message: 'Tariffs retrieved successfully', ...result };
+    }
+
+    @Get(':id')
+    async findOne(@Param('id') id: string) {
+        const result = await this.tariffsService.findOne(id);
+        return { success: true, message: 'Tariff details retrieved successfully', data: result };
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id/status')
+    async updateStatus(@Param('id') id: string, @Body() dto: UpdateTariffStatusDto) {
+        const result = await this.tariffsService.updateStatus(id, dto);
+        return { success: true, message: 'Tariff status updated successfully', data: result };
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post(':id/duplicate')
+    async duplicate(@Param('id') id: string) {
+        const result = await this.tariffsService.duplicate(id);
+        return { success: true, message: 'Tariff duplicated successfully', data: result };
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Delete(':id')
+    async remove(@Param('id') id: string) {
+        await this.tariffsService.remove(id);
+        return { success: true, message: 'Tariff deleted successfully' };
+    }
 
     @UseGuards(JwtAuthGuard)
     @Post('bulk-create')
