@@ -453,8 +453,8 @@ export class TariffsService {
 
             // Clone relations
             // Weight Tiers
-            if (original.weightTiers?.length) {
-                await Promise.all(original.weightTiers.map(t =>
+            if (original.getDataValue('weightTiers')?.length) {
+                await Promise.all(original.getDataValue('weightTiers').map((t: any) =>
                     this.tariffWeightTierModel.create({
                         ...t.get({ plain: true }),
                         tier_id: this.generateId('TIER'),
@@ -465,8 +465,8 @@ export class TariffsService {
             }
 
             // Route Prices
-            if (original.routePrices?.length) {
-                await Promise.all(original.routePrices.map(r =>
+            if (original.getDataValue('routePrices')?.length) {
+                await Promise.all(original.getDataValue('routePrices').map((r: any) =>
                     this.tariffRoutePriceModel.create({
                         ...r.get({ plain: true }),
                         route_price_id: this.generateId('ROUTE'),
@@ -477,8 +477,8 @@ export class TariffsService {
             }
 
             // Distance
-            if (original.distanceConfigs?.length) {
-                await Promise.all(original.distanceConfigs.map(d =>
+            if (original.getDataValue('distanceConfigs')?.length) {
+                await Promise.all(original.getDataValue('distanceConfigs').map((d: any) =>
                     this.tariffDistanceModel.create({
                         ...d.get({ plain: true }),
                         distance_id: this.generateId('DIST'),
@@ -489,8 +489,8 @@ export class TariffsService {
             }
 
             // Vehicle Daily
-            if (original.dailyRates?.length) {
-                await Promise.all(original.dailyRates.map(v =>
+            if (original.getDataValue('dailyRates')?.length) {
+                await Promise.all(original.getDataValue('dailyRates').map((v: any) =>
                     this.tariffVehicleDailyModel.create({
                         ...v.get({ plain: true }),
                         daily_id: this.generateId('DAILY'),
@@ -501,8 +501,8 @@ export class TariffsService {
             }
 
             // Sea Freight
-            if (original.seaFreights?.length) {
-                await Promise.all(original.seaFreights.map(s =>
+            if (original.getDataValue('seaFreights')?.length) {
+                await Promise.all(original.getDataValue('seaFreights').map((s: any) =>
                     this.tariffSeaFreightModel.create({
                         ...s.get({ plain: true }),
                         sea_id: this.generateId('SEA'),
@@ -513,8 +513,8 @@ export class TariffsService {
             }
 
             // Surcharges
-            if (original.surcharges?.length) {
-                await Promise.all(original.surcharges.map(s =>
+            if (original.getDataValue('surcharges')?.length) {
+                await Promise.all(original.getDataValue('surcharges').map((s: any) =>
                     this.tariffSurchargeModel.create({
                         ...s.get({ plain: true }),
                         surcharge_id: this.generateId('SUR'),
@@ -549,7 +549,7 @@ export class TariffsService {
             let distanceCharge = 0;
             let dailyRentalCharge = 0;
 
-            switch (tariff.pricing_model) {
+            switch (tariff.getDataValue('pricing_model')) {
                 case 'WEIGHT_BASED':
                     const calculatedWeight = this.calculateChargeableWeight(dto.weight_kg, dto.volume_m3);
                     const result = this.calculateWeightBasedPrice(tariff, calculatedWeight);
@@ -574,16 +574,16 @@ export class TariffsService {
             }
 
             // Apply minimum charge
-            basePrice = Math.max(basePrice, Number(tariff.min_charge));
+            basePrice = Math.max(basePrice, Number(tariff.getDataValue('min_charge')));
 
             // Calculate additional charges
             const fragileCharge = dto.is_fragile ? 25000 : 0;
-            const insuranceCharge = dto.insurance_value ? Number(dto.insurance_value) * 0.01 : 0;
+            const insuranceCharge = dto.insurance_value ? Number(dto.getDataValue('insurance_value')) * 0.01 : 0;
 
             // Calculate surcharges
             let surchargeTotal = 0;
-            if (tariff.surcharges && tariff.surcharges.length > 0) {
-                surchargeTotal = this.calculateSurcharges(tariff.surcharges, basePrice);
+            if (tariff.getDataValue('surcharges') && tariff.getDataValue('surcharges').length > 0) {
+                surchargeTotal = this.calculateSurcharges(tariff.getDataValue('surcharges'), basePrice);
             }
 
             // Subtotal
@@ -600,9 +600,9 @@ export class TariffsService {
             const finalPrice = afterDiscount + tax;
 
             return {
-                tariff_id: tariff.tariff_id,
-                tariff_name: tariff.tariff_name,
-                pricing_model: tariff.pricing_model,
+                tariff_id: tariff.getDataValue('tariff_id'),
+                tariff_name: tariff.getDataValue('tariff_name'),
+                pricing_model: tariff.getDataValue('pricing_model'),
                 breakdown: {
                     base_price: Math.round(basePrice),
                     weight_charge: Math.round(weightCharge),
@@ -618,7 +618,7 @@ export class TariffsService {
                     final_price: Math.round(finalPrice),
                 },
                 metadata: {
-                    currency: tariff.currency,
+                    currency: tariff.getDataValue('currency'),
                     effective_date: dto.effective_date,
                     calculated_at: new Date().toISOString(),
                     valid_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -709,66 +709,67 @@ export class TariffsService {
     }
 
     private calculateRouteBasedPrice(tariff: any, origin: string, destination: string, itemType?: string): number {
-        if (!tariff.routePrices || tariff.routePrices.length === 0) {
+        if (!tariff.getDataValue('routePrices') || tariff.getDataValue('routePrices').length === 0) {
             throw new BadRequestException('No route prices configured for this tariff');
         }
 
-        const route = tariff.routePrices.find((r: any) =>
-            r.origin_city === origin &&
-            r.destination_city === destination &&
-            (!itemType || r.item_type === itemType || !r.item_type)
+        const norm = (v: any) => String(v ?? '').trim().toLowerCase();
+        const route = tariff.getDataValue('routePrices').find((r: any) =>
+            norm(r.getDataValue('origin_city')) === norm(origin) &&
+            norm(r.getDataValue('destination_city')) === norm(destination) &&
+            (!itemType || norm(r.getDataValue('item_type')) === norm(itemType) || !r.getDataValue('item_type'))
         );
 
         if (!route) {
             throw new BadRequestException(`No route price found for ${origin} to ${destination}`);
         }
 
-        return Number(route.price);
+        return Number(route.getDataValue('price'));
     }
 
     private calculateDistanceBasedPrice(tariff: any, distanceKm: number, itemType?: string): { totalPrice: number; distanceCharge: number } {
-        if (!tariff.distanceConfigs || tariff.distanceConfigs.length === 0) {
+        if (!tariff.getDataValue('distanceConfigs') || tariff.getDataValue('distanceConfigs').length === 0) {
             throw new BadRequestException('No distance configuration for this tariff');
         }
 
-        const config = tariff.distanceConfigs.find((d: any) =>
-            (!itemType || d.item_type === itemType || !d.item_type) &&
-            (!d.max_km || distanceKm <= Number(d.max_km))
+        const config = tariff.getDataValue('distanceConfigs').find((d: any) =>
+            (!itemType || d.getDataValue('item_type') === itemType || !d.getDataValue('item_type')) &&
+            (!d.getDataValue('max_km') || distanceKm <= Number(d.getDataValue('max_km')))
         );
 
         if (!config) {
             throw new BadRequestException(`No distance configuration found for ${distanceKm} km`);
         }
 
-        const basePrice = Number(config.base_price);
-        const distanceCharge = distanceKm * Number(config.rate_per_km);
+        const basePrice = Number(config.getDataValue('base_price'));
+        const distanceCharge = distanceKm * Number(config.getDataValue('rate_per_km'));
         const totalPrice = basePrice + distanceCharge;
 
         return { totalPrice, distanceCharge };
     }
 
     private calculateDailyBasedPrice(tariff: any, vehicleType: string, rentalDays: number): number {
-        if (!tariff.dailyRates || tariff.dailyRates.length === 0) {
+        if (!tariff.getDataValue('dailyRates') || tariff.getDataValue('dailyRates').length === 0) {
             throw new BadRequestException('No daily rates configured for this tariff');
         }
 
-        const rate = tariff.dailyRates.find((r: any) => r.vehicle_type === vehicleType);
+        const rate = tariff.getDataValue('dailyRates').find((r: any) => r.getDataValue('vehicle_type') === vehicleType);
 
         if (!rate) {
             throw new BadRequestException(`No daily rate found for vehicle type: ${vehicleType}`);
         }
 
-        return rentalDays * Number(rate.daily_rate);
+        return rentalDays * Number(rate.getDataValue('daily_rate'));
     }
 
     private calculateSurcharges(surcharges: any[], baseAmount: number): number {
         let total = 0;
 
         for (const surcharge of surcharges) {
-            if (surcharge.calculation === 'FIXED') {
-                total += Number(surcharge.value);
-            } else if (surcharge.calculation === 'PERCENTAGE') {
-                total += baseAmount * (Number(surcharge.value) / 100);
+            if (surcharge.getDataValue('calculation') === 'FIXED') {
+                total += Number(surcharge.getDataValue('value'));
+            } else if (surcharge.getDataValue('calculation') === 'PERCENTAGE') {
+                total += baseAmount * (Number(surcharge.getDataValue('value')) / 100);
             }
         }
 
