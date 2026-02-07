@@ -29,7 +29,6 @@ export class SubServicesService {
         if (params.search) {
             where[Op.or] = [
                 { sub_service_name: { [Op.like]: `%${params.search}%` } },
-                { sub_service_code: { [Op.like]: `%${params.search}%` } },
             ];
         }
 
@@ -63,10 +62,10 @@ export class SubServicesService {
 
         // Uniqueness check
         const existing = await this.subServiceModel.findOne({
-            where: { sub_service_code: createSubServiceDto.sub_service_code }
+            where: { sub_service_name: createSubServiceDto.sub_service_name }
         });
         if (existing) {
-            throw new BadRequestException(`Sub Service code ${createSubServiceDto.sub_service_code} already exists`);
+            throw new BadRequestException(`Sub Service name ${createSubServiceDto.sub_service_name} already exists`);
         }
 
         return this.subServiceModel.create(createSubServiceDto as any);
@@ -82,12 +81,12 @@ export class SubServicesService {
             }
         }
 
-        if (updateSubServiceDto.sub_service_code && updateSubServiceDto.sub_service_code !== subService.sub_service_code) {
+        if (updateSubServiceDto.sub_service_name && updateSubServiceDto.sub_service_name !== subService.sub_service_name) {
             const existing = await this.subServiceModel.findOne({
-                where: { sub_service_code: updateSubServiceDto.sub_service_code }
+                where: { sub_service_name: updateSubServiceDto.sub_service_name }
             });
             if (existing) {
-                throw new BadRequestException(`Sub Service code ${updateSubServiceDto.sub_service_code} already exists`);
+                throw new BadRequestException(`Sub Service name ${updateSubServiceDto.sub_service_name} already exists`);
             }
         }
 

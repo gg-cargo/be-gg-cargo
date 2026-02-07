@@ -8,10 +8,6 @@ export class CreateSubServiceDto {
 
     @IsString()
     @IsNotEmpty()
-    sub_service_code: string;
-
-    @IsString()
-    @IsNotEmpty()
     sub_service_name: string;
 
     @IsInt()

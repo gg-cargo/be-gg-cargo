@@ -33,13 +33,6 @@ export class SubService extends Model<SubService> {
 
     @Column({
         type: DataType.STRING,
-        allowNull: false,
-        unique: true
-    })
-    sub_service_code: string;
-
-    @Column({
-        type: DataType.STRING,
         allowNull: false
     })
     sub_service_name: string;

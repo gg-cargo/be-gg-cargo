@@ -27,7 +27,6 @@ export class ServicesService {
         if (params.search) {
             where[Op.or] = [
                 { service_name: { [Op.like]: `%${params.search}%` } },
-                { service_code: { [Op.like]: `%${params.search}%` } },
             ];
         }
 
@@ -53,24 +52,11 @@ export class ServicesService {
     }
 
     async create(createServiceDto: CreateServiceDto): Promise<Service> {
-        // Uniqueness check for code
-        // const existing = await this.serviceModel.findOne({ where: { service_code: createServiceDto.service_code } });
-        // if (existing) {
-        //     throw new BadRequestException(`Service code ${createServiceDto.service_code} already exists`);
-        // }
-
         return this.serviceModel.create(createServiceDto as any);
     }
 
     async update(id: string, updateServiceDto: UpdateServiceDto): Promise<Service> {
         const service = await this.findOne(id);
-
-        if (updateServiceDto.service_code && updateServiceDto.service_code !== service.service_code) {
-            const existing = await this.serviceModel.findOne({ where: { service_code: updateServiceDto.service_code } });
-            if (existing) {
-                throw new BadRequestException(`Service code ${updateServiceDto.service_code} already exists`);
-            }
-        }
 
         return service.update(updateServiceDto);
     }
