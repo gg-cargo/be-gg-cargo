@@ -16,7 +16,7 @@ export class Service extends Model<Service> {
 
     @Column({
         type: DataType.STRING,
-        allowNull: false,
+        allowNull: true,
         unique: true
     })
     service_code: string;
