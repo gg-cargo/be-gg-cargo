@@ -54,10 +54,10 @@ export class ServicesService {
 
     async create(createServiceDto: CreateServiceDto): Promise<Service> {
         // Uniqueness check for code
-        const existing = await this.serviceModel.findOne({ where: { service_code: createServiceDto.service_code } });
-        if (existing) {
-            throw new BadRequestException(`Service code ${createServiceDto.service_code} already exists`);
-        }
+        // const existing = await this.serviceModel.findOne({ where: { service_code: createServiceDto.service_code } });
+        // if (existing) {
+        //     throw new BadRequestException(`Service code ${createServiceDto.service_code} already exists`);
+        // }
 
         return this.serviceModel.create(createServiceDto as any);
     }
