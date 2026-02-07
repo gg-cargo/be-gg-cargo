@@ -532,5 +532,247 @@ export class TariffsService {
             throw error;
         }
     }
+
+    async simulate(dto: any) {
+        try {
+            // Find matching tariff
+            const tariff = await this.findMatchingTariff(dto);
+
+            if (!tariff) {
+                throw new BadRequestException('No tariff found for the given parameters');
+            }
+
+            // Calculate base price based on pricing model
+            let basePrice = 0;
+            let weightCharge = 0;
+            let volumeCharge = 0;
+            let distanceCharge = 0;
+            let dailyRentalCharge = 0;
+
+            switch (tariff.pricing_model) {
+                case 'WEIGHT_BASED':
+                    const calculatedWeight = this.calculateChargeableWeight(dto.weight_kg, dto.volume_m3);
+                    const result = this.calculateWeightBasedPrice(tariff, calculatedWeight);
+                    basePrice = result.price;
+                    weightCharge = result.price;
+                    break;
+
+                case 'ROUTE_BASED':
+                    basePrice = this.calculateRouteBasedPrice(tariff, dto.origin, dto.destination, dto.item_type);
+                    break;
+
+                case 'DISTANCE_BASED':
+                    const distResult = this.calculateDistanceBasedPrice(tariff, dto.distance_km, dto.item_type);
+                    basePrice = distResult.totalPrice;
+                    distanceCharge = distResult.distanceCharge;
+                    break;
+
+                case 'DAILY_BASED':
+                    dailyRentalCharge = this.calculateDailyBasedPrice(tariff, dto.vehicle_type, dto.rental_days);
+                    basePrice = dailyRentalCharge;
+                    break;
+            }
+
+            // Apply minimum charge
+            basePrice = Math.max(basePrice, Number(tariff.min_charge));
+
+            // Calculate additional charges
+            const fragileCharge = dto.is_fragile ? 25000 : 0;
+            const insuranceCharge = dto.insurance_value ? Number(dto.insurance_value) * 0.01 : 0;
+
+            // Calculate surcharges
+            let surchargeTotal = 0;
+            if (tariff.surcharges && tariff.surcharges.length > 0) {
+                surchargeTotal = this.calculateSurcharges(tariff.surcharges, basePrice);
+            }
+
+            // Subtotal
+            const subtotal = basePrice + fragileCharge + insuranceCharge + surchargeTotal;
+
+            // Apply discount (if promo code provided)
+            const discount = dto.promo_code ? subtotal * 0.1 : 0;
+
+            // Calculate tax (PPN 11%)
+            const afterDiscount = subtotal - discount;
+            const tax = afterDiscount * 0.11;
+
+            // Final price
+            const finalPrice = afterDiscount + tax;
+
+            return {
+                tariff_id: tariff.tariff_id,
+                tariff_name: tariff.tariff_name,
+                pricing_model: tariff.pricing_model,
+                breakdown: {
+                    base_price: Math.round(basePrice),
+                    weight_charge: Math.round(weightCharge),
+                    volume_charge: Math.round(volumeCharge),
+                    distance_charge: Math.round(distanceCharge),
+                    daily_rental_charge: Math.round(dailyRentalCharge),
+                    fragile_charge: Math.round(fragileCharge),
+                    insurance_charge: Math.round(insuranceCharge),
+                    surcharge_total: Math.round(surchargeTotal),
+                    subtotal: Math.round(subtotal),
+                    discount: Math.round(discount),
+                    tax: Math.round(tax),
+                    final_price: Math.round(finalPrice),
+                },
+                metadata: {
+                    currency: tariff.currency,
+                    effective_date: dto.effective_date,
+                    calculated_at: new Date().toISOString(),
+                    valid_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                },
+            };
+        } catch (error) {
+            this.logger.error('Simulation error:', error);
+            throw error;
+        }
+    }
+
+    private async findMatchingTariff(dto: any) {
+        const where: any = {
+            service_type: dto.service_type,
+            sub_service: dto.sub_service,
+            is_active: true,
+            effective_start: { [Op.lte]: dto.effective_date },
+            [Op.or]: [
+                { effective_end: { [Op.gte]: dto.effective_date } },
+                { effective_end: null }
+            ]
+        };
+
+        if (dto.origin) {
+            where[Op.or] = [
+                { origin_zone: dto.origin },
+                { origin_zone: null }
+            ];
+        }
+
+        if (dto.destination) {
+            where[Op.and] = [
+                {
+                    [Op.or]: [
+                        { destination_zone: dto.destination },
+                        { destination_zone: null }
+                    ]
+                }
+            ];
+        }
+
+        if (dto.customer_id) {
+            where[Op.or] = [
+                { customer_id: dto.customer_id },
+                { customer_id: null }
+            ];
+        }
+
+        const tariff = await this.masterTarifModel.findOne({
+            where,
+            include: [
+                { model: this.tariffWeightTierModel, as: 'weightTiers' },
+                { model: this.tariffRoutePriceModel, as: 'routePrices' },
+                { model: this.tariffDistanceModel, as: 'distanceConfigs' },
+                { model: this.tariffVehicleDailyModel, as: 'dailyRates' },
+                { model: this.tariffSurchargeModel, as: 'surcharges' }
+            ],
+            order: [
+                ['customer_id', 'DESC'],
+                ['effective_start', 'DESC']
+            ]
+        });
+
+        return tariff;
+    }
+
+    private calculateChargeableWeight(actualWeight: number, volumeM3?: number): number {
+        if (!volumeM3) return actualWeight;
+        const volumetricWeight = volumeM3 * 167;
+        return Math.max(actualWeight, volumetricWeight);
+    }
+
+    private calculateWeightBasedPrice(tariff: any, weight: number): { price: number } {
+        if (!tariff.weightTiers || tariff.weightTiers.length === 0) {
+            throw new BadRequestException('No weight tiers configured for this tariff');
+        }
+
+        const tier = tariff.weightTiers.find((t: any) =>
+            weight >= Number(t.min_weight_kg) && weight <= Number(t.max_weight_kg)
+        );
+
+        if (!tier) {
+            throw new BadRequestException(`No weight tier found for ${weight} kg`);
+        }
+
+        const price = weight * Number(tier.rate_per_kg);
+        return { price };
+    }
+
+    private calculateRouteBasedPrice(tariff: any, origin: string, destination: string, itemType?: string): number {
+        if (!tariff.routePrices || tariff.routePrices.length === 0) {
+            throw new BadRequestException('No route prices configured for this tariff');
+        }
+
+        const route = tariff.routePrices.find((r: any) =>
+            r.origin_city === origin &&
+            r.destination_city === destination &&
+            (!itemType || r.item_type === itemType || !r.item_type)
+        );
+
+        if (!route) {
+            throw new BadRequestException(`No route price found for ${origin} to ${destination}`);
+        }
+
+        return Number(route.price);
+    }
+
+    private calculateDistanceBasedPrice(tariff: any, distanceKm: number, itemType?: string): { totalPrice: number; distanceCharge: number } {
+        if (!tariff.distanceConfigs || tariff.distanceConfigs.length === 0) {
+            throw new BadRequestException('No distance configuration for this tariff');
+        }
+
+        const config = tariff.distanceConfigs.find((d: any) =>
+            (!itemType || d.item_type === itemType || !d.item_type) &&
+            (!d.max_km || distanceKm <= Number(d.max_km))
+        );
+
+        if (!config) {
+            throw new BadRequestException(`No distance configuration found for ${distanceKm} km`);
+        }
+
+        const basePrice = Number(config.base_price);
+        const distanceCharge = distanceKm * Number(config.rate_per_km);
+        const totalPrice = basePrice + distanceCharge;
+
+        return { totalPrice, distanceCharge };
+    }
+
+    private calculateDailyBasedPrice(tariff: any, vehicleType: string, rentalDays: number): number {
+        if (!tariff.dailyRates || tariff.dailyRates.length === 0) {
+            throw new BadRequestException('No daily rates configured for this tariff');
+        }
+
+        const rate = tariff.dailyRates.find((r: any) => r.vehicle_type === vehicleType);
+
+        if (!rate) {
+            throw new BadRequestException(`No daily rate found for vehicle type: ${vehicleType}`);
+        }
+
+        return rentalDays * Number(rate.daily_rate);
+    }
+
+    private calculateSurcharges(surcharges: any[], baseAmount: number): number {
+        let total = 0;
+
+        for (const surcharge of surcharges) {
+            if (surcharge.calculation === 'FIXED') {
+                total += Number(surcharge.value);
+            } else if (surcharge.calculation === 'PERCENTAGE') {
+                total += baseAmount * (Number(surcharge.value) / 100);
+            }
+        }
+
+        return total;
+    }
 }
 

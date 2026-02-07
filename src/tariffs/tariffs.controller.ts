@@ -21,6 +21,7 @@ import { TariffsService } from './tariffs.service';
 import { BulkCreateTariffDto } from './dto/bulk-create-tariff.dto';
 import { GetTariffsFilterDto } from './dto/get-tariffs-filter.dto';
 import { UpdateTariffStatusDto } from './dto/update-tariff-status.dto';
+import { SimulateTariffDto } from './dto/simulate-tariff.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
@@ -136,6 +137,26 @@ export class TariffsController {
                     message: error.message || 'Failed to parse Excel file',
                 },
                 error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+        }
+    }
+
+    @Post('simulate')
+    async simulate(@Body() dto: SimulateTariffDto) {
+        try {
+            const result = await this.tariffsService.simulate(dto);
+            return {
+                success: true,
+                message: 'Price simulation completed successfully',
+                data: result,
+            };
+        } catch (error) {
+            throw new HttpException(
+                {
+                    success: false,
+                    message: error.message || 'Failed to simulate price',
+                },
+                error.status || HttpStatus.BAD_REQUEST,
             );
         }
     }
