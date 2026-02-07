@@ -81,7 +81,7 @@ export class SubServicesService {
             }
         }
 
-        if (updateSubServiceDto.sub_service_name && updateSubServiceDto.sub_service_name !== subService.sub_service_name) {
+        if (updateSubServiceDto.sub_service_name && updateSubServiceDto.sub_service_name !== subService.getDataValue('sub_service_name')) {
             const existing = await this.subServiceModel.findOne({
                 where: { sub_service_name: updateSubServiceDto.sub_service_name }
             });
