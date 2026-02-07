@@ -23,6 +23,9 @@ export class TariffDistance extends Model<TariffDistance> {
     @Column({ type: DataType.DECIMAL(10, 2), allowNull: true })
     max_km: number;
 
+    @Column({ type: DataType.STRING(100), allowNull: true })
+    item_type: string;
+
     @BelongsTo(() => MasterTarif)
     tariff: MasterTarif;
 }

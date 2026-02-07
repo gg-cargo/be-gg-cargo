@@ -2,7 +2,6 @@ import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsInt } from 'class-valida
 
 export class CreateServiceDto {
     @IsString()
-    @IsNotEmpty()
     service_code: string;
 
     @IsString()
