@@ -11,7 +11,7 @@ import { BulkCreateTariffDto, CreateTariffDto } from './dto/bulk-create-tariff.d
 import { GetTariffsFilterDto } from './dto/get-tariffs-filter.dto';
 import { UpdateTariffStatusDto } from './dto/update-tariff-status.dto';
 import { Sequelize } from 'sequelize-typescript';
-import { Op } from 'sequelize';
+import { Op, fn, col } from 'sequelize';
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 
@@ -578,7 +578,7 @@ export class TariffsService {
 
             // Calculate additional charges
             const fragileCharge = dto.is_fragile ? 25000 : 0;
-            const insuranceCharge = dto.insurance_value ? Number(dto.getDataValue('insurance_value')) * 0.01 : 0;
+            const insuranceCharge = dto.insurance_value ? Number(dto.insurance_value) * 0.01 : 0;
 
             // Calculate surcharges
             let surchargeTotal = 0;
@@ -631,41 +631,49 @@ export class TariffsService {
     }
 
     private async findMatchingTariff(dto: any) {
-        const where: any = {
-            service_type: dto.service_type,
-            sub_service: dto.sub_service,
-            is_active: true,
-            effective_start: { [Op.lte]: dto.effective_date },
-            [Op.or]: [
-                { effective_end: { [Op.gte]: dto.effective_date } },
-                { effective_end: null }
-            ]
-        };
+        const andConditions: any[] = [
+            { service_type: dto.service_type },
+            { sub_service: dto.sub_service },
+            { is_active: true },
+            // effective_end check
+            {
+                [Op.or]: [
+                    { effective_end: { [Op.gte]: dto.effective_date } },
+                    { effective_end: null }
+                ]
+            }
+        ];
 
         if (dto.origin) {
-            where[Op.or] = [
-                { origin_zone: dto.origin },
-                { origin_zone: null }
-            ];
+            const normOrigin = String(dto.origin).trim().toLowerCase();
+            andConditions.push({
+                [Op.or]: [
+                    this.sequelizeWhereLower('origin_zone', normOrigin),
+                    { origin_zone: null }
+                ]
+            });
         }
 
         if (dto.destination) {
-            where[Op.and] = [
-                {
-                    [Op.or]: [
-                        { destination_zone: dto.destination },
-                        { destination_zone: null }
-                    ]
-                }
-            ];
+            const normDestination = String(dto.destination).trim().toLowerCase();
+            andConditions.push({
+                [Op.or]: [
+                    this.sequelizeWhereLower('destination_zone', normDestination),
+                    { destination_zone: null }
+                ]
+            });
         }
 
         if (dto.customer_id) {
-            where[Op.or] = [
-                { customer_id: dto.customer_id },
-                { customer_id: null }
-            ];
+            andConditions.push({
+                [Op.or]: [
+                    { customer_id: dto.customer_id },
+                    { customer_id: null }
+                ]
+            });
         }
+
+        const where = { [Op.and]: andConditions };
 
         const tariff = await this.masterTarifModel.findOne({
             where,
@@ -691,85 +699,99 @@ export class TariffsService {
         return Math.max(actualWeight, volumetricWeight);
     }
 
+    // helper to build Sequelize where clause comparing LOWER(TRIM(column)) = value
+    private sequelizeWhereLower(columnName: string, value: string) {
+        return Sequelize.where(fn('LOWER', fn('TRIM', col(columnName))), value);
+    }
+
     private calculateWeightBasedPrice(tariff: any, weight: number): { price: number } {
-        if (!tariff.weightTiers || tariff.weightTiers.length === 0) {
+        const weightTiers = tariff.getDataValue ? tariff.getDataValue('weightTiers') : tariff.weightTiers;
+        if (!weightTiers || weightTiers.length === 0) {
             throw new BadRequestException('No weight tiers configured for this tariff');
         }
 
-        const tier = tariff.weightTiers.find((t: any) =>
-            weight >= Number(t.min_weight_kg) && weight <= Number(t.max_weight_kg)
+        const tier = weightTiers.find((t: any) =>
+            weight >= Number(t.getDataValue('min_weight_kg')) && weight <= Number(t.getDataValue('max_weight_kg'))
         );
 
         if (!tier) {
             throw new BadRequestException(`No weight tier found for ${weight} kg`);
         }
 
-        const price = weight * Number(tier.rate_per_kg);
+        const price = weight * Number(tier.getDataValue('rate_per_kg'));
         return { price };
     }
 
     private calculateRouteBasedPrice(tariff: any, origin: string, destination: string, itemType?: string): number {
-        if (!tariff.getDataValue('routePrices') || tariff.getDataValue('routePrices').length === 0) {
+        const routePrices = tariff.getDataValue ? tariff.getDataValue('routePrices') : tariff.routePrices;
+        if (!routePrices || routePrices.length === 0) {
             throw new BadRequestException('No route prices configured for this tariff');
         }
 
         const norm = (v: any) => String(v ?? '').trim().toLowerCase();
-        const route = tariff.getDataValue('routePrices').find((r: any) =>
-            norm(r.getDataValue('origin_city')) === norm(origin) &&
-            norm(r.getDataValue('destination_city')) === norm(destination) &&
-            (!itemType || norm(r.getDataValue('item_type')) === norm(itemType) || !r.getDataValue('item_type'))
-        );
+        const route = routePrices.find((r: any) => {
+            const getVal = (obj: any, key: string) => (obj && typeof obj.getDataValue === 'function' ? obj.getDataValue(key) : obj?.[key]);
+            return norm(getVal(r, 'origin_city')) === norm(origin) &&
+                norm(getVal(r, 'destination_city')) === norm(destination) &&
+                (!itemType || norm(getVal(r, 'item_type')) === norm(itemType) || !getVal(r, 'item_type'));
+        });
 
         if (!route) {
             throw new BadRequestException(`No route price found for ${origin} to ${destination}`);
         }
 
-        return Number(route.getDataValue('price'));
+        const getVal = (obj: any, key: string) => (obj && typeof obj.getDataValue === 'function' ? obj.getDataValue(key) : obj?.[key]);
+        return Number(getVal(route, 'price'));
     }
 
     private calculateDistanceBasedPrice(tariff: any, distanceKm: number, itemType?: string): { totalPrice: number; distanceCharge: number } {
-        if (!tariff.getDataValue('distanceConfigs') || tariff.getDataValue('distanceConfigs').length === 0) {
+        const getVal = (obj: any, key: string) => (obj && typeof obj.getDataValue === 'function' ? obj.getDataValue(key) : obj?.[key]);
+        const distanceConfigs = getVal(tariff, 'distanceConfigs');
+        if (!distanceConfigs || distanceConfigs.length === 0) {
             throw new BadRequestException('No distance configuration for this tariff');
         }
 
-        const config = tariff.getDataValue('distanceConfigs').find((d: any) =>
-            (!itemType || d.getDataValue('item_type') === itemType || !d.getDataValue('item_type')) &&
-            (!d.getDataValue('max_km') || distanceKm <= Number(d.getDataValue('max_km')))
+        const config = distanceConfigs.find((d: any) =>
+            (!itemType || getVal(d, 'item_type') === itemType || !getVal(d, 'item_type')) &&
+            (!getVal(d, 'max_km') || distanceKm <= Number(getVal(d, 'max_km')))
         );
 
         if (!config) {
             throw new BadRequestException(`No distance configuration found for ${distanceKm} km`);
         }
 
-        const basePrice = Number(config.getDataValue('base_price'));
-        const distanceCharge = distanceKm * Number(config.getDataValue('rate_per_km'));
+        const basePrice = Number(getVal(config, 'base_price'));
+        const distanceCharge = distanceKm * Number(getVal(config, 'rate_per_km'));
         const totalPrice = basePrice + distanceCharge;
 
         return { totalPrice, distanceCharge };
     }
 
     private calculateDailyBasedPrice(tariff: any, vehicleType: string, rentalDays: number): number {
-        if (!tariff.getDataValue('dailyRates') || tariff.getDataValue('dailyRates').length === 0) {
+        const getVal = (obj: any, key: string) => (obj && typeof obj.getDataValue === 'function' ? obj.getDataValue(key) : obj?.[key]);
+        const dailyRates = getVal(tariff, 'dailyRates');
+        if (!dailyRates || dailyRates.length === 0) {
             throw new BadRequestException('No daily rates configured for this tariff');
         }
 
-        const rate = tariff.getDataValue('dailyRates').find((r: any) => r.getDataValue('vehicle_type') === vehicleType);
+        const rate = dailyRates.find((r: any) => getVal(r, 'vehicle_type') === vehicleType);
 
         if (!rate) {
             throw new BadRequestException(`No daily rate found for vehicle type: ${vehicleType}`);
         }
 
-        return rentalDays * Number(rate.getDataValue('daily_rate'));
+        return rentalDays * Number(getVal(rate, 'daily_rate'));
     }
 
     private calculateSurcharges(surcharges: any[], baseAmount: number): number {
+        const getVal = (obj: any, key: string) => (obj && typeof obj.getDataValue === 'function' ? obj.getDataValue(key) : obj?.[key]);
         let total = 0;
 
         for (const surcharge of surcharges) {
-            if (surcharge.getDataValue('calculation') === 'FIXED') {
-                total += Number(surcharge.getDataValue('value'));
-            } else if (surcharge.getDataValue('calculation') === 'PERCENTAGE') {
-                total += baseAmount * (Number(surcharge.getDataValue('value')) / 100);
+            if (getVal(surcharge, 'calculation') === 'FIXED') {
+                total += Number(getVal(surcharge, 'value'));
+            } else if (getVal(surcharge, 'calculation') === 'PERCENTAGE') {
+                total += baseAmount * (Number(getVal(surcharge, 'value')) / 100);
             }
         }
 
