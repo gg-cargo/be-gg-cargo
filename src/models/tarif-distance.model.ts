@@ -21,6 +21,9 @@ export class TariffDistance extends Model<TariffDistance> {
     rate_per_km: number;
 
     @Column({ type: DataType.DECIMAL(10, 2), allowNull: true })
+    min_km: number;
+
+    @Column({ type: DataType.DECIMAL(10, 2), allowNull: true })
     max_km: number;
 
     @Column({ type: DataType.STRING(100), allowNull: true })

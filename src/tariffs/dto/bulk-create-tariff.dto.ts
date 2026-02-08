@@ -51,7 +51,7 @@ class DistanceTierDto {
     @IsNotEmpty()
     @IsNumber()
     @Min(0)
-    surcharge: number;
+    rate_per_km: number;
 }
 
 class DistanceConfigDto {
@@ -60,10 +60,15 @@ class DistanceConfigDto {
     @Min(0)
     base_price: number;
 
-    @IsNotEmpty()
+    @IsOptional()
     @IsNumber()
     @Min(0)
-    rate_per_km: number;
+    rate_per_km?: number;
+
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    min_km?: number;
 
     @IsOptional()
     @IsNumber()

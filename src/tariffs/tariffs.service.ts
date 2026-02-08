@@ -172,14 +172,34 @@ export class TariffsService {
 
         // Create distance config
         if (dto.distance_config) {
-            const distanceId = this.generateId('DIST');
-            await this.tariffDistanceModel.create({
-                distance_id: distanceId,
-                tariff_id: tariffId,
-                base_price: dto.distance_config.base_price,
-                rate_per_km: dto.distance_config.rate_per_km,
-                max_km: dto.distance_config.max_km || null,
-            } as any, { transaction });
+            const basePrice = dto.distance_config.base_price || 0;
+            const distanceTiers = dto.distance_config.distance_tiers;
+
+            if (distanceTiers && distanceTiers.length > 0) {
+                // New format: multiple tiers
+                for (const tier of distanceTiers) {
+                    const distanceId = this.generateId('DIST');
+                    await this.tariffDistanceModel.create({
+                        distance_id: distanceId,
+                        tariff_id: tariffId,
+                        base_price: basePrice,
+                        rate_per_km: tier.rate_per_km,
+                        min_km: tier.min_km || null,
+                        max_km: tier.max_km || null,
+                    } as any, { transaction });
+                }
+            } else {
+                // Old format: single tier (backward compatibility)
+                const distanceId = this.generateId('DIST');
+                await this.tariffDistanceModel.create({
+                    distance_id: distanceId,
+                    tariff_id: tariffId,
+                    base_price: basePrice,
+                    rate_per_km: dto.distance_config.rate_per_km,
+                    min_km: dto.distance_config.min_km || null,
+                    max_km: dto.distance_config.max_km || null,
+                } as any, { transaction });
+            }
         }
 
         // Create vehicle daily rates
@@ -751,10 +771,15 @@ export class TariffsService {
             throw new BadRequestException('No distance configuration for this tariff');
         }
 
-        const config = distanceConfigs.find((d: any) =>
-            (!itemType || getVal(d, 'item_type') === itemType || !getVal(d, 'item_type')) &&
-            (!getVal(d, 'max_km') || distanceKm <= Number(getVal(d, 'max_km')))
-        );
+        const config = distanceConfigs.find((d: any) => {
+            const minKm = getVal(d, 'min_km');
+            const maxKm = getVal(d, 'max_km');
+            const meetsMinCondition = !minKm || distanceKm >= Number(minKm);
+            const meetsMaxCondition = !maxKm || distanceKm <= Number(maxKm);
+            const meetsItemType = !itemType || getVal(d, 'item_type') === itemType || !getVal(d, 'item_type');
+
+            return meetsItemType && meetsMinCondition && meetsMaxCondition;
+        });
 
         if (!config) {
             throw new BadRequestException(`No distance configuration found for ${distanceKm} km`);
