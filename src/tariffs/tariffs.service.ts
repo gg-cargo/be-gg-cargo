@@ -11,7 +11,7 @@ import { BulkCreateTariffDto, CreateTariffDto } from './dto/bulk-create-tariff.d
 import { GetTariffsFilterDto } from './dto/get-tariffs-filter.dto';
 import { UpdateTariffStatusDto } from './dto/update-tariff-status.dto';
 import { Sequelize } from 'sequelize-typescript';
-import { Op, fn, col } from 'sequelize';
+import { Op, fn, col, where } from 'sequelize';
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 
@@ -49,6 +49,16 @@ export class TariffsService {
                 try {
                     // Validate pricing model specific requirements
                     this.validatePricingModelData(tariffDto, i + 1);
+
+                    // Check if tariff already exists
+                    const existingTariff = await this.checkExistingTariff(tariffDto);
+                    if (existingTariff) {
+                        const getVal = (obj: any, key: string) => (obj && typeof obj.getDataValue === 'function' ? obj.getDataValue(key) : obj?.[key]);
+                        throw new Error(
+                            `Tariff sudah ada: ${getVal(existingTariff, 'tariff_name')} (ID: ${getVal(existingTariff, 'tariff_id')}) ` +
+                            `dengan periode ${getVal(existingTariff, 'effective_start')} - ${getVal(existingTariff, 'effective_end') || 'selamanya'}`
+                        );
+                    }
 
                     // Generate tariff_id
                     const tariffId = this.generateTariffId();
@@ -650,6 +660,76 @@ export class TariffsService {
         }
     }
 
+    private async checkExistingTariff(dto: any) {
+        const andConditions: any[] = [
+            { service_type: dto.service_type },
+            { sub_service: dto.sub_service },
+            { pricing_model: dto.pricing_model },
+            { is_active: true }
+        ];
+
+        // Check effective date overlap
+        if (dto.effective_start) {
+            andConditions.push({
+                [Op.or]: [
+                    {
+                        [Op.and]: [
+                            { effective_start: { [Op.lte]: dto.effective_start } },
+                            {
+                                [Op.or]: [
+                                    { effective_end: { [Op.gte]: dto.effective_start } },
+                                    { effective_end: null }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        [Op.and]: [
+                            { effective_start: { [Op.gte]: dto.effective_start } },
+                            dto.effective_end ? { effective_start: { [Op.lte]: dto.effective_end } } : {}
+                        ]
+                    }
+                ]
+            });
+        }
+
+        // Check origin_zone match
+        const normOrigin = dto.origin_zone ? String(dto.origin_zone).trim().toLowerCase() : null;
+        if (normOrigin) {
+            andConditions.push(
+                this.sequelizeWhereLower('origin_zone', normOrigin)
+            );
+        } else {
+            andConditions.push({ origin_zone: null });
+        }
+
+        // Check destination_zone match
+        const normDestination = dto.destination_zone ? String(dto.destination_zone).trim().toLowerCase() : null;
+        if (normDestination) {
+            andConditions.push(
+                this.sequelizeWhereLower('destination_zone', normDestination)
+            );
+        } else {
+            andConditions.push({ destination_zone: null });
+        }
+
+        // Check customer_id match
+        if (dto.customer_id) {
+            andConditions.push({ customer_id: dto.customer_id });
+        } else {
+            andConditions.push({ customer_id: null });
+        }
+
+        const where = { [Op.and]: andConditions };
+
+        const existingTariff = await this.masterTarifModel.findOne({
+            where,
+            attributes: ['tariff_id', 'tariff_name', 'effective_start', 'effective_end']
+        });
+
+        return existingTariff;
+    }
+
     private async findMatchingTariff(dto: any) {
         const andConditions: any[] = [
             { service_type: dto.service_type },
@@ -721,7 +801,7 @@ export class TariffsService {
 
     // helper to build Sequelize where clause comparing LOWER(TRIM(column)) = value
     private sequelizeWhereLower(columnName: string, value: string) {
-        return Sequelize.where(fn('LOWER', fn('TRIM', col(columnName))), value);
+        return where(fn('LOWER', fn('TRIM', col(columnName))), value);
     }
 
     private calculateWeightBasedPrice(tariff: any, weight: number): { price: number } {
