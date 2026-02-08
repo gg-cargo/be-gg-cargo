@@ -7,11 +7,13 @@ export class SimulateTariffDto {
     @IsString()
     sub_service: string;
 
+    @IsOptional()
     @IsString()
-    origin: string;
+    origin?: string | null;
 
+    @IsOptional()
     @IsString()
-    destination: string;
+    destination?: string | null;
 
     @IsDateString()
     effective_date: string;
