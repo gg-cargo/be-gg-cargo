@@ -114,7 +114,7 @@ export class TransportersService {
     }
 
     async registerTransporter(body: any) {
-        const { email, phone, ktp, sim, foto_kurir_sim, foto_kendaraan, kontak_emergency, alamat, kir, stnk, first_name, last_name, password, role } = body;
+        const { email, phone, ktp, sim, foto_kurir_sim, foto_ktp, foto_sim, foto_kendaraan, kontak_emergency, alamat, kir, stnk, first_name, last_name, password, role } = body;
         if (!email || !phone || !ktp?.nik) throw new BadRequestException('Data utama tidak lengkap');
         if (!password) throw new BadRequestException('Password wajib diisi');
         let userLevel = 4;
@@ -137,23 +137,25 @@ export class TransportersService {
                 phone,
                 email,
                 password: hashedPassword,
-                nik: ktp.nik,
                 address: alamat,
-                sim: sim?.nomor,
                 isApprove: 0,
                 aktif: 0,
                 level: userLevel,
                 // Field KTP sesuai body
+                nik: ktp.nik,
                 ktp_tempat_tanggal_lahir: ktp.tempat_tanggal_lahir,
                 ktp_jenis_kelamin: ktp.jenis_kelamin,
                 ktp_alamat: ktp.alamat,
                 ktp_agama: ktp.agama,
                 ktp_status_perkawinan: ktp.status_perkawinan,
                 // Field SIM detail
+                sim: sim?.nomor,
                 sim_jenis: sim?.jenis,
                 sim_nama_pemegang: sim?.nama_pemegang,
                 // Foto terkait dokumen
                 url_foto_kurir_sim: foto_kurir_sim,
+                url_foto_ktp: foto_ktp || ktp?.foto,
+                url_foto_sim: foto_sim || sim?.foto,
             }, { transaction: t });
             // Simpan data truk (opsional)
             let truck: any = null;
@@ -196,7 +198,7 @@ export class TransportersService {
         const offset = (page - 1) * limit;
         const { count, rows } = await this.userModel.findAndCountAll({
             where,
-            attributes: ['id', 'name', 'phone', 'isApprove'],
+            attributes: ['id', 'name', 'phone', 'isApprove', 'level'],
             order: [['id', 'DESC']],
             offset,
             limit,
@@ -206,6 +208,7 @@ export class TransportersService {
             id: u.getDataValue('id'),
             name: u.getDataValue('name'),
             phone: u.getDataValue('phone'),
+            role: u.getDataValue('level'),
             status: u.getDataValue('isApprove') === 1 ? 'Approved' : (u.getDataValue('isApprove') === 0 ? 'Pending' : String(u.getDataValue('isApprove')))
         }));
         return { data: result, total: count };
@@ -217,7 +220,7 @@ export class TransportersService {
             attributes: [
                 'id', 'name', 'phone', 'email', 'level', 'nik', 'address', 'aktif', 'isApprove',
                 'ktp_tempat_tanggal_lahir', 'ktp_jenis_kelamin', 'ktp_alamat', 'ktp_agama', 'ktp_status_perkawinan',
-                'sim', 'sim_jenis', 'sim_nama_pemegang', 'url_foto_kurir_sim'
+                'sim', 'sim_jenis', 'sim_nama_pemegang', 'url_foto_kurir_sim', 'url_foto_ktp', 'url_foto_sim'
             ],
             include: [
                 {
@@ -251,6 +254,8 @@ export class TransportersService {
             sim_jenis: user.getDataValue('sim_jenis'),
             sim_nama_pemegang: user.getDataValue('sim_nama_pemegang'),
             url_foto_kurir_sim: user.getDataValue('url_foto_kurir_sim'),
+            url_foto_ktp: user.getDataValue('url_foto_ktp'),
+            url_foto_sim: user.getDataValue('url_foto_sim'),
             trucks: user.getDataValue('trucks')?.map((t: any) => ({
                 id: t.getDataValue('id'),
                 jenis_mobil: t.getDataValue('jenis_mobil'),
@@ -272,7 +277,7 @@ export class TransportersService {
         if (!user) throw new BadRequestException('Transporter tidak ditemukan');
         const {
             first_name, last_name, email, phone, password,
-            ktp, sim, foto_kurir_sim, foto_kendaraan, alamat, kir, stnk, role, kontak_emergency
+            ktp, sim, foto_kurir_sim, foto_ktp, foto_sim, foto_kendaraan, alamat, kir, stnk, role, kontak_emergency
         } = body;
         const name = [first_name, last_name].filter(Boolean).join(' ');
         // Normalisasi update fields
@@ -287,6 +292,8 @@ export class TransportersService {
             sim_jenis: sim?.jenis,
             sim_nama_pemegang: sim?.nama_pemegang,
             url_foto_kurir_sim: foto_kurir_sim,
+            url_foto_ktp: foto_ktp || ktp?.foto,
+            url_foto_sim: foto_sim || sim?.foto,
         };
         if (role !== undefined && [4, 8].includes(Number(role))) updateFields.level = Number(role);
         // Password

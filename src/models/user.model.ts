@@ -494,6 +494,10 @@ export class User extends Model {
   sim_nama_pemegang: string;
   @Column({ type: DataType.TEXT, allowNull: true })
   url_foto_kurir_sim: string;
+  @Column({ type: DataType.TEXT, allowNull: true })
+  url_foto_ktp: string;
+  @Column({ type: DataType.TEXT, allowNull: true })
+  url_foto_sim: string;
   // === END Penambahan field registration ===
 
   // Relations
