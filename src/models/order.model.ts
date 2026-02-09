@@ -23,6 +23,7 @@ export class Order extends Model {
     @Column({
         type: DataType.STRING(255),
         allowNull: false,
+        unique: true,
     })
     no_tracking: string;
 

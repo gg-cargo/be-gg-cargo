@@ -8167,8 +8167,8 @@ export class OrdersService {
                 createInternationalDto.asuransi
             );
 
-            // Generate tracking number
-            const noTracking = await this.generateInternationalTrackingNumber();
+            // Generate tracking number dengan transaction
+            const noTracking = await this.generateInternationalTrackingNumber(transaction);
 
             // c. Penyimpanan Data Kritis
             const orderData = {
@@ -8419,32 +8419,89 @@ export class OrdersService {
 
     /**
      * Generate tracking number untuk internasional
+     * Menggunakan transaction lock untuk mencegah race condition
      */
-    private async generateInternationalTrackingNumber(): Promise<string> {
-        const today = new Date();
-        const year = today.getFullYear().toString().slice(-2);
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
+    private async generateInternationalTrackingNumber(transaction?: Transaction): Promise<string> {
+        const maxRetries = 5;
+        let attempt = 0;
 
-        const prefix = `INTLGG${year}${month}${day}`;
+        while (attempt < maxRetries) {
+            try {
+                const today = new Date();
+                const year = today.getFullYear().toString().slice(-2);
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
 
-        // Cari nomor urut terakhir untuk hari ini
-        const lastOrder = await this.orderModel.findOne({
-            where: {
-                no_tracking: {
-                    [Op.like]: `${prefix}%`
+                const prefix = `INTLGG${year}${month}${day}`;
+
+                // Gunakan transaction dengan isolation level yang tepat
+                const t = transaction || await this.orderModel.sequelize!.transaction({
+                    isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED
+                });
+
+                try {
+                    // Cari nomor urut terakhir menggunakan MAX untuk lebih akurat
+                    // dan gunakan lock untuk mencegah race condition
+                    const result = await this.orderModel.findOne({
+                        attributes: [
+                            [fn('MAX', col('no_tracking')), 'max_tracking']
+                        ],
+                        where: {
+                            no_tracking: {
+                                [Op.like]: `${prefix}%`
+                            }
+                        },
+                        lock: transaction ? t.LOCK.UPDATE : undefined,
+                        transaction: t,
+                        raw: true
+                    }) as any;
+
+                    let nextNumber = 1;
+                    if (result && result.max_tracking) {
+                        const lastNumber = parseInt(result.max_tracking.slice(-3));
+                        nextNumber = lastNumber + 1;
+                    }
+
+                    const trackingNumber = `${prefix}${String(nextNumber).padStart(3, '0')}`;
+
+                    // Commit transaction jika dibuat di sini
+                    if (!transaction) {
+                        await t.commit();
+                    }
+
+                    this.logger.log(`Generated tracking number: ${trackingNumber} (attempt ${attempt + 1})`);
+                    return trackingNumber;
+
+                } catch (error) {
+                    // Rollback transaction jika dibuat di sini
+                    if (!transaction) {
+                        await t.rollback();
+                    }
+                    throw error;
                 }
-            },
-            order: [['created_at', 'DESC']]
-        });
 
-        let nextNumber = 1;
-        if (lastOrder && lastOrder.no_tracking) {
-            const lastNumber = parseInt(lastOrder.no_tracking.slice(-3));
-            nextNumber = lastNumber + 1;
+            } catch (error) {
+                attempt++;
+
+                // Jika ini adalah error unique constraint violation, retry
+                if (error.name === 'SequelizeUniqueConstraintError' && attempt < maxRetries) {
+                    this.logger.warn(`Duplicate tracking number detected, retrying... (attempt ${attempt}/${maxRetries})`);
+                    // Tambahkan delay random untuk mengurangi collision
+                    await new Promise(resolve => setTimeout(resolve, Math.random() * 100 * attempt));
+                    continue;
+                }
+
+                // Jika sudah max retries atau error lain, throw
+                if (attempt >= maxRetries) {
+                    this.logger.error(`Failed to generate unique tracking number after ${maxRetries} attempts`);
+                    throw new InternalServerErrorException('Gagal membuat nomor tracking unik setelah beberapa percobaan');
+                }
+
+                throw error;
+            }
         }
 
-        return `${prefix}${String(nextNumber).padStart(3, '0')}`;
+        throw new InternalServerErrorException('Gagal membuat nomor tracking');
     }
 
     /**
