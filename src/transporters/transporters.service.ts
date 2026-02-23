@@ -114,7 +114,7 @@ export class TransportersService {
     }
 
     async registerTransporter(body: any) {
-        const { email, phone, ktp, sim, foto_kurir_sim, foto_ktp, foto_sim, foto_kendaraan, kontak_emergency, alamat, kir, stnk, first_name, last_name, password, role } = body;
+        const { email, phone, ktp, sim, foto_kurir_sim, foto_ktp, foto_sim, foto_kendaraan, kontak_emergency, alamat, kir, stnk, first_name, last_name, password, role, hub_id } = body;
         if (!email || !phone || !ktp?.nik) throw new BadRequestException('Data utama tidak lengkap');
         if (!password) throw new BadRequestException('Password wajib diisi');
         let userLevel = 4;
@@ -139,8 +139,9 @@ export class TransportersService {
                 password: hashedPassword,
                 address: alamat,
                 isApprove: 0,
-                aktif: 0,
+                aktif: 1,
                 level: userLevel,
+                hub_id: hub_id != null && hub_id !== '' ? Number(hub_id) : 0,
                 // Field KTP sesuai body
                 nik: ktp.nik,
                 ktp_tempat_tanggal_lahir: ktp.tempat_tanggal_lahir,
@@ -181,6 +182,7 @@ export class TransportersService {
             return {
                 user_id: user.id,
                 name,
+                hub_id: hub_id != null && hub_id !== '' ? Number(hub_id) : 0,
                 isApprove: user.isApprove,
                 aktif: user.aktif,
                 truck_id: truck ? truck.id : null,
@@ -360,6 +362,43 @@ export class TransportersService {
 
         // Ambil dan kembalikan detail yang sudah di-update
         return await this.getTransporterDetail(id);
+    }
+
+    /**
+     * Delete (hard delete) transporter/kurir
+     * Menghapus permanent user dan semua data terkait dari database
+     */
+    async deleteTransporter(id: number) {
+        if (!id || isNaN(id)) throw new BadRequestException('ID tidak valid');
+
+        const user = await this.userModel.findByPk(id);
+        if (!user) throw new BadRequestException('Transporter/kurir tidak ditemukan');
+
+        const userLevel = user.getDataValue('level');
+        if (![4, 8].includes(Number(userLevel))) {
+            throw new BadRequestException('User yang dipilih bukan transporter/kurir (level harus 4 atau 8)');
+        }
+
+        const userName = user.getDataValue('name');
+
+        return await this.sequelize.transaction(async (t) => {
+            await this.usersEmergencyContactModel.destroy({ where: { user_id: id }, transaction: t });
+            await this.truckModel.destroy({ where: { driver_id: id }, transaction: t });
+            await this.pickupModel.destroy({ where: { driver_id: id }, transaction: t });
+            await this.deliverModel.destroy({ where: { driver_id: id }, transaction: t });
+            await this.jobAssignModel.destroy({
+                where: { expeditor_by: String(id) },
+                transaction: t,
+            });
+
+            await this.userModel.destroy({ where: { id }, transaction: t });
+
+            return {
+                id,
+                name: userName,
+                message: `Transporter/kurir ${userName} berhasil dihapus`,
+            };
+        });
     }
 }
 

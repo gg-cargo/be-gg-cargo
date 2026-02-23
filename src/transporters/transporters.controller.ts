@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Post, Query, Get, Patch, Param, ParseIntPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpException, HttpStatus, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { TransportersService } from './transporters.service';
 
 @Controller('transporters')
@@ -84,6 +84,26 @@ export class TransportersController {
             };
         } catch (e) {
             throw new HttpException(e.message || 'Gagal update transporter', HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    @Delete(':id')
+    async deleteTransporter(@Param('id', ParseIntPipe) id: number) {
+        try {
+            const data = await this.transportersService.deleteTransporter(id);
+            return {
+                status: 'success',
+                message: data.message,
+                data: {
+                    id: data.id,
+                    name: data.name,
+                },
+            };
+        } catch (e) {
+            if (e instanceof BadRequestException) {
+                throw new HttpException(e.message, HttpStatus.BAD_REQUEST);
+            }
+            throw new HttpException(e.message || 'Gagal menghapus transporter/kurir', HttpStatus.BAD_REQUEST);
         }
     }
 }
