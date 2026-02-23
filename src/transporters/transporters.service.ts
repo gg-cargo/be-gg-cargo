@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
 import { User } from '../models/user.model';
+import { Hub } from '../models/hub.model';
 import { TruckList } from '../models/truck-list.model';
 import { JobAssign } from '../models/job-assign.model';
 import { OrderPickupDriver } from '../models/order-pickup-driver.model';
@@ -14,6 +15,7 @@ import { UsersEmergencyContact } from '../models/users_emergency_contact.model';
 export class TransportersService {
     constructor(
         @InjectModel(User) private readonly userModel: typeof User,
+        @InjectModel(Hub) private readonly hubModel: typeof Hub,
         @InjectModel(TruckList) private readonly truckModel: typeof TruckList,
         @InjectModel(JobAssign) private readonly jobAssignModel: typeof JobAssign,
         @InjectModel(OrderPickupDriver) private readonly pickupModel: typeof OrderPickupDriver,
@@ -200,19 +202,32 @@ export class TransportersService {
         const offset = (page - 1) * limit;
         const { count, rows } = await this.userModel.findAndCountAll({
             where,
-            attributes: ['id', 'name', 'phone', 'isApprove', 'level'],
+            attributes: ['id', 'name', 'phone', 'isApprove', 'level', 'hub_id'],
+            include: [
+                {
+                    model: this.hubModel,
+                    as: 'hub',
+                    attributes: ['id', 'nama'],
+                    required: false,
+                },
+            ],
             order: [['id', 'DESC']],
             offset,
             limit,
         });
 
-        const result = rows.map((u: any) => ({
-            id: u.getDataValue('id'),
-            name: u.getDataValue('name'),
-            phone: u.getDataValue('phone'),
-            role: u.getDataValue('level'),
-            status: u.getDataValue('isApprove') === 1 ? 'Approved' : (u.getDataValue('isApprove') === 0 ? 'Pending' : String(u.getDataValue('isApprove')))
-        }));
+        const result = rows.map((u: any) => {
+            const hub = u.getDataValue('hub');
+            return {
+                id: u.getDataValue('id'),
+                name: u.getDataValue('name'),
+                phone: u.getDataValue('phone'),
+                hub_id: u.getDataValue('hub_id'),
+                hub_name: hub?.getDataValue?.('nama') ?? null,
+                role: u.getDataValue('level'),
+                status: u.getDataValue('isApprove') === 1 ? 'Approved' : (u.getDataValue('isApprove') === 0 ? 'Pending' : String(u.getDataValue('isApprove')))
+            };
+        });
         return { data: result, total: count };
     }
 
