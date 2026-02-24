@@ -5,6 +5,7 @@ import { DriverStatusSummaryQueryDto } from './dto/driver-status-summary.dto';
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { MyTasksQueryDto, MyTasksResponseDto } from './dto/my-tasks.dto';
 import { AcceptTaskResponseDto } from './dto/accept-task.dto';
+import { RejectTaskDto, RejectTaskResponseDto } from './dto/reject-task.dto';
 import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -102,6 +103,26 @@ export class DriversController {
         }
 
         return this.driversService.acceptTask(taskId, driverId, taskType);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch('tasks/:task_id/reject')
+    async rejectTask(
+        @Param('task_id', ParseIntPipe) taskId: number,
+        @Query('task_type') taskType: 'pickup' | 'delivery',
+        @Body() rejectDto: RejectTaskDto,
+        @Request() req: any
+    ): Promise<RejectTaskResponseDto> {
+        const driverId = req.user?.id;
+        if (!driverId) {
+            throw new UnauthorizedException('User tidak terautentikasi');
+        }
+
+        if (!taskType || !['pickup', 'delivery'].includes(taskType)) {
+            throw new BadRequestException('task_type wajib diisi dan harus salah satu dari: pickup, delivery');
+        }
+
+        return this.driversService.rejectTask(taskId, driverId, taskType, rejectDto.rejection_reason);
     }
 
     @UseGuards(JwtAuthGuard)

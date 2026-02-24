@@ -538,101 +538,53 @@ export class DriversService {
                 ]
             });
 
-            // 4. Filter dan hitung beban kerja kurir
+            // 4. Map semua kurir ke availableDrivers
             const availableDrivers: AvailableDriverDto[] = [];
 
             for (const driver of drivers) {
                 const driverId = driver.getDataValue('id');
 
-                // Hitung tugas yang sedang berjalan (pickup tasks saja untuk saat ini)
-                const currentPickupTasks = await this.orderModel.count({
-                    where: {
-                        assign_driver: driverId,
-                        status_pickup: { [Op.in]: ['Assigned', 'Picked Up'] }
-                    }
-                });
-
-                // Untuk delivery tasks, gunakan tabel order_pickup_drivers jika ada
-                let currentDeliveryTasks = 0;
-                if (this.orderModel.sequelize?.models.OrderPickupDriver) {
-                    const OrderPickupDriver = this.orderModel.sequelize.models.OrderPickupDriver;
-                    currentDeliveryTasks = await OrderPickupDriver.count({
-                        where: {
-                            driver_id: driverId,
-                            status: { [Op.in]: [1, 2] } // 1: in progress, 2: completed
-                        }
-                    });
-                }
-
-                const totalCurrentTasks = currentPickupTasks + currentDeliveryTasks;
-
-                // Kurir dianggap tersedia jika tugas < 10
-                if (totalCurrentTasks < 10) {
-                    // Parse lokasi kurir
-                    let driverLocation: DriverLocationDto = { lat: 0, lng: 0 };
-                    const driverLatlng = driver.getDataValue('latlng');
-                    if (driverLatlng) {
-                        try {
-                            // Handle format string langsung "lat,lng"
-                            if (typeof driverLatlng === 'string' && driverLatlng.includes(',')) {
-                                const [lat, lng] = driverLatlng.split(',').map(coord => parseFloat(coord.trim()));
-                                if (!isNaN(lat) && !isNaN(lng)) {
-                                    driverLocation = { lat, lng };
-                                }
-                            } else {
-                                // Handle format JSON
-                                const latlngData = JSON.parse(driverLatlng);
-
-                                // Handle format array of objects dengan field latlng
-                                if (Array.isArray(latlngData) && latlngData.length > 0) {
-                                    // Ambil koordinat terakhir (lokasi saat ini)
-                                    const lastLocation = latlngData[latlngData.length - 1];
-                                    if (lastLocation.latlng) {
-                                        const [lat, lng] = lastLocation.latlng.split(',').map(coord => parseFloat(coord.trim()));
-                                        if (!isNaN(lat) && !isNaN(lng)) {
-                                            driverLocation = { lat, lng };
-                                        }
-                                    }
-                                } else if (latlngData.lat && latlngData.lng) {
-                                    // Handle format object langsung {lat: x, lng: y}
-                                    driverLocation = { lat: latlngData.lat, lng: latlngData.lng };
-                                }
+                // Parse lokasi kurir
+                let driverLocation: DriverLocationDto = { lat: 0, lng: 0 };
+                const driverLatlng = driver.getDataValue('latlng');
+                if (driverLatlng) {
+                    try {
+                        if (typeof driverLatlng === 'string' && driverLatlng.includes(',')) {
+                            const [lat, lng] = driverLatlng.split(',').map(coord => parseFloat(coord.trim()));
+                            if (!isNaN(lat) && !isNaN(lng)) {
+                                driverLocation = { lat, lng };
                             }
-                        } catch (error) {
-                            this.logger.warn(`Invalid latlng format for driver ${driverId}: ${driverLatlng}`);
+                        } else {
+                            const latlngData = JSON.parse(driverLatlng);
+                            if (Array.isArray(latlngData) && latlngData.length > 0) {
+                                const lastLocation = latlngData[latlngData.length - 1];
+                                if (lastLocation.latlng) {
+                                    const [lat, lng] = lastLocation.latlng.split(',').map(coord => parseFloat(coord.trim()));
+                                    if (!isNaN(lat) && !isNaN(lng)) {
+                                        driverLocation = { lat, lng };
+                                    }
+                                }
+                            } else if (latlngData.lat && latlngData.lng) {
+                                driverLocation = { lat: latlngData.lat, lng: latlngData.lng };
+                            }
                         }
+                    } catch (error) {
+                        this.logger.warn(`Invalid latlng format for driver ${driverId}: ${driverLatlng}`);
                     }
-
-                    // Hitung jarak dari order (simplified calculation)
-                    let distance = 0;
-                    if (orderLocation.lat && orderLocation.lng && driverLocation.lat && driverLocation.lng) {
-                        distance = this.calculateDistance(
-                            orderLocation.lat, orderLocation.lng,
-                            driverLocation.lat, driverLocation.lng
-                        );
-                    }
-
-                    availableDrivers.push({
-                        id: driverId,
-                        name: driver.getDataValue('name'),
-                        phone: driver.getDataValue('phone'),
-                        current_location: driverLocation,
-                        service_center_id: driver.getDataValue('service_center_id'),
-                        hub_id: driver.getDataValue('hub_id'),
-                        current_tasks: totalCurrentTasks,
-                        distance_from_order: distance,
-                        is_available: true
-                    });
                 }
+
+                availableDrivers.push({
+                    id: driverId,
+                    name: driver.getDataValue('name'),
+                    phone: driver.getDataValue('phone'),
+                    current_location: driverLocation,
+                    service_center_id: driver.getDataValue('service_center_id'),
+                    hub_id: driver.getDataValue('hub_id'),
+                    current_tasks: 0,
+                    distance_from_order: 0,
+                    is_available: true
+                });
             }
-
-            // 5. Sort berdasarkan jarak terdekat dan beban kerja
-            availableDrivers.sort((a, b) => {
-                if (a.current_tasks !== b.current_tasks) {
-                    return a.current_tasks - b.current_tasks; // Prioritas beban kerja rendah
-                }
-                return a.distance_from_order - b.distance_from_order; // Kemudian jarak terdekat
-            });
 
             return {
                 message: `Ditemukan ${availableDrivers.length} kurir yang tersedia`,
@@ -750,97 +702,53 @@ export class DriversService {
                 ]
             });
 
-            // 4. Filter dan hitung beban kerja kurir
+            // 4. Map semua kurir ke availableDrivers
             const availableDrivers: AvailableDriverDto[] = [];
 
             for (const driver of drivers) {
                 const driverId = driver.getDataValue('id');
 
-                // Hitung tugas delivery yang sedang berjalan (status pending = 0)
-                const currentDeliveryTasks = await this.orderDeliverDriverModel.count({
-                    where: {
-                        driver_id: driverId,
-                        status: 0 // Status pending
-                    }
-                });
-
-                // Hitung tugas pickup yang masih berjalan
-                const currentPickupTasks = await this.orderPickupDriverModel.count({
-                    where: {
-                        driver_id: driverId,
-                        status: 0 // Status pending
-                    }
-                });
-
-                const totalCurrentTasks = currentPickupTasks + currentDeliveryTasks;
-
-                // Kurir dianggap tersedia jika tugas < 3
-                if (totalCurrentTasks < 3) {
-                    // Parse lokasi kurir
-                    let driverLocation: DriverLocationDto = { lat: 0, lng: 0 };
-                    const driverLatlng = driver.getDataValue('latlng');
-                    if (driverLatlng) {
-                        try {
-                            // Handle format string langsung "lat,lng"
-                            if (typeof driverLatlng === 'string' && driverLatlng.includes(',')) {
-                                const [lat, lng] = driverLatlng.split(',').map(coord => parseFloat(coord.trim()));
-                                if (!isNaN(lat) && !isNaN(lng)) {
-                                    driverLocation = { lat, lng };
-                                }
-                            } else {
-                                // Handle format JSON
-                                const latlngData = JSON.parse(driverLatlng);
-
-                                // Handle format array of objects dengan field latlng
-                                if (Array.isArray(latlngData) && latlngData.length > 0) {
-                                    // Ambil koordinat terakhir (lokasi saat ini)
-                                    const lastLocation = latlngData[latlngData.length - 1];
-                                    if (lastLocation.latlng) {
-                                        const [lat, lng] = lastLocation.latlng.split(',').map(coord => parseFloat(coord.trim()));
-                                        if (!isNaN(lat) && !isNaN(lng)) {
-                                            driverLocation = { lat, lng };
-                                        }
-                                    }
-                                } else if (latlngData.lat && latlngData.lng) {
-                                    // Handle format object langsung {lat: x, lng: y}
-                                    driverLocation = { lat: latlngData.lat, lng: latlngData.lng };
-                                }
+                // Parse lokasi kurir
+                let driverLocation: DriverLocationDto = { lat: 0, lng: 0 };
+                const driverLatlng = driver.getDataValue('latlng');
+                if (driverLatlng) {
+                    try {
+                        if (typeof driverLatlng === 'string' && driverLatlng.includes(',')) {
+                            const [lat, lng] = driverLatlng.split(',').map(coord => parseFloat(coord.trim()));
+                            if (!isNaN(lat) && !isNaN(lng)) {
+                                driverLocation = { lat, lng };
                             }
-                        } catch (error) {
-                            this.logger.warn(`Invalid latlng format for driver ${driverId}: ${driverLatlng}`);
+                        } else {
+                            const latlngData = JSON.parse(driverLatlng);
+                            if (Array.isArray(latlngData) && latlngData.length > 0) {
+                                const lastLocation = latlngData[latlngData.length - 1];
+                                if (lastLocation.latlng) {
+                                    const [lat, lng] = lastLocation.latlng.split(',').map(coord => parseFloat(coord.trim()));
+                                    if (!isNaN(lat) && !isNaN(lng)) {
+                                        driverLocation = { lat, lng };
+                                    }
+                                }
+                            } else if (latlngData.lat && latlngData.lng) {
+                                driverLocation = { lat: latlngData.lat, lng: latlngData.lng };
+                            }
                         }
+                    } catch (error) {
+                        this.logger.warn(`Invalid latlng format for driver ${driverId}: ${driverLatlng}`);
                     }
-
-                    // Hitung jarak dari order (simplified calculation)
-                    let distance = 0;
-                    if (orderLocation.lat && orderLocation.lng && driverLocation.lat && driverLocation.lng) {
-                        distance = this.calculateDistance(
-                            orderLocation.lat, orderLocation.lng,
-                            driverLocation.lat, driverLocation.lng
-                        );
-                    }
-
-                    availableDrivers.push({
-                        id: driverId,
-                        name: driver.getDataValue('name'),
-                        phone: driver.getDataValue('phone'),
-                        current_location: driverLocation,
-                        service_center_id: driver.getDataValue('service_center_id'),
-                        hub_id: driver.getDataValue('hub_id'),
-                        current_tasks: totalCurrentTasks,
-                        distance_from_order: distance,
-                        is_available: true
-                    });
                 }
+
+                availableDrivers.push({
+                    id: driverId,
+                    name: driver.getDataValue('name'),
+                    phone: driver.getDataValue('phone'),
+                    current_location: driverLocation,
+                    service_center_id: driver.getDataValue('service_center_id'),
+                    hub_id: driver.getDataValue('hub_id'),
+                    current_tasks: 0,
+                    distance_from_order: 0,
+                    is_available: true
+                });
             }
-
-            // 5. Sort berdasarkan jarak terdekat dan beban kerja
-            availableDrivers.sort((a, b) => {
-                if (a.current_tasks !== b.current_tasks) {
-                    return a.current_tasks - b.current_tasks; // Prioritas beban kerja rendah
-                }
-                return a.distance_from_order - b.distance_from_order; // Kemudian jarak terdekat
-            });
 
             return {
                 message: `Ditemukan ${availableDrivers.length} kurir transporter yang tersedia untuk delivery`,
@@ -884,12 +792,14 @@ export class DriversService {
      * Menugaskan driver untuk order (pickup atau delivery)
      */
     async assignDriverToOrder(
-        assignDriverDto: AssignDriverDto
+        assignDriverDto: AssignDriverDto,
+        existingTransaction?: any
     ): Promise<AssignDriverResponseDto> {
         if (!this.orderModel.sequelize) {
             throw new InternalServerErrorException('Database connection tidak tersedia');
         }
-        const transaction = await this.orderModel.sequelize.transaction();
+        const transaction = existingTransaction || await this.orderModel.sequelize.transaction();
+        const shouldCommit = !existingTransaction;
 
         try {
             // 1. Validasi order
@@ -1044,8 +954,10 @@ export class DriversService {
             const assignerName = assignedByUser.getDataValue('name');
             const orderTracking = order.getDataValue('no_tracking');
 
-            // 8. Commit transaction
-            await transaction.commit();
+            // 8. Commit transaction (hanya jika bukan existing transaction)
+            if (shouldCommit) {
+                await transaction.commit();
+            }
 
             // Pengiriman WhatsApp ke driver saat penugasan dimatikan sesuai permintaan
             // await this.sendDriverAssignmentWhatsapp({
@@ -1071,7 +983,9 @@ export class DriversService {
             };
 
         } catch (error) {
-            await transaction.rollback();
+            if (shouldCommit) {
+                await transaction.rollback();
+            }
             this.logger.error(`Error in assignDriverToOrder: ${error.message}`, error.stack);
             throw error;
         }
@@ -1933,6 +1847,112 @@ export class DriversService {
     }
 
     /**
+     * Cari driver terbaik untuk reassign (exclude driver yang reject)
+     */
+    private async findBestDriverForReassign(
+        hubId: number | null,
+        excludeDriverId: number,
+        taskType: 'pickup' | 'delivery'
+    ): Promise<{ id: number; name: string } | null> {
+        const driverWhereClause: any = {
+            level: 8, // Driver level
+            aktif: 1,
+            status_app: 1,
+            freeze_saldo: 0,
+            freeze_gps: 0,
+            id: { [Op.ne]: excludeDriverId }, // Exclude driver yang reject
+        };
+
+        if (hubId) {
+            driverWhereClause.hub_id = hubId;
+        }
+
+        const drivers = await this.userModel.findAll({
+            where: driverWhereClause,
+            attributes: ['id', 'name', 'hub_id'],
+            raw: true,
+        });
+
+        if (!drivers.length) {
+            // Coba cari tanpa filter hub_id jika tidak ada
+            if (hubId) {
+                delete driverWhereClause.hub_id;
+                const globalDrivers = await this.userModel.findAll({
+                    where: driverWhereClause,
+                    attributes: ['id', 'name', 'hub_id'],
+                    raw: true,
+                });
+                if (!globalDrivers.length) return null;
+                return this.selectDriverByWorkload(globalDrivers, taskType);
+            }
+            return null;
+        }
+
+        return this.selectDriverByWorkload(drivers, taskType);
+    }
+
+    /**
+     * Pilih driver berdasarkan beban kerja terendah
+     */
+    private async selectDriverByWorkload(
+        drivers: any[],
+        taskType: 'pickup' | 'delivery'
+    ): Promise<{ id: number; name: string } | null> {
+        if (!drivers.length) return null;
+
+        const driverIds = drivers.map((d: any) => Number(d.id));
+
+        // Hitung beban kerja masing-masing driver (task pending)
+        let workloadRows: Array<Record<string, any>>;
+
+        if (taskType === 'pickup') {
+            workloadRows = await this.orderPickupDriverModel.findAll({
+                attributes: [
+                    'driver_id',
+                    [fn('COUNT', col('id')), 'task_count'],
+                ],
+                where: {
+                    driver_id: { [Op.in]: driverIds },
+                    status: 0, // Pending tasks
+                },
+                group: ['driver_id'],
+                raw: true,
+            }) as unknown as Array<Record<string, any>>;
+        } else {
+            workloadRows = await this.orderDeliverDriverModel.findAll({
+                attributes: [
+                    'driver_id',
+                    [fn('COUNT', col('id')), 'task_count'],
+                ],
+                where: {
+                    driver_id: { [Op.in]: driverIds },
+                    status: 0, // Pending tasks
+                },
+                group: ['driver_id'],
+                raw: true,
+            }) as unknown as Array<Record<string, any>>;
+        }
+
+        const workloadMap = new Map<number, number>();
+        for (const row of workloadRows) {
+            workloadMap.set(Number(row.driver_id), Number(row.task_count));
+        }
+
+        // Sort driver berdasarkan beban kerja terendah
+        const sortedDrivers = drivers
+            .map((driver: any) => ({
+                id: Number(driver.id),
+                name: driver.name,
+                workload: workloadMap.get(Number(driver.id)) || 0,
+            }))
+            .sort((a, b) => a.workload - b.workload);
+
+        return sortedDrivers.length > 0
+            ? { id: sortedDrivers[0].id, name: sortedDrivers[0].name }
+            : null;
+    }
+
+    /**
      * Helper method untuk mendapatkan informasi barang (jumlah koli, total berat, detail koli) untuk multiple orders
      */
     private async getBarangInfoForOrders(orderIds: number[]): Promise<Map<number, { jumlah_koli: number; total_berat_kg: number; detail_koli?: Array<{ piece_id: string; berat: number; panjang: number; lebar: number; tinggi: number }> }>> {
@@ -2140,6 +2160,172 @@ export class DriversService {
                 throw error;
             }
             throw new InternalServerErrorException('Gagal menerima task');
+        }
+    }
+
+    /**
+     * Driver menolak tugas (pickup atau delivery)
+     * Task akan otomatis dialihkan ke driver lain yang tersedia
+     */
+    async rejectTask(
+        taskId: number,
+        driverId: number,
+        taskType: 'pickup' | 'delivery',
+        rejectionReason?: string
+    ): Promise<any> {
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+
+        const transaction = await this.orderModel.sequelize.transaction();
+
+        try {
+            let orderId: number;
+            let noTracking: string;
+            let driverName: string;
+            let hubId: number | null = null;
+
+            if (taskType === 'pickup') {
+                // 1. Validasi pickup task
+                const pickupTask = await this.orderPickupDriverModel.findOne({
+                    where: {
+                        id: taskId,
+                        driver_id: driverId,
+                    },
+                    transaction,
+                });
+
+                if (!pickupTask) {
+                    throw new NotFoundException('Pickup task tidak ditemukan atau tidak memiliki akses');
+                }
+
+                // Hanya task dengan status Pending (0) yang bisa ditolak
+                const currentStatus = pickupTask.getDataValue('status');
+                if (currentStatus !== 0) {
+                    throw new BadRequestException(
+                        `Task tidak dapat ditolak karena status saat ini bukan Pending. Status: ${this.getTaskStatusLabel(currentStatus)}`
+                    );
+                }
+
+                orderId = pickupTask.getDataValue('order_id');
+                driverName = pickupTask.getDataValue('name');
+
+                // Ambil data order
+                const order = await this.orderModel.findByPk(orderId, {
+                    attributes: ['id', 'no_tracking', 'hub_source_id'],
+                    transaction,
+                });
+
+                if (!order) {
+                    throw new NotFoundException('Order tidak ditemukan');
+                }
+
+                noTracking = order.getDataValue('no_tracking');
+                hubId = order.getDataValue('hub_source_id');
+
+                // 2. Hapus assignment lama
+                await this.orderPickupDriverModel.destroy({
+                    where: { id: taskId },
+                    transaction,
+                });
+
+                this.logger.log(`Driver ${driverId} (${driverName}) menolak pickup task ${taskId} untuk order ${orderId}. Reason: ${rejectionReason || 'N/A'}`);
+
+            } else {
+                // delivery task
+                const deliveryTask = await this.orderDeliverDriverModel.findOne({
+                    where: {
+                        id: taskId,
+                        driver_id: driverId,
+                    },
+                    transaction,
+                });
+
+                if (!deliveryTask) {
+                    throw new NotFoundException('Delivery task tidak ditemukan atau tidak memiliki akses');
+                }
+
+                const currentStatus = deliveryTask.getDataValue('status');
+                if (currentStatus !== 0) {
+                    throw new BadRequestException(
+                        `Task tidak dapat ditolak karena status saat ini bukan Pending. Status: ${this.getTaskStatusLabel(currentStatus)}`
+                    );
+                }
+
+                orderId = deliveryTask.getDataValue('order_id');
+                driverName = deliveryTask.getDataValue('name');
+
+                const order = await this.orderModel.findByPk(orderId, {
+                    attributes: ['id', 'no_tracking', 'hub_dest_id'],
+                    transaction,
+                });
+
+                if (!order) {
+                    throw new NotFoundException('Order tidak ditemukan');
+                }
+
+                noTracking = order.getDataValue('no_tracking');
+                hubId = order.getDataValue('hub_dest_id');
+
+                // Hapus assignment lama
+                await this.orderDeliverDriverModel.destroy({
+                    where: { id: taskId },
+                    transaction,
+                });
+
+                this.logger.log(`Driver ${driverId} (${driverName}) menolak delivery task ${taskId} untuk order ${orderId}. Reason: ${rejectionReason || 'N/A'}`);
+            }
+
+            // 4. Auto reassign ke driver lain yang tersedia
+            let newDriver: { id: number; name: string } | null = null;
+            let reassigned = false;
+
+            try {
+                // Cari driver terbaik untuk reassign (exclude driver yang reject)
+                newDriver = await this.findBestDriverForReassign(hubId, driverId, taskType);
+
+                if (newDriver) {
+                    // Assign ke driver baru
+                    await this.assignDriverToOrder({
+                        order_id: orderId,
+                        driver_id: newDriver.id,
+                        assigned_by_user_id: 1, // System auto assign
+                        task_type: taskType,
+                    }, transaction);
+
+                    reassigned = true;
+                    this.logger.log(`${taskType} task untuk order ${orderId} berhasil dialihkan ke driver ${newDriver.id} (${newDriver.name})`);
+                } else {
+                    this.logger.warn(`Tidak ada driver tersedia untuk reassign ${taskType} task order ${orderId}`);
+                }
+            } catch (reassignError) {
+                // Jika reassign gagal, tetap lanjutkan (rejection tetap berhasil)
+                this.logger.error(`Reassign gagal untuk order ${orderId}: ${reassignError instanceof Error ? reassignError.message : reassignError}`);
+            }
+
+            await transaction.commit();
+
+            return {
+                message: reassigned
+                    ? `Task berhasil ditolak dan dialihkan ke driver lain`
+                    : `Task berhasil ditolak. Tidak ada driver tersedia untuk dialihkan.`,
+                success: true,
+                data: {
+                    task_id: taskId,
+                    task_type: taskType,
+                    order_id: orderId,
+                    no_tracking: noTracking,
+                    rejected_by: driverName,
+                    rejected_at: new Date(),
+                    reassigned,
+                    ...(newDriver && { new_driver: newDriver }),
+                },
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Reject task gagal: ${error instanceof Error ? error.message : error}`);
+            throw error;
         }
     }
 
