@@ -140,7 +140,7 @@ export class TransportersService {
                 email,
                 password: hashedPassword,
                 address: alamat,
-                isApprove: 0,
+                isApprove: 1,
                 aktif: 1,
                 level: userLevel,
                 hub_id: hub_id != null && hub_id !== '' ? Number(hub_id) : 0,
