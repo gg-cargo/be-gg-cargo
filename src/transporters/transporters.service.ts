@@ -210,7 +210,7 @@ export class TransportersService {
         const offset = (page - 1) * limit;
         const { count, rows } = await this.userModel.findAndCountAll({
             where,
-            attributes: ['id', 'name', 'phone', 'isApprove', 'level', 'hub_id'],
+            attributes: ['id', 'name', 'phone', 'isApprove', 'level', 'hub_id', 'status_app'],
             include: [
                 {
                     model: this.hubModel,
@@ -233,7 +233,8 @@ export class TransportersService {
                 hub_id: u.getDataValue('hub_id'),
                 hub_name: hub?.getDataValue?.('nama') ?? null,
                 role: u.getDataValue('level'),
-                status: u.getDataValue('isApprove') === 1 ? 'Approved' : (u.getDataValue('isApprove') === 0 ? 'Pending' : String(u.getDataValue('isApprove')))
+                status: u.getDataValue('isApprove') === 1 ? 'Approved' : (u.getDataValue('isApprove') === 0 ? 'Pending' : String(u.getDataValue('isApprove'))),
+                status_app: u.getDataValue('status_app') ?? null,
             };
         });
         return { data: result, total: count };
