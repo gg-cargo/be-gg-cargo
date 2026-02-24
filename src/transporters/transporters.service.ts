@@ -117,7 +117,7 @@ export class TransportersService {
 
     async registerTransporter(body: any) {
         const { email, phone, ktp, sim, foto_kurir_sim, foto_ktp, foto_sim, foto_kendaraan, kontak_emergency, alamat, kir, stnk, first_name, last_name, password, role, hub_id } = body;
-        if (!email || !phone || !ktp?.nik) throw new BadRequestException('Data utama tidak lengkap');
+        if (!phone || !ktp?.nik) throw new BadRequestException('Data utama tidak lengkap');
         if (!password) throw new BadRequestException('Password wajib diisi');
         let userLevel = 4;
         if (role !== undefined) {
@@ -137,7 +137,7 @@ export class TransportersService {
             const user = await this.userModel.create({
                 name,
                 phone,
-                email,
+                email: email ?? null,
                 password: hashedPassword,
                 address: alamat,
                 isApprove: 1,
