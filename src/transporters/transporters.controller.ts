@@ -23,12 +23,13 @@ export class TransportersController {
     async listTransportersOrCouriers(
         @Query('role') role?: string,
         @Query('status') status?: string,
+        @Query('hub_id') hub_id?: string,
         @Query('page') page?: string,
         @Query('limit') limit?: string
     ) {
         const pageNum = Number(page) > 0 ? Number(page) : 1;
         const pageLimit = Number(limit) > 0 ? Number(limit) : 10;
-        const result = await this.transportersService.listTransportersOrCouriers(role, status, pageNum, pageLimit);
+        const result = await this.transportersService.listTransportersOrCouriers(role, status, hub_id, pageNum, pageLimit);
         return {
             message: 'Berhasil mengambil data list transporter/kurir',
             data: result.data,

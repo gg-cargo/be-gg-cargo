@@ -193,7 +193,7 @@ export class TransportersService {
         });
     }
 
-    async listTransportersOrCouriers(role?: string, status?: string, page = 1, limit = 10) {
+    async listTransportersOrCouriers(role?: string, status?: string, hub_id?: string, page = 1, limit = 10) {
         const where: any = {};
         if (role === '4') where.level = 4;
         else if (role === '8') where.level = 8;
@@ -201,6 +201,11 @@ export class TransportersService {
 
         if (status === 'approved' || status === '1') where.isApprove = 1;
         else if (status === 'pending' || status === '0') where.isApprove = 0;
+
+        if (hub_id != null && hub_id !== '') {
+            const hubIdNum = Number(hub_id);
+            if (!Number.isNaN(hubIdNum)) where.hub_id = hubIdNum;
+        }
 
         const offset = (page - 1) * limit;
         const { count, rows } = await this.userModel.findAndCountAll({
