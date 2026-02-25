@@ -601,6 +601,7 @@ export class FinanceService {
                     berat_volume_kg: totalVolumeWeight,
                     volume_m3: volumeM3,
                     pengiriman: shipment.getDataValue('status'),
+                    status_reweight: shipment.getDataValue('reweight_status'),
                     status_tagihan: shipment.getDataValue('invoiceStatus'),
                     tgl_tagihan: shipment.getDataValue('orderInvoice')?.getDataValue('invoice_date') || shipment.getDataValue('date_submit'),
                     dibuat_oleh: shipment.getDataValue('orderUser')?.getDataValue('name') || 'Unknown',
