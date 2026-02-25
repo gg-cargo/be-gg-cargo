@@ -531,6 +531,7 @@ export class FinanceService {
                     'invoiceStatus',
                     'isUnpaid',
                     'isPartialPaid',
+                    'reweight_status',
                     'date_submit',
                     'order_by',
                     'total_harga',
