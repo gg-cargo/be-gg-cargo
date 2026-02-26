@@ -173,7 +173,6 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                         { text: 'DESKRIPSI', style: 'tableHeader', fillColor: '#C6EAD6' },
                         { text: 'QTY', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
                         { text: 'UOM', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'center' },
-                        { text: 'UNIT PRICE (IDR)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
                         { text: 'TOTAL HARGA (IDR)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
                         { text: 'UNIT PRICE (SGD)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
                         { text: 'TOTAL (SGD)', style: 'tableHeader', fillColor: '#C6EAD6', alignment: 'right' },
@@ -188,7 +187,7 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                     ];
 
                 const widths = isInternational
-                    ? ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto']
+                    ? ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto']
                     : ['*', 'auto', 'auto', 'auto', 'auto'];
 
                 const formatSgd = (amount: number | undefined) => {
@@ -219,7 +218,6 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                                 { text: item.deskripsi, fontSize: 9 },
                                 { text: jumlahKoliText, fontSize: 9, alignment: 'center' },
                                 { text: `${item.qty} ${item.uom}`, fontSize: 9, alignment: 'center' },
-                                { text: formatCurrency(item.harga_satuan), fontSize: 9, alignment: 'right' },
                                 { text: formatCurrency(item.total), fontSize: 9, alignment: 'right' },
                                 { text: formatSgd(item.unit_price_sgd), fontSize: 9, alignment: 'right' },
                                 { text: formatSgd(item.total_price_sgd), fontSize: 9, alignment: 'right' },
