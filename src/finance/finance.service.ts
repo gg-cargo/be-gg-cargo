@@ -786,11 +786,18 @@ export class FinanceService {
             const resolvedItemTagihan = invoiceDetails.map(detail => {
                 const unitPrice = detail.getDataValue('unit_price') || 0;
                 const qty = detail.getDataValue('qty') || 0;
-                const itemTotal = unitPrice * qty;
+                let itemTotal = unitPrice * qty;
 
                 const unitPriceSgd = detail.getDataValue('unit_price_sgd');
                 const totalPriceSgd = detail.getDataValue('total_price_sgd');
                 const exchangeRateIdr = detail.getDataValue('exchange_rate_idr');
+
+                // International: jika total IDR = 0 tapi ada SGD & kurs, hitung dari SGD ke IDR
+                if (isInternational && (itemTotal === 0 || isNaN(itemTotal)) && totalPriceSgd != null && exchangeRateIdr != null) {
+                    const totalSgd = Number(totalPriceSgd);
+                    const kurs = Number(exchangeRateIdr);
+                    itemTotal = !isNaN(totalSgd) && !isNaN(kurs) ? totalSgd * kurs : 0;
+                }
 
                 return {
                     deskripsi: detail.getDataValue('description'),
@@ -1235,11 +1242,18 @@ export class FinanceService {
             const resolvedBillingItems = invoiceDetails.map((detail: any) => {
                 const unitPrice = detail.getDataValue('unit_price') || 0;
                 const qty = detail.getDataValue('qty') || 0;
-                const total = unitPrice * qty;
+                let total = unitPrice * qty;
 
                 const unitPriceSgd = detail.getDataValue('unit_price_sgd');
                 const totalPriceSgd = detail.getDataValue('total_price_sgd');
                 const exchangeRateIdr = detail.getDataValue('exchange_rate_idr');
+
+                // International: jika total IDR = 0 tapi ada SGD & kurs, hitung dari SGD ke IDR
+                if (isInternational && (total === 0 || isNaN(total)) && totalPriceSgd != null && exchangeRateIdr != null) {
+                    const totalSgd = Number(totalPriceSgd);
+                    const kurs = Number(exchangeRateIdr);
+                    total = !isNaN(totalSgd) && !isNaN(kurs) ? totalSgd * kurs : 0;
+                }
 
                 return {
                     description: detail.getDataValue('description'),
