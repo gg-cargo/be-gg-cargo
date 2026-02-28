@@ -282,6 +282,19 @@ export class OrdersService {
                 updated_at: new Date()
             }, { where: { id: order.getDataValue('id') }, transaction });
 
+            const { date, time } = getOrderHistoryDateTime();
+            await this.orderHistoryModel.create({
+                order_id: order.getDataValue('id'),
+                status: ORDER_STATUS.OUT_FOR_DELIVERY,
+                remark: `Pesanan diantar ke customer - kota ${order.getDataValue('kota_penerima')}`,
+                date,
+                time,
+                provinsi: order.getDataValue('provinsi_penerima') || '',
+                kota: order.getDataValue('kota_penerima') || '',
+                created_by: updatedByUserId,
+                created_at: new Date(),
+            }, { transaction });
+
             await transaction.commit();
 
             return {
