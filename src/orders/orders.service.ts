@@ -5799,6 +5799,11 @@ export class OrdersService {
                 layananFilter = {
                     layanan: layananInput
                 };
+            } else {
+                // Ketika tidak ada filter tipe atau layanan, exclude 'Sewa truck'
+                layananFilter = {
+                    layanan: { [Op.ne]: 'Sewa truck' }
+                };
             }
 
             // 6. Buat filter next_hub (dipindahkan ke penentuan areaFilter bila tidak ada hub_id)
@@ -6700,7 +6705,7 @@ export class OrdersService {
             await this.orderHistoryModel.create({
                 order_id: orderId,
                 status: 'Reweight Finalized',
-                remark: `pesanan diproses di${hubAsalName}`,
+                remark: `pesanan diproses di ${hubAsalName}`,
                 date: date,
                 time: time,
                 created_by: submitReweightDto.submitted_by_user_id,
