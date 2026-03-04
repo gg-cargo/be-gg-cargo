@@ -32,6 +32,7 @@ import { DriversModule } from '../drivers/drivers.module';
 import { NotificationBadgesModule } from '../notification-badges/notification-badges.module';
 import { RatesModule } from '../rates/rates.module';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { TariffsModule } from '../tariffs/tariffs.module';
 import { Vendor } from '../models/vendor.model';
 
 @Module({
@@ -40,6 +41,7 @@ import { Vendor } from '../models/vendor.model';
         NotificationBadgesModule,
         RatesModule,
         InvoicesModule,
+        TariffsModule,
         SequelizeModule.forFeature([
             Order,
             OrderShipment,
