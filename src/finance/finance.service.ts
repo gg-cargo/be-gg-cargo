@@ -1070,12 +1070,16 @@ export class FinanceService {
 
                 // Insert ke order_invoice_details
                 for (const item of items) {
+                    const qty = item.qty || 0;
+                    const unitPrice = item.unit_price || 0;
+                    const itemTotal = qty * unitPrice;
                     await this.orderInvoiceDetailModel.create({
                         invoice_id: invoice.id,
                         description: item.description || '',
-                        qty: item.qty || 0,
+                        qty: qty,
                         uom: item.uom || '',
-                        unit_price: item.unit_price || 0,
+                        unit_price: unitPrice,
+                        total: isNaN(itemTotal) ? 0 : itemTotal,
                         remark: item.remark || ''
                     }, { transaction: t });
                 }
@@ -1559,12 +1563,22 @@ export class FinanceService {
                             ? Number(item.exchange_rate_idr)
                             : null;
 
+                        // Hitung total: gunakan item.total jika ada, else qty * unit_price. International: totalPriceSgd * exchangeRateIdr jika total 0
+                        const rawTotal = typeof item.total === 'string' ? parseFloat(item.total) : item.total;
+                        let itemTotal = typeof rawTotal === 'number' && !isNaN(rawTotal)
+                            ? rawTotal
+                            : (qty * unitPrice);
+                        if (isInternational && (itemTotal === 0 || isNaN(itemTotal)) && totalPriceSgd != null && exchangeRateIdr != null) {
+                            itemTotal = Number(totalPriceSgd) * Number(exchangeRateIdr);
+                        }
+
                         await this.orderInvoiceDetailModel.create({
                             invoice_id: invoice.id,
                             description: item.description,
                             qty: qty,
                             uom: item.uom,
                             unit_price: unitPrice,
+                            total: isNaN(itemTotal) ? 0 : itemTotal,
                             unit_price_sgd: isInternational ? unitPriceSgd : null,
                             total_price_sgd: isInternational ? (totalPriceSgd ?? (unitPriceSgd !== null ? unitPriceSgd * qty : null)) : null,
                             exchange_rate_idr: isInternational ? exchangeRateIdr : null,

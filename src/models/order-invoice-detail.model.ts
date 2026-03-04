@@ -47,6 +47,13 @@ export class OrderInvoiceDetail extends Model {
     @Column({
         type: DataType.DECIMAL(18, 2),
         allowNull: true,
+        comment: 'Total per baris (qty * unit_price) atau dari billing item',
+    })
+    total: number;
+
+    @Column({
+        type: DataType.DECIMAL(18, 2),
+        allowNull: true,
         comment: 'Harga per unit dalam SGD (khusus international)',
     })
     unit_price_sgd: string;
