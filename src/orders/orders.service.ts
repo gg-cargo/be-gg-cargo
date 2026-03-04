@@ -50,6 +50,7 @@ import { generateOrderLabelsPDF } from './helpers/generate-order-labels-pdf.help
 import { convertPdfToImages } from './helpers/convert-pdf-to-images.helper';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
 import { InvoicesService } from '../invoices/invoices.service';
+import { TariffsService } from '../tariffs/tariffs.service';
 import { ReportMissingItemDto } from './dto/report-missing-item.dto';
 import { ResolveMissingItemDto } from './dto/resolve-missing-item.dto';
 import { ForwardToVendorDto, ForwardToVendorResponseDto } from './dto/forward-to-vendor.dto';
@@ -129,6 +130,7 @@ export class OrdersService {
         private readonly notificationBadgesService: NotificationBadgesService,
         private readonly ratesService: RatesService,
         private readonly invoicesService: InvoicesService,
+        private readonly tariffsService: TariffsService,
         @Inject('SEQUELIZE') private readonly sequelize: Sequelize,
     ) { }
 
@@ -782,8 +784,9 @@ export class OrdersService {
 
     /**
      * Helper function untuk auto-create invoice ketika bypass reweight diaktifkan
+     * @param chargeableWeight - Optional. Jika dari submit reweight, gunakan max(berat aktual, berat volume) untuk qty Biaya Pengiriman
      */
-    private async autoCreateInvoice(orderId: number, transaction: Transaction): Promise<any> {
+    private async autoCreateInvoice(orderId: number, transaction: Transaction, chargeableWeightFromReweight?: number): Promise<any> {
         try {
             // Ambil data order
             const order = await this.orderModel.findByPk(orderId, {
@@ -798,13 +801,74 @@ export class OrdersService {
                 throw new Error('Order tidak ditemukan');
             }
 
-            // Validasi apakah sudah ada invoice
-            if (order.getDataValue('orderInvoice') && order.getDataValue('orderInvoice').getDataValue('invoice_no')) {
+            const existingInvoice = order.getDataValue('orderInvoice');
+            const hasInvoice = existingInvoice && existingInvoice.getDataValue('invoice_no');
+
+            // Jika invoice sudah ada dan dari submit reweight: UPDATE detail Biaya Pengiriman (bukan create)
+            if (hasInvoice && chargeableWeightFromReweight != null && chargeableWeightFromReweight > 0) {
+                const invoice = existingInvoice;
+                const invoiceId = invoice.getDataValue('id');
+                const totalHargaOrder = order.total_harga || 0;
+                const chargeableWeight = chargeableWeightFromReweight;
+                const remark = `Berat terberat: ${chargeableWeight.toFixed(2)} kg (max dari berat aktual & volume)`;
+
+                // Ambil total dari /master/tariffs/simulate (final_price)
+                let itemTotal = totalHargaOrder;
+                try {
+                    const layanan = order.getDataValue('layanan') || 'Reguler';
+                    const simulateDto = {
+                        service_type: 'Kirim Barang',
+                        sub_service: layanan,
+                        origin: order.getDataValue('kota_pengirim') || order.getDataValue('provinsi_pengirim'),
+                        destination: order.getDataValue('kota_penerima') || order.getDataValue('provinsi_penerima'),
+                        effective_date: new Date().toISOString().split('T')[0],
+                        weight_kg: chargeableWeight,
+                        is_fragile: false
+                    };
+                    const simulateResult = await this.tariffsService.simulate(simulateDto);
+                    if (simulateResult?.breakdown?.final_price != null) {
+                        itemTotal = Number(simulateResult.breakdown.final_price);
+                    }
+                } catch (err) {
+                    this.logger.warn(`Tariff simulate gagal untuk order ${orderId}, gunakan total_harga: ${err?.message}`);
+                }
+
+                const unitPricePengiriman = chargeableWeight > 0 ? itemTotal / chargeableWeight : itemTotal;
+
+                const pengirimanDetail = await this.orderInvoiceDetailModel.findOne({
+                    where: {
+                        invoice_id: invoiceId,
+                        description: 'Biaya Pengiriman Barang'
+                    },
+                    transaction
+                });
+
+                if (pengirimanDetail) {
+                    await pengirimanDetail.update({
+                        qty: chargeableWeight,
+                        unit_price: unitPricePengiriman,
+                        total: itemTotal,
+                        remark
+                    }, { transaction });
+                }
+
+                // Update order.total_harga dengan final_price dari tariff
+                await order.update({ total_harga: itemTotal }, { transaction });
+
                 return {
-                    invoice_no: order.getDataValue('orderInvoice').getDataValue('invoice_no'),
-                    invoice_id: order.getDataValue('orderInvoice').getDataValue('id'),
-                    total_amount: order.getDataValue('orderInvoice').getDataValue('total_amount')
-                }; // Sudah ada invoice
+                    invoice_no: invoice.getDataValue('invoice_no'),
+                    invoice_id: invoiceId,
+                    total_amount: itemTotal
+                };
+            }
+
+            // Jika invoice sudah ada dan BUKAN dari submit reweight: return (bypass flow)
+            if (hasInvoice) {
+                return {
+                    invoice_no: existingInvoice.getDataValue('invoice_no'),
+                    invoice_id: existingInvoice.getDataValue('id'),
+                    total_amount: existingInvoice.getDataValue('total_amount')
+                };
             }
 
             // Ambil info bank default
@@ -818,7 +882,7 @@ export class OrdersService {
             let invoice_no = noTracking;
 
             // Cek apakah sudah ada invoice dengan no_tracking yang sama
-            const existingInvoice = await this.orderInvoiceModel.findOne({
+            const existingInvoiceByNoTracking = await this.orderInvoiceModel.findOne({
                 where: {
                     [Op.or]: [
                         { invoice_no: noTracking },
@@ -829,9 +893,9 @@ export class OrdersService {
                 transaction
             });
 
-            if (existingInvoice && existingInvoice.invoice_no !== noTracking) {
+            if (existingInvoiceByNoTracking && existingInvoiceByNoTracking.invoice_no !== noTracking) {
                 // Jika ada invoice dengan format no_tracking-xxx, gunakan format berikutnya
-                const match = existingInvoice.invoice_no.match(new RegExp(`${noTracking}-(\\d+)`));
+                const match = existingInvoiceByNoTracking.invoice_no.match(new RegExp(`${noTracking}-(\\d+)`));
                 if (match) {
                     const nextNumber = parseInt(match[1], 10) + 1;
                     invoice_no = `${noTracking}-${String(nextNumber).padStart(3, '0')}`;
@@ -852,52 +916,59 @@ export class OrdersService {
                 remark: string;
             }[] = [];
 
-            // Hitung chargeable weight berdasarkan order shipments
+            // Hitung chargeable weight: gunakan dari submit reweight jika tersedia, else hitung dari shipments
+            let chargeableWeight: number;
             let totalWeight = 0;
             let totalVolume = 0;
             let totalBeratVolume = 0;
 
-            // Ambil semua shipments untuk order ini
-            const orderShipments = await this.orderShipmentModel.findAll({
-                where: { order_id: orderId },
-                attributes: ['qty', 'berat', 'panjang', 'lebar', 'tinggi'],
-                transaction
-            });
+            if (chargeableWeightFromReweight != null && chargeableWeightFromReweight > 0) {
+                // Dari submit reweight: max(berat aktual, berat volume) sudah dihitung dari pieces
+                chargeableWeight = chargeableWeightFromReweight;
+            } else {
+                // Dari bypass reweight: hitung dari order shipments
+                const orderShipments = await this.orderShipmentModel.findAll({
+                    where: { order_id: orderId },
+                    attributes: ['qty', 'berat', 'panjang', 'lebar', 'tinggi'],
+                    transaction
+                });
 
-            // Hitung total weight dan volume dari shipments
-            orderShipments.forEach((shipment) => {
-                const qty = Number(shipment.getDataValue('qty')) || 0;
-                const berat = Number(shipment.getDataValue('berat')) || 0;
-                const panjang = Number(shipment.getDataValue('panjang')) || 0;
-                const lebar = Number(shipment.getDataValue('lebar')) || 0;
-                const tinggi = Number(shipment.getDataValue('tinggi')) || 0;
+                orderShipments.forEach((shipment) => {
+                    const qty = Number(shipment.getDataValue('qty')) || 0;
+                    const berat = Number(shipment.getDataValue('berat')) || 0;
+                    const panjang = Number(shipment.getDataValue('panjang')) || 0;
+                    const lebar = Number(shipment.getDataValue('lebar')) || 0;
+                    const tinggi = Number(shipment.getDataValue('tinggi')) || 0;
 
-                // Hitung per item
-                const itemWeight = berat * qty;
-                let itemVolume = 0;
-                let itemBeratVolume = 0;
+                    const itemWeight = berat * qty;
+                    let itemVolume = 0;
+                    let itemBeratVolume = 0;
 
-                if (panjang && lebar && tinggi) {
-                    itemVolume = this.calculateVolume(panjang, lebar, tinggi) * qty;
-                    itemBeratVolume = this.calculateBeratVolume(panjang, lebar, tinggi) * qty;
-                }
+                    if (panjang && lebar && tinggi) {
+                        itemVolume = this.calculateVolume(panjang, lebar, tinggi) * qty;
+                        itemBeratVolume = this.calculateBeratVolume(panjang, lebar, tinggi) * qty;
+                    }
 
-                // Akumulasi total
-                totalWeight += itemWeight;
-                totalVolume += itemVolume;
-                totalBeratVolume += itemBeratVolume;
-            });
+                    totalWeight += itemWeight;
+                    totalVolume += itemVolume;
+                    totalBeratVolume += itemBeratVolume;
+                });
 
-            // Chargeable weight = max(total berat aktual, total berat volume)
-            const chargeableWeight = Math.max(totalWeight, totalBeratVolume);
+                chargeableWeight = Math.max(totalWeight, totalBeratVolume);
+            }
 
-            // Biaya Pengiriman
+            // Biaya Pengiriman - qty = chargeableWeight (max berat aktual, berat volume) untuk order_invoice_details
+            const totalHargaOrder = order.total_harga || 0;
+            const unitPricePengiriman = chargeableWeight > 0 ? totalHargaOrder / chargeableWeight : totalHargaOrder;
+            const remarkPengiriman = chargeableWeightFromReweight != null
+                ? `Berat terberat: ${chargeableWeight.toFixed(2)} kg (max dari berat aktual & volume)`
+                : `Berat terberat: ${chargeableWeight.toFixed(2)} kg (Aktual: ${totalWeight.toFixed(2)} kg, Volume: ${totalBeratVolume.toFixed(2)} kg)`;
             items.push({
                 description: 'Biaya Pengiriman Barang',
                 qty: chargeableWeight,
                 uom: 'kg',
-                unit_price: order.total_harga || 0,
-                remark: `Berat terberat: ${chargeableWeight.toFixed(2)} kg (Aktual: ${totalWeight.toFixed(2)} kg, Volume: ${totalBeratVolume.toFixed(2)} kg)`
+                unit_price: unitPricePengiriman,
+                remark: remarkPengiriman
             });
 
             // Biaya Asuransi
@@ -970,12 +1041,16 @@ export class OrdersService {
 
             // Insert ke order_invoice_details
             for (const item of items) {
+                const qty = item.qty || 0;
+                const unitPrice = item.unit_price || 0;
+                const itemTotal = qty * unitPrice;
                 await this.orderInvoiceDetailModel.create({
                     invoice_id: invoice.id,
                     description: item.description || '',
-                    qty: item.qty || 0,
+                    qty: qty,
                     uom: item.uom || '',
-                    unit_price: item.unit_price || 0,
+                    unit_price: unitPrice,
+                    total: isNaN(itemTotal) ? 0 : itemTotal,
                     remark: item.remark || ''
                 }, { transaction });
             }
@@ -6681,10 +6756,10 @@ export class OrdersService {
                 }
             );
 
-            // 6. Auto-create invoice
+            // 6. Auto-create invoice (pass chargeableWeight = max(berat aktual, berat volume) untuk qty di order_invoice_details)
             let invoiceData: { invoice_no: string; invoice_id: number; total_amount: number; } | null = null;
             try {
-                invoiceData = await this.autoCreateInvoice(orderId, transaction);
+                invoiceData = await this.autoCreateInvoice(orderId, transaction, chargeableWeight);
             } catch (error) {
                 this.logger.error(`Gagal auto-create invoice untuk order ${orderId}: ${error.message}`);
                 // Invoice gagal dibuat, tapi reweight tetap berhasil

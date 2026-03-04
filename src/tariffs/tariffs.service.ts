@@ -624,7 +624,7 @@ export class TariffsService {
 
             // Calculate tax (PPN 11%)
             const afterDiscount = subtotal - discount;
-            const tax = afterDiscount * 0.11;
+            const tax = 0;
 
             // Final price
             const finalPrice = afterDiscount + tax;
