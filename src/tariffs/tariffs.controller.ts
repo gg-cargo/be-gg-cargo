@@ -21,6 +21,7 @@ import { TariffsService } from './tariffs.service';
 import { BulkCreateTariffDto } from './dto/bulk-create-tariff.dto';
 import { GetTariffsFilterDto } from './dto/get-tariffs-filter.dto';
 import { UpdateTariffStatusDto } from './dto/update-tariff-status.dto';
+import { UpdateTariffDto } from './dto/update-tariff.dto';
 import { SimulateTariffDto } from './dto/simulate-tariff.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import * as XLSX from 'xlsx';
@@ -49,6 +50,13 @@ export class TariffsController {
     async updateStatus(@Param('id') id: string, @Body() dto: UpdateTariffStatusDto) {
         const result = await this.tariffsService.updateStatus(id, dto);
         return { success: true, message: 'Tariff status updated successfully', data: result };
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id')
+    async update(@Param('id') id: string, @Body() dto: UpdateTariffDto) {
+        const result = await this.tariffsService.update(id, dto);
+        return { success: true, message: 'Tariff updated successfully', data: result };
     }
 
     @UseGuards(JwtAuthGuard)

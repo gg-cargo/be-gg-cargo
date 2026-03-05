@@ -10,6 +10,7 @@ import { TariffSurcharge } from '../models/tarif-surcharge.model';
 import { BulkCreateTariffDto, CreateTariffDto } from './dto/bulk-create-tariff.dto';
 import { GetTariffsFilterDto } from './dto/get-tariffs-filter.dto';
 import { UpdateTariffStatusDto } from './dto/update-tariff-status.dto';
+import { UpdateTariffDto } from './dto/update-tariff.dto';
 import { Sequelize } from 'sequelize-typescript';
 import { Op, fn, col, where } from 'sequelize';
 import * as XLSX from 'xlsx';
@@ -151,7 +152,7 @@ export class TariffsService {
 
     private async createRelatedRecords(
         tariffId: string,
-        dto: CreateTariffDto,
+        dto: CreateTariffDto | UpdateTariffDto,
         transaction: any,
     ) {
         // Create weight tiers
@@ -445,6 +446,103 @@ export class TariffsService {
         }
 
         return tariff;
+    }
+
+    async update(id: string, dto: UpdateTariffDto) {
+        const tariff = await this.findOne(id);
+        const transaction = await this.sequelize.transaction();
+
+        try {
+            // Build merged data for validation (map camelCase relations to snake_case DTO shape)
+            const plain = tariff.get({ plain: true }) as any;
+            const mergedForValidation: CreateTariffDto = {
+                ...plain,
+                ...dto,
+                pricing_model: (dto.pricing_model ?? plain.pricing_model) as any,
+                weight_tiers: dto.weight_tiers ?? plain.weightTiers?.map((t: any) => ({
+                    min_weight_kg: t.min_weight_kg,
+                    max_weight_kg: t.max_weight_kg,
+                    rate_per_kg: t.rate_per_kg,
+                })),
+                route_prices: dto.route_prices ?? plain.routePrices?.map((r: any) => ({
+                    origin_city: r.origin_city,
+                    destination_city: r.destination_city,
+                    item_type: r.item_type,
+                    price: r.price,
+                })),
+                distance_config: dto.distance_config ?? (plain.distanceConfigs?.[0] ? {
+                    base_price: plain.distanceConfigs[0].base_price,
+                    rate_per_km: plain.distanceConfigs[0].rate_per_km,
+                    min_km: plain.distanceConfigs[0].min_km,
+                    max_km: plain.distanceConfigs[0].max_km,
+                    distance_tiers: plain.distanceConfigs.slice(1).map((t: any) => ({
+                        min_km: t.min_km,
+                        max_km: t.max_km,
+                        rate_per_km: t.rate_per_km,
+                    })),
+                } : undefined),
+                vehicle_daily_rates: dto.vehicle_daily_rates ?? plain.dailyRates?.map((d: any) => ({
+                    vehicle_type: d.vehicle_type,
+                    daily_rate: d.daily_rate,
+                    max_hours: d.max_hours,
+                })),
+                sea_freight_config: dto.sea_freight_config ?? (plain.seaFreights?.[0] ? {
+                    origin_port: plain.seaFreights[0].origin_port,
+                    destination_port: plain.seaFreights[0].destination_port,
+                    rate_per_cbm: plain.seaFreights[0].rate_per_cbm,
+                    currency: plain.seaFreights[0].currency,
+                } : undefined),
+                surcharges: dto.surcharges ?? plain.surcharges?.map((s: any) => ({
+                    surcharge_type: s.surcharge_type,
+                    calculation: s.calculation,
+                    value: s.value,
+                    condition: s.condition,
+                })),
+            };
+            this.validatePricingModelData(mergedForValidation, 1);
+
+            // Update master fields (only provided fields)
+            const masterFields = [
+                'service_type', 'sub_service', 'tariff_name', 'pricing_model', 'customer_id',
+                'origin_zone', 'destination_zone', 'vehicle_type', 'barang_id', 'currency',
+                'min_charge', 'sla_hours', 'is_active', 'effective_start', 'effective_end'
+            ];
+            for (const field of masterFields) {
+                if ((dto as any)[field] !== undefined) {
+                    tariff.setDataValue(field as keyof MasterTarif, (dto as any)[field]);
+                }
+            }
+            await tariff.save({ transaction });
+
+            // Delete existing related records for relations provided in DTO
+            if (dto.weight_tiers !== undefined) {
+                await this.tariffWeightTierModel.destroy({ where: { tariff_id: id }, transaction });
+            }
+            if (dto.route_prices !== undefined) {
+                await this.tariffRoutePriceModel.destroy({ where: { tariff_id: id }, transaction });
+            }
+            if (dto.distance_config !== undefined) {
+                await this.tariffDistanceModel.destroy({ where: { tariff_id: id }, transaction });
+            }
+            if (dto.vehicle_daily_rates !== undefined) {
+                await this.tariffVehicleDailyModel.destroy({ where: { tariff_id: id }, transaction });
+            }
+            if (dto.sea_freight_config !== undefined) {
+                await this.tariffSeaFreightModel.destroy({ where: { tariff_id: id }, transaction });
+            }
+            if (dto.surcharges !== undefined) {
+                await this.tariffSurchargeModel.destroy({ where: { tariff_id: id }, transaction });
+            }
+
+            // Create new related records for provided data
+            await this.createRelatedRecords(id, dto, transaction);
+
+            await transaction.commit();
+            return this.findOne(id);
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
     }
 
     async updateStatus(id: string, dto: UpdateTariffStatusDto) {
