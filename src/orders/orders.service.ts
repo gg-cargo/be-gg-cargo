@@ -816,7 +816,7 @@ export class OrdersService {
                 let itemTotal = totalHargaOrder;
                 try {
                     const layanan = order.getDataValue('layanan') || 'Reguler';
-                    const simulateDto = {
+                    const simulateDto: Record<string, any> = {
                         service_type: 'Kirim Barang',
                         sub_service: layanan,
                         origin: order.getDataValue('kota_pengirim') || order.getDataValue('provinsi_pengirim'),
@@ -825,6 +825,10 @@ export class OrdersService {
                         weight_kg: chargeableWeight,
                         is_fragile: false
                     };
+                    const orderBarangId = order.getDataValue('barang_id');
+                    if (orderBarangId != null) {
+                        simulateDto.barang_id = orderBarangId;
+                    }
                     const simulateResult = await this.tariffsService.simulate(simulateDto);
                     if (simulateResult?.breakdown?.final_price != null) {
                         itemTotal = Number(simulateResult.breakdown.final_price);
