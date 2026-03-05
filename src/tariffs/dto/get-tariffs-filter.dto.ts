@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsInt, Min, IsBoolean, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsInt, Min, IsBoolean, IsDateString, IsNumber } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
 export class GetTariffsFilterDto {
@@ -21,6 +21,27 @@ export class GetTariffsFilterDto {
     @IsOptional()
     @IsString()
     service_type?: string;
+
+    @IsOptional()
+    @IsString()
+    sub_service?: string;
+
+    @IsOptional()
+    @IsString()
+    pricing_model?: string;
+
+    @IsOptional()
+    @IsString()
+    origin_zone?: string;
+
+    @IsOptional()
+    @IsString()
+    destination_zone?: string;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsNumber()
+    barang_id?: number;
 
     @IsOptional()
     @IsString()

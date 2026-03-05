@@ -388,7 +388,7 @@ export class TariffsService {
     }
 
     async findAll(params: GetTariffsFilterDto) {
-        const { page = 1, limit = 10, search, service_type, customer_id, is_active, start_date, end_date } = params;
+        const { page = 1, limit = 10, search, service_type, sub_service, pricing_model, origin_zone, destination_zone, barang_id, customer_id, is_active, start_date, end_date } = params;
         const offset = (page - 1) * limit;
 
         const where: any = {};
@@ -403,6 +403,11 @@ export class TariffsService {
         }
 
         if (service_type) where.service_type = service_type;
+        if (sub_service) where.sub_service = sub_service;
+        if (pricing_model) where.pricing_model = pricing_model;
+        if (origin_zone) where.origin_zone = origin_zone;
+        if (destination_zone) where.destination_zone = destination_zone;
+        if (barang_id != null) where.barang_id = barang_id;
         if (customer_id) where.customer_id = customer_id;
         if (is_active !== undefined) where.is_active = is_active;
         if (start_date) where.effective_start = { [Op.gte]: start_date };
