@@ -74,6 +74,7 @@ export class TariffsService {
                         origin_zone: tariffDto.origin_zone || null,
                         destination_zone: tariffDto.destination_zone || null,
                         vehicle_type: tariffDto.vehicle_type || null,
+                        barang_id: tariffDto.barang_id ?? null,
                         currency: tariffDto.currency,
                         min_charge: tariffDto.min_charge,
                         sla_hours: tariffDto.sla_hours || null,
@@ -731,52 +732,57 @@ export class TariffsService {
     }
 
     private async findMatchingTariff(dto: any) {
-        const andConditions: any[] = [
-            { service_type: dto.service_type },
-            { sub_service: dto.sub_service },
-            { is_active: true },
-            // effective_end check
-            {
-                [Op.or]: [
-                    { effective_end: { [Op.gte]: dto.effective_date } },
-                    { effective_end: null }
-                ]
+        const buildConditions = (barangIdFilter: number | null) => {
+            const andConditions: any[] = [
+                { service_type: dto.service_type },
+                { sub_service: dto.sub_service },
+                { is_active: true },
+                {
+                    [Op.or]: [
+                        { effective_end: { [Op.gte]: dto.effective_date } },
+                        { effective_end: null }
+                    ]
+                }
+            ];
+
+            if (barangIdFilter !== undefined) {
+                andConditions.push({ barang_id: barangIdFilter });
             }
-        ];
 
-        if (dto.origin) {
-            const normOrigin = String(dto.origin).trim().toLowerCase();
-            andConditions.push({
-                [Op.or]: [
-                    this.sequelizeWhereLower('origin_zone', normOrigin),
-                    { origin_zone: null }
-                ]
-            });
-        }
+            if (dto.origin) {
+                const normOrigin = String(dto.origin).trim().toLowerCase();
+                andConditions.push({
+                    [Op.or]: [
+                        this.sequelizeWhereLower('origin_zone', normOrigin),
+                        { origin_zone: null }
+                    ]
+                });
+            }
 
-        if (dto.destination) {
-            const normDestination = String(dto.destination).trim().toLowerCase();
-            andConditions.push({
-                [Op.or]: [
-                    this.sequelizeWhereLower('destination_zone', normDestination),
-                    { destination_zone: null }
-                ]
-            });
-        }
+            if (dto.destination) {
+                const normDestination = String(dto.destination).trim().toLowerCase();
+                andConditions.push({
+                    [Op.or]: [
+                        this.sequelizeWhereLower('destination_zone', normDestination),
+                        { destination_zone: null }
+                    ]
+                });
+            }
 
-        if (dto.customer_id) {
-            andConditions.push({
-                [Op.or]: [
-                    { customer_id: dto.customer_id },
-                    { customer_id: null }
-                ]
-            });
-        }
+            if (dto.customer_id) {
+                andConditions.push({
+                    [Op.or]: [
+                        { customer_id: dto.customer_id },
+                        { customer_id: null }
+                    ]
+                });
+            }
 
-        const where = { [Op.and]: andConditions };
+            return { [Op.and]: andConditions };
+        };
 
-        const tariff = await this.masterTarifModel.findOne({
-            where,
+        const findOpts = (whereClause: any) => ({
+            where: whereClause,
             include: [
                 { model: this.tariffWeightTierModel, as: 'weightTiers' },
                 { model: this.tariffRoutePriceModel, as: 'routePrices' },
@@ -784,13 +790,17 @@ export class TariffsService {
                 { model: this.tariffVehicleDailyModel, as: 'dailyRates' },
                 { model: this.tariffSurchargeModel, as: 'surcharges' }
             ],
-            order: [
-                ['customer_id', 'DESC'],
-                ['effective_start', 'DESC']
-            ]
+            order: [['customer_id', 'DESC'], ['effective_start', 'DESC']] as any
         });
 
-        return tariff;
+        if (dto.barang_id != null) {
+            const tariffWithBarang = await this.masterTarifModel.findOne(findOpts(buildConditions(dto.barang_id)));
+            if (tariffWithBarang) return tariffWithBarang;
+
+            return this.masterTarifModel.findOne(findOpts(buildConditions(null)));
+        }
+
+        return this.masterTarifModel.findOne(findOpts(buildConditions(null)));
     }
 
     private calculateChargeableWeight(actualWeight: number, volumeM3?: number): number {

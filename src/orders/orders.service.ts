@@ -1469,6 +1469,7 @@ export class OrdersService {
                 //barang
                 nama_barang: createOrderDto.nama_barang,
                 layanan: createOrderDto.layanan,
+                barang_id: createOrderDto.barang_id ?? null,
                 no_referensi: createOrderDto.no_referensi,
                 asuransi: createOrderDto.asuransi || 0,
                 packing: createOrderDto.packing || 0,

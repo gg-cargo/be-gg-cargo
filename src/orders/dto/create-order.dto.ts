@@ -64,6 +64,10 @@ export class CreateOrderDto {
 
     @IsNumber()
     @IsOptional()
+    barang_id?: number;
+
+    @IsNumber()
+    @IsOptional()
     asuransi?: number;
 
     @IsNumber()

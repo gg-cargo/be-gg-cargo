@@ -22,6 +22,10 @@ export class SimulateTariffDto {
     @IsString()
     customer_id?: string;
 
+    @IsOptional()
+    @IsNumber()
+    barang_id?: number;
+
     // Conditional fields based on pricing_type
     @IsOptional()
     @IsNumber()

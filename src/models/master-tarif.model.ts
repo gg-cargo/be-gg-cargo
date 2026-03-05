@@ -1,5 +1,6 @@
-import { Table, Column, Model, DataType, HasMany } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, HasMany, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { TariffWeightTier } from './tarif-weight-tier.model';
+import { Barang } from './barang.model';
 import { TariffRoutePrice } from './tarif-route-price.model';
 import { TariffDistance } from './tarif-distance.model';
 import { TariffVehicleDaily } from './tarif-vehicle-daily.model';
@@ -65,6 +66,13 @@ export class MasterTarif extends Model<MasterTarif> {
 
     @Column({ type: DataType.DATEONLY, allowNull: true })
     effective_end: Date;
+
+    @ForeignKey(() => Barang)
+    @Column({ type: DataType.INTEGER, allowNull: true })
+    barang_id: number;
+
+    @BelongsTo(() => Barang)
+    barang: Barang;
 
     @HasMany(() => TariffWeightTier)
     weightTiers: TariffWeightTier[];

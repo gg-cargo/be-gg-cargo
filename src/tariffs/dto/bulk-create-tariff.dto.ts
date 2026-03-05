@@ -169,6 +169,10 @@ export class CreateTariffDto {
     @IsString()
     vehicle_type?: string;
 
+    @IsOptional()
+    @IsNumber()
+    barang_id?: number;
+
     @IsNotEmpty()
     @IsString()
     currency: string;

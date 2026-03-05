@@ -35,6 +35,7 @@ import { RouteGatesModule } from './route-gates/route-gates.module';
 import { DeparturesModule } from './departures/departures.module';
 import { TariffsModule } from './tariffs/tariffs.module';
 import { MasterServicesModule } from './services-master/services-master.module';
+import { BarangModule } from './barang/barang.module';
 
 @Module({
   imports: [
@@ -79,6 +80,8 @@ import { MasterServicesModule } from './services-master/services-master.module';
     TariffsModule,
     // services
     MasterServicesModule,
+    // barang (master data untuk jenis barang: pempek, dokumen, dll)
+    BarangModule,
   ],
   controllers: [AppController],
   providers: [AppService],

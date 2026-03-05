@@ -10,11 +10,13 @@ import { TariffVehicleDaily } from '../models/tarif-vehicle-daily.model';
 import { TariffSeaFreight } from '../models/tarif-sea-freight.model';
 import { TariffSurcharge } from '../models/tarif-surcharge.model';
 import { TariffServiceMultiplier } from '../models/tarif-service-multiplier.model';
+import { Barang } from '../models/barang.model';
 
 @Module({
     imports: [
         SequelizeModule.forFeature([
             MasterTarif,
+            Barang,
             TariffWeightTier,
             TariffRoutePrice,
             TariffDistance,

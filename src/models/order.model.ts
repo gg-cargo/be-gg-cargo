@@ -6,6 +6,7 @@ import { OrderInvoice } from './order-invoice.model';
 import { TransactionPayment } from './transaction-payment.model';
 import { Hub } from './hub.model';
 import { OrderKendala } from './order-kendala.model';
+import { Barang } from './barang.model';
 import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 
 @Table({
@@ -239,6 +240,16 @@ export class Order extends Model {
         defaultValue: 'Reguler',
     })
     layanan: string;
+
+    @ForeignKey(() => Barang)
+    @Column({
+        type: DataType.INTEGER,
+        allowNull: true,
+    })
+    barang_id: number;
+
+    @BelongsTo(() => Barang)
+    barang: Barang;
 
     @Column({
         type: DataType.STRING(50),

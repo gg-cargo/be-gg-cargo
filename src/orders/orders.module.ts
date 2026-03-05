@@ -34,6 +34,7 @@ import { RatesModule } from '../rates/rates.module';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { TariffsModule } from '../tariffs/tariffs.module';
 import { Vendor } from '../models/vendor.model';
+import { Barang } from '../models/barang.model';
 
 @Module({
     imports: [
@@ -66,7 +67,8 @@ import { Vendor } from '../models/vendor.model';
             OrderKendala,
             JobAssign,
             TruckList,
-            Vendor
+            Vendor,
+            Barang
         ])
     ],
     controllers: [OrdersController, InboundController],
