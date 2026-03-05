@@ -5707,7 +5707,8 @@ export class OrdersService {
                             [Op.and]: [
                                 { [Op.or]: [{ status_pickup: null }, { status_pickup: 'siap pickup' }, { status_pickup: 'Picked Up' }, { status_pickup: 'Completed' }, { status_pickup: 'Failed' }] },
                                 { is_gagal_pickup: 0 },
-                                { issetManifest_inbound: 0 }
+                                { issetManifest_inbound: 0 },
+                                { issetManifest_outbound: 0 }
                             ]
                         };
                         break;
