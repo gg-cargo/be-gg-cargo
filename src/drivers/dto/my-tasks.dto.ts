@@ -1,4 +1,4 @@
-import { IsOptional, IsIn, IsInt, Min, IsDateString } from 'class-validator';
+import { IsOptional, IsIn, IsInt, Min, IsDateString, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class MyTasksQueryDto {
@@ -29,11 +29,30 @@ export class MyTasksQueryDto {
     @IsInt({ message: 'limit harus berupa angka' })
     @Min(1, { message: 'limit harus lebih dari 0' })
     limit?: number;
+
+    /** Filter by driver ID (hanya untuk GET /drivers/tasks) */
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt({ message: 'driver_id harus berupa angka' })
+    driver_id?: number;
+
+    /** Filter by driver hub ID (hanya untuk GET /drivers/tasks) */
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt({ message: 'hub_id harus berupa angka' })
+    hub_id?: number;
+
+    /** Filter by driver name - partial match (hanya untuk GET /drivers/tasks) */
+    @IsOptional()
+    @IsString({ message: 'driver_name harus berupa string' })
+    driver_name?: string;
 }
 
 export class DriverTaskDto {
     task_id: number;
     task_type: 'pickup' | 'delivery';
+    driver_id?: number;
+    driver_name?: string;
     order_id: number;
     no_tracking: string;
     nama_pengirim: string;

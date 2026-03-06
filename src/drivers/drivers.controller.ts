@@ -87,6 +87,14 @@ export class DriversController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Get('tasks')
+    async getAllDriverTasks(
+        @Query() query: MyTasksQueryDto,
+    ): Promise<MyTasksResponseDto> {
+        return this.driversService.getAllTasks(query);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Patch('tasks/:task_id/accept')
     async acceptTask(
         @Param('task_id', ParseIntPipe) taskId: number,

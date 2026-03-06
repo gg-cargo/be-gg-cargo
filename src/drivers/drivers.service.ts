@@ -1352,7 +1352,7 @@ export class DriversService {
 
                 const pickupTasks = await this.orderPickupDriverModel.findAll({
                     where: pickupWhere,
-                    attributes: ['id', 'order_id', 'status', 'assign_date', 'notes', 'latlng', 'photo'],
+                    attributes: ['id', 'order_id', 'driver_id', 'name', 'status', 'assign_date', 'notes', 'latlng', 'photo'],
                     raw: true,
                 });
 
@@ -1456,6 +1456,8 @@ export class DriversService {
                         tasks.push({
                             task_id: pickupTask.id,
                             task_type: 'pickup',
+                            driver_id: pickupTask.driver_id,
+                            driver_name: pickupTask.name || undefined,
                             order_id: order.id,
                             no_tracking: order.no_tracking,
                             nama_pengirim: order.nama_pengirim,
@@ -1502,7 +1504,7 @@ export class DriversService {
 
                 const deliveryTasks = await this.orderDeliverDriverModel.findAll({
                     where: deliveryWhere,
-                    attributes: ['id', 'order_id', 'status', 'assign_date', 'notes', 'latlng', 'photo'],
+                    attributes: ['id', 'order_id', 'driver_id', 'name', 'status', 'assign_date', 'notes', 'latlng', 'photo'],
                     raw: true,
                 });
 
@@ -1605,6 +1607,8 @@ export class DriversService {
                         tasks.push({
                             task_id: deliveryTask.id,
                             task_type: 'delivery',
+                            driver_id: deliveryTask.driver_id,
+                            driver_name: deliveryTask.name || undefined,
                             order_id: order.id,
                             no_tracking: order.no_tracking,
                             nama_pengirim: order.nama_pengirim,
@@ -1664,9 +1668,372 @@ export class DriversService {
     }
 
     /**
+     * Mendapatkan daftar task (pickup dan delivery) untuk semua driver
+     */
+    async getAllTasks(query: MyTasksQueryDto): Promise<MyTasksResponseDto> {
+        try {
+            const {
+                task_type = 'all',
+                status,
+                date_from,
+                date_to,
+                page = 1,
+                limit = 20,
+                driver_id,
+                hub_id,
+                driver_name,
+            } = query;
+
+            const offset = (page - 1) * limit;
+
+            const isCompletedFilter = status === 'completed';
+
+            // Build filter untuk driver (driver_id, hub_id, driver_name)
+            const driverFilter: any = {};
+            if (driver_id !== undefined && driver_id !== null) {
+                driverFilter.driver_id = driver_id;
+            } else if (hub_id !== undefined && hub_id !== null) {
+                const driversInHub = await this.userModel.findAll({
+                    where: { hub_id },
+                    attributes: ['id'],
+                    raw: true,
+                });
+                const driverIds = driversInHub.map((d: any) => d.id);
+                if (driverIds.length === 0) {
+                    return {
+                        message: 'Daftar task berhasil diambil',
+                        success: true,
+                        data: {
+                            tasks: [],
+                            pagination: { page, limit, total: 0, total_pages: 0 },
+                            statistics: {
+                                total_tasks: 0,
+                                total_pickup: 0,
+                                total_delivery: 0,
+                                pending: 0,
+                                in_progress: 0,
+                                completed: 0,
+                                failed: 0,
+                                completed_pickup: 0,
+                                completed_delivery: 0,
+                            },
+                        },
+                    };
+                }
+                driverFilter.driver_id = { [Op.in]: driverIds };
+            }
+            if (driver_name && driver_name.trim()) {
+                driverFilter.name = { [Op.like]: `%${driver_name.trim()}%` };
+            }
+
+            // Build filter untuk tanggal
+            const dateFilter: any = {};
+            if (date_from || date_to) {
+                dateFilter.assign_date = {};
+                if (date_from) {
+                    dateFilter.assign_date[Op.gte] = new Date(date_from);
+                }
+                if (date_to) {
+                    const endDate = new Date(date_to);
+                    endDate.setHours(23, 59, 59, 999);
+                    dateFilter.assign_date[Op.lte] = endDate;
+                }
+            }
+
+            const tasks: DriverTaskDto[] = [];
+
+            // 1. Ambil pickup tasks jika task_type adalah 'pickup' atau 'all'
+            if (task_type === 'pickup' || task_type === 'all') {
+                const pickupWhere: any = { ...driverFilter };
+
+                if (Object.keys(dateFilter).length > 0) {
+                    Object.assign(pickupWhere, dateFilter);
+                }
+
+                if (isCompletedFilter) {
+                    pickupWhere.status = 1;
+                } else if (status !== undefined) {
+                    pickupWhere.status = parseInt(status);
+                }
+
+                const pickupTasks = await this.orderPickupDriverModel.findAll({
+                    where: pickupWhere,
+                    attributes: ['id', 'order_id', 'driver_id', 'name', 'status', 'assign_date', 'notes', 'latlng', 'photo'],
+                    raw: true,
+                });
+
+                let filteredPickupTasks = pickupTasks;
+                if (isCompletedFilter) {
+                    filteredPickupTasks = pickupTasks.filter((task: any) => {
+                        const photo = task.photo;
+                        return photo && photo !== '' && photo !== null;
+                    });
+                }
+
+                if (filteredPickupTasks.length > 0) {
+                    const orderIds = filteredPickupTasks.map((task: any) => task.order_id);
+
+                    const orderWhere: any = {
+                        id: { [Op.in]: orderIds },
+                    };
+
+                    if (isCompletedFilter) {
+                        orderWhere.status_pickup = 'Completed';
+                    } else if (status !== undefined && parseInt(status) === 1) {
+                        orderWhere.status_pickup = {
+                            [Op.or]: [
+                                { [Op.ne]: 'Completed' },
+                                { [Op.is]: null }
+                            ]
+                        };
+                    }
+
+                    const orders = await this.orderModel.findAll({
+                        where: orderWhere,
+                        attributes: [
+                            'id',
+                            'no_tracking',
+                            'nama_pengirim',
+                            'alamat_pengirim',
+                            'kota_pengirim',
+                            'no_telepon_pengirim',
+                            'nama_penerima',
+                            'alamat_penerima',
+                            'kota_penerima',
+                            'no_telepon_penerima',
+                            'nama_barang',
+                            'reweight_status',
+                            'layanan',
+                            'hub_source_id',
+                            'status_pickup',
+                        ],
+                        raw: true,
+                    });
+
+                    if (isCompletedFilter) {
+                        const completedOrderIds = orders
+                            .filter((order: any) => order.status_pickup === 'Completed')
+                            .map((order: any) => order.id);
+                        filteredPickupTasks = filteredPickupTasks.filter((task: any) =>
+                            completedOrderIds.includes(task.order_id)
+                        );
+                    }
+
+                    const orderMap = new Map(orders.map((order: any) => [order.id, order]));
+                    const hubSourceIds = [...new Set(orders.map((order: any) => order.hub_source_id).filter(Boolean))];
+                    const hubs = await this.hubModel.findAll({
+                        where: { id: { [Op.in]: hubSourceIds } },
+                        attributes: ['id', 'nama'],
+                        raw: true,
+                    });
+                    const hubMap = new Map(hubs.map((hub: any) => [hub.id, hub.nama]));
+
+                    const validPickupOrderIds = new Set(filteredPickupTasks.map((task: any) => task.order_id));
+                    const orderIdsForPickup = orders
+                        .filter((order: any) => validPickupOrderIds.has(order.id))
+                        .map((order: any) => order.id);
+                    const barangInfoMap = await this.getBarangInfoForOrders(orderIdsForPickup);
+
+                    for (const pickupTask of filteredPickupTasks) {
+                        const order = orderMap.get(pickupTask.order_id);
+                        if (!order || !validPickupOrderIds.has(order.id)) continue;
+
+                        const hubName = hubMap.get(order.hub_source_id);
+                        const statusLabel = this.getTaskStatusLabel(pickupTask.status, 'pickup', order.status_pickup);
+                        const barangInfo = barangInfoMap.get(order.id);
+
+                        tasks.push({
+                            task_id: pickupTask.id,
+                            task_type: 'pickup',
+                            driver_id: pickupTask.driver_id,
+                            driver_name: pickupTask.name || undefined,
+                            order_id: order.id,
+                            no_tracking: order.no_tracking,
+                            nama_pengirim: order.nama_pengirim,
+                            alamat_pengirim: order.alamat_pengirim,
+                            kota_pengirim: order.kota_pengirim,
+                            no_telepon_pengirim: order.no_telepon_pengirim,
+                            nama_penerima: order.nama_penerima,
+                            alamat_penerima: order.alamat_penerima,
+                            kota_penerima: order.kota_penerima,
+                            no_telepon_penerima: order.no_telepon_penerima,
+                            status: pickupTask.status,
+                            reweight_status: order.reweight_status,
+                            status_label: statusLabel,
+                            assign_date: pickupTask.assign_date,
+                            notes: pickupTask.notes || undefined,
+                            latlng: pickupTask.latlng || undefined,
+                            nama_barang: order.nama_barang || undefined,
+                            layanan: order.layanan || undefined,
+                            hub_name: hubName,
+                            barang_info: barangInfo,
+                        });
+                    }
+                }
+            }
+
+            // 2. Ambil delivery tasks jika task_type adalah 'delivery' atau 'all'
+            if (task_type === 'delivery' || task_type === 'all') {
+                const deliveryWhere: any = { ...driverFilter };
+
+                if (Object.keys(dateFilter).length > 0) {
+                    Object.assign(deliveryWhere, dateFilter);
+                }
+
+                if (isCompletedFilter) {
+                    deliveryWhere.status = 1;
+                } else if (status !== undefined) {
+                    deliveryWhere.status = parseInt(status);
+                }
+
+                const deliveryTasks = await this.orderDeliverDriverModel.findAll({
+                    where: deliveryWhere,
+                    attributes: ['id', 'order_id', 'driver_id', 'name', 'status', 'assign_date', 'notes', 'latlng', 'photo'],
+                    raw: true,
+                });
+
+                if (deliveryTasks.length > 0) {
+                    const orderIds = deliveryTasks.map((task: any) => task.order_id);
+
+                    const orderWhere: any = {
+                        id: { [Op.in]: orderIds },
+                    };
+
+                    if (isCompletedFilter) {
+                        orderWhere.status_deliver = 'Completed';
+                    } else if (status !== undefined && parseInt(status) === 1) {
+                        orderWhere.status_deliver = {
+                            [Op.or]: [
+                                { [Op.ne]: 'Completed' },
+                                { [Op.is]: null }
+                            ]
+                        };
+                    }
+
+                    const orders = await this.orderModel.findAll({
+                        where: orderWhere,
+                        attributes: [
+                            'id',
+                            'no_tracking',
+                            'nama_pengirim',
+                            'alamat_pengirim',
+                            'kota_pengirim',
+                            'no_telepon_pengirim',
+                            'nama_penerima',
+                            'alamat_penerima',
+                            'kota_penerima',
+                            'no_telepon_penerima',
+                            'nama_barang',
+                            'layanan',
+                            'hub_dest_id',
+                            'status',
+                            'status_deliver',
+                            'reweight_status',
+                        ],
+                        raw: true,
+                    });
+
+                    let filteredDeliveryTasks = deliveryTasks;
+                    if (isCompletedFilter) {
+                        filteredDeliveryTasks = deliveryTasks.filter((task: any) => {
+                            const photo = task.photo;
+                            return photo && photo !== '' && photo !== null;
+                        });
+
+                        const deliveredOrderIds = orders
+                            .filter((order: any) => order.status_deliver === 'Completed')
+                            .map((order: any) => order.id);
+                        filteredDeliveryTasks = filteredDeliveryTasks.filter((task: any) =>
+                            deliveredOrderIds.includes(task.order_id)
+                        );
+                    }
+
+                    const orderMap = new Map(orders.map((order: any) => [order.id, order]));
+                    const hubDestIds = [...new Set(orders.map((order: any) => order.hub_dest_id).filter(Boolean))];
+                    const hubs = hubDestIds.length > 0 ? await this.hubModel.findAll({
+                        where: { id: { [Op.in]: hubDestIds } },
+                        attributes: ['id', 'nama'],
+                        raw: true,
+                    }) : [];
+                    const hubMap = new Map(hubs.map((hub: any) => [hub.id, hub.nama]));
+
+                    const validDeliveryOrderIds = new Set(filteredDeliveryTasks.map((task: any) => task.order_id));
+                    const orderIdsForDelivery = orders
+                        .filter((order: any) => validDeliveryOrderIds.has(order.id))
+                        .map((order: any) => order.id);
+                    const barangInfoMap = await this.getBarangInfoForOrders(orderIdsForDelivery);
+
+                    for (const deliveryTask of filteredDeliveryTasks) {
+                        const order = orderMap.get(deliveryTask.order_id);
+                        if (!order || !validDeliveryOrderIds.has(order.id)) continue;
+
+                        const hubName = hubMap.get(order.hub_dest_id);
+                        const statusLabel = this.getTaskStatusLabel(deliveryTask.status, 'delivery', order.status_deliver);
+                        const barangInfo = barangInfoMap.get(order.id);
+
+                        tasks.push({
+                            task_id: deliveryTask.id,
+                            task_type: 'delivery',
+                            driver_id: deliveryTask.driver_id,
+                            driver_name: deliveryTask.name || undefined,
+                            order_id: order.id,
+                            no_tracking: order.no_tracking,
+                            nama_pengirim: order.nama_pengirim,
+                            alamat_pengirim: order.alamat_pengirim,
+                            kota_pengirim: order.kota_pengirim,
+                            no_telepon_pengirim: order.no_telepon_pengirim,
+                            nama_penerima: order.nama_penerima,
+                            alamat_penerima: order.alamat_penerima,
+                            kota_penerima: order.kota_penerima,
+                            no_telepon_penerima: order.no_telepon_penerima,
+                            status: deliveryTask.status,
+                            reweight_status: order.reweight_status,
+                            status_label: statusLabel,
+                            assign_date: deliveryTask.assign_date,
+                            notes: deliveryTask.notes || undefined,
+                            latlng: deliveryTask.latlng || undefined,
+                            nama_barang: order.nama_barang || undefined,
+                            layanan: order.layanan || undefined,
+                            hub_name: hubName,
+                            barang_info: barangInfo,
+                        });
+                    }
+                }
+            }
+
+            // Sort berdasarkan assign_date (terbaru dulu)
+            tasks.sort((a, b) => new Date(b.assign_date).getTime() - new Date(a.assign_date).getTime());
+
+            const total = tasks.length;
+            const paginatedTasks = tasks.slice(offset, offset + limit);
+            const totalPages = Math.ceil(total / limit);
+
+            const statistics = await this.calculateTaskStatistics(undefined, date_from, date_to);
+
+            return {
+                message: 'Daftar task berhasil diambil',
+                success: true,
+                data: {
+                    tasks: paginatedTasks,
+                    pagination: {
+                        page,
+                        limit,
+                        total,
+                        total_pages: totalPages,
+                    },
+                    statistics,
+                },
+            };
+        } catch (error) {
+            this.logger.error(`Error in getAllTasks: ${error.message}`, error.stack);
+            throw new InternalServerErrorException('Gagal mengambil daftar task');
+        }
+    }
+
+    /**
      * Menghitung statistik tugas untuk driver
      */
-    private async calculateTaskStatistics(driverId: number, dateFrom?: string, dateTo?: string): Promise<TaskStatisticsDto> {
+    private async calculateTaskStatistics(driverId?: number, dateFrom?: string, dateTo?: string): Promise<TaskStatisticsDto> {
         try {
             // Build filter untuk tanggal
             const dateFilter: any = {};
@@ -1683,9 +2050,8 @@ export class DriversService {
             }
 
             // Query semua pickup tasks
-            const pickupWhere: any = {
-                driver_id: driverId,
-            };
+            const pickupWhere: any = {};
+            if (driverId !== undefined) pickupWhere.driver_id = driverId;
             if (Object.keys(dateFilter).length > 0) {
                 Object.assign(pickupWhere, dateFilter);
             }
@@ -1697,9 +2063,8 @@ export class DriversService {
             });
 
             // Query semua delivery tasks
-            const deliveryWhere: any = {
-                driver_id: driverId,
-            };
+            const deliveryWhere: any = {};
+            if (driverId !== undefined) deliveryWhere.driver_id = driverId;
             if (Object.keys(dateFilter).length > 0) {
                 Object.assign(deliveryWhere, dateFilter);
             }
