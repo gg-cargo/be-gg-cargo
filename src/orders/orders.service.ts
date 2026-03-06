@@ -1437,6 +1437,7 @@ export class OrdersService {
 
         // Mulai transaction
         const transaction = await this.orderModel.sequelize!.transaction();
+        let transactionCommitted = false;
 
         try {
             // 1. Simpan ke tabel orders
@@ -1714,6 +1715,7 @@ export class OrdersService {
 
             // Commit transaction
             await transaction.commit();
+            transactionCommitted = true;
 
             // Schedule automatic "pesanan diproses" entry after 5 minutes
             this.scheduleAutoProcessOrder(order.id, userId);
@@ -1785,8 +1787,10 @@ export class OrdersService {
             };
 
         } catch (error) {
-            // Rollback transaction jika terjadi error
-            await transaction.rollback();
+            // Rollback transaction hanya jika belum di-commit
+            if (!transactionCommitted) {
+                await transaction.rollback();
+            }
             throw new BadRequestException('Gagal membuat order: ' + error.message);
         }
     }
