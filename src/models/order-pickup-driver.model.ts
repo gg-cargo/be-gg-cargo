@@ -22,9 +22,9 @@ export class OrderPickupDriver extends Model<OrderPickupDriver> {
 
     @Column({
         type: DataType.INTEGER,
-        allowNull: false,
+        allowNull: true,
     })
-    driver_id: number;
+    driver_id: number | null;
 
     @Column({
         type: DataType.DATE,

@@ -5,7 +5,7 @@ import { User } from './user.model';
 export interface OrderDeliverDriverAttributes {
     id?: number;
     order_id: number;
-    driver_id: number;
+    driver_id: number | null;
     assign_date: Date;
     name: string;
     photo: string;
@@ -48,9 +48,9 @@ export class OrderDeliverDriver extends Model<OrderDeliverDriverAttributes, Orde
     @ForeignKey(() => User)
     @Column({
         type: DataType.INTEGER,
-        allowNull: false,
+        allowNull: true,
     })
-    driver_id: number;
+    driver_id: number | null;
 
     @Index
     @Column({

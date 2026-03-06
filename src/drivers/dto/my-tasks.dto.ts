@@ -51,7 +51,7 @@ export class MyTasksQueryDto {
 export class DriverTaskDto {
     task_id: number;
     task_type: 'pickup' | 'delivery';
-    driver_id?: number;
+    driver_id?: number | null;
     driver_name?: string;
     order_id: number;
     no_tracking: string;

@@ -851,6 +851,24 @@ export class DriversService {
                 }
             }
 
+            // 4b. Cek apakah ada task dengan order_id sama dan driver_id kosong - jika ada, update entry tersebut
+            let existingUnassignedTask: any = null;
+            const unassignedWhere = {
+                order_id: assignDriverDto.order_id,
+                driver_id: null,
+            };
+            if (assignDriverDto.task_type === 'pickup') {
+                existingUnassignedTask = await this.orderPickupDriverModel.findOne({
+                    where: unassignedWhere,
+                    transaction,
+                });
+            } else if (assignDriverDto.task_type === 'delivery') {
+                existingUnassignedTask = await this.orderDeliverDriverModel.findOne({
+                    where: unassignedWhere,
+                    transaction,
+                });
+            }
+
             // 5. Update order berdasarkan task_type
             if (assignDriverDto.task_type === 'pickup') {
                 await this.orderModel.update(
@@ -880,31 +898,40 @@ export class DriversService {
                 );
             }
 
-            // 6. Buat record di tabel yang sesuai berdasarkan task_type
+            // 6. Update existing unassigned task ATAU buat record baru di tabel yang sesuai berdasarkan task_type
+            const driverUpdatePayload = {
+                driver_id: assignDriverDto.driver_id,
+                assign_date: new Date(),
+                name: driver.getDataValue('name'),
+                status: 0, // pending
+                photo: '',
+                notes: '',
+                signature: '',
+            };
             if (assignDriverDto.task_type === 'pickup') {
-                // Buat record di order_pickup_drivers
-                await this.orderPickupDriverModel.create({
-                    order_id: assignDriverDto.order_id,
-                    driver_id: assignDriverDto.driver_id,
-                    assign_date: new Date(),
-                    name: driver.getDataValue('name'),
-                    status: 0, // pending
-                    photo: '', // default empty string untuk field wajib
-                    notes: '', // default empty string untuk field wajib
-                    signature: '' // default empty string untuk field wajib
-                } as any, { transaction });
+                if (existingUnassignedTask) {
+                    await this.orderPickupDriverModel.update(driverUpdatePayload, {
+                        where: { id: existingUnassignedTask.id },
+                        transaction,
+                    });
+                } else {
+                    await this.orderPickupDriverModel.create({
+                        order_id: assignDriverDto.order_id,
+                        ...driverUpdatePayload,
+                    } as any, { transaction });
+                }
             } else if (assignDriverDto.task_type === 'delivery') {
-                // Buat record di order_deliver_drivers
-                await this.orderDeliverDriverModel.create({
-                    order_id: assignDriverDto.order_id,
-                    driver_id: assignDriverDto.driver_id,
-                    assign_date: new Date(),
-                    name: driver.getDataValue('name'),
-                    status: 0, // pending
-                    photo: '', // default empty string untuk field wajib
-                    notes: '', // default empty string untuk field wajib
-                    signature: '' // default empty string untuk field wajib
-                }, { transaction });
+                if (existingUnassignedTask) {
+                    await this.orderDeliverDriverModel.update(driverUpdatePayload, {
+                        where: { id: existingUnassignedTask.id },
+                        transaction,
+                    });
+                } else {
+                    await this.orderDeliverDriverModel.create({
+                        order_id: assignDriverDto.order_id,
+                        ...driverUpdatePayload,
+                    }, { transaction });
+                }
             }
 
             // Buat notification badge untuk order baru
@@ -1456,7 +1483,7 @@ export class DriversService {
                         tasks.push({
                             task_id: pickupTask.id,
                             task_type: 'pickup',
-                            driver_id: pickupTask.driver_id,
+                            driver_id: pickupTask.driver_id ?? undefined,
                             driver_name: pickupTask.name || undefined,
                             order_id: order.id,
                             no_tracking: order.no_tracking,
@@ -1607,7 +1634,7 @@ export class DriversService {
                         tasks.push({
                             task_id: deliveryTask.id,
                             task_type: 'delivery',
-                            driver_id: deliveryTask.driver_id,
+                            driver_id: deliveryTask.driver_id ?? undefined,
                             driver_name: deliveryTask.name || undefined,
                             order_id: order.id,
                             no_tracking: order.no_tracking,
@@ -1845,7 +1872,7 @@ export class DriversService {
                         tasks.push({
                             task_id: pickupTask.id,
                             task_type: 'pickup',
-                            driver_id: pickupTask.driver_id,
+                            driver_id: pickupTask.driver_id ?? undefined,
                             driver_name: pickupTask.name || undefined,
                             order_id: order.id,
                             no_tracking: order.no_tracking,
@@ -1974,7 +2001,7 @@ export class DriversService {
                         tasks.push({
                             task_id: deliveryTask.id,
                             task_type: 'delivery',
-                            driver_id: deliveryTask.driver_id,
+                            driver_id: deliveryTask.driver_id ?? undefined,
                             driver_name: deliveryTask.name || undefined,
                             order_id: order.id,
                             no_tracking: order.no_tracking,
@@ -2206,6 +2233,8 @@ export class DriversService {
                 return 'Completed';
             case 2:
                 return 'Failed';
+            case 3:
+                return 'Not Assigned';
             default:
                 return 'Unknown';
         }

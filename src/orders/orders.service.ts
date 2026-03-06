@@ -1726,12 +1726,49 @@ export class OrdersService {
                 await this.createNotificationBadge(order.id, 'hub kosong', 'order');
             }
 
-            // Auto assign pickup driver hanya untuk layanan selain Sewa Truk & Kirim Motor
+            // Buat record order_pickup_drivers (tanpa driver) untuk layanan selain Sewa Truk & Kirim Motor
             if (
                 createOrderDto.layanan !== LayananType.SEWA_TRUK &&
                 createOrderDto.layanan !== LayananType.KIRIM_MOTOR
             ) {
-                await this.autoAssignPickupDriver(order, hubSourceId, userId);
+                await this.orderPickupDriverModel.create({
+                    order_id: order.id,
+                    driver_id: null,
+                    assign_date: new Date(),
+                    name: '',
+                    photo: '',
+                    notes: '',
+                    signature: '',
+                    status: 3, // Not Assigned
+                } as any);
+
+                // Update order untuk pickup menunggu penugasan
+                await this.orderModel.update(
+                    {
+                        assign_driver: null,
+                        pickup_by: '',
+                        status_pickup: 'siap pickup',
+                        status: ORDER_STATUS.READY_FOR_PICKUP,
+                        updatedAt: new Date(),
+                    },
+                    {
+                        where: { id: order.id },
+                    },
+                );
+
+                // Catat di order histories (khusus pickup)
+                const { date, time } = getOrderHistoryDateTime();
+                await this.orderHistoryModel.create({
+                    order_id: order.id,
+                    status: 'Driver Assigned for Pickup',
+                    remark: 'Kurir dalam perjalanan',
+                    date,
+                    time,
+                    created_by: userId,
+                    created_at: new Date(),
+                    provinsi: '',
+                    kota: '',
+                });
             }
 
             return {

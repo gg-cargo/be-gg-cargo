@@ -1,4 +1,5 @@
-import { Column, DataType, Model, Table } from 'sequelize-typescript';
+import { Column, DataType, Model, Table, ForeignKey, BelongsTo } from 'sequelize-typescript';
+import { Hub } from './hub.model';
 
 @Table({
     tableName: 'city',
@@ -74,6 +75,17 @@ export class City extends Model<City> {
         comment: 'Catatan tambahan untuk coverage area'
     })
     coverage_notes: string;
+
+    @ForeignKey(() => Hub)
+    @Column({
+        type: DataType.INTEGER,
+        allowNull: true,
+        comment: 'Hub asal untuk kota ini (opsional)'
+    })
+    hub_origin: number;
+
+    @BelongsTo(() => Hub, 'hub_origin')
+    hubOrigin: Hub;
 
     @Column({
         type: DataType.DATE,

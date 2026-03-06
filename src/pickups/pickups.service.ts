@@ -411,7 +411,7 @@ export class PickupsService {
 
         // 3. Ambil detail driver jika ada
         let driverDetail: any = null;
-        if (pickupDriver) {
+        if (pickupDriver && pickupDriver.driver_id != null) {
             driverDetail = await this.userModel.findByPk(pickupDriver.driver_id, {
                 attributes: ['id', 'name', 'phone', 'level'],
                 raw: true,
