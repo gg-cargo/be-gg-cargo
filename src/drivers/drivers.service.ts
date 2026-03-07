@@ -2219,7 +2219,7 @@ export class DriversService {
             case 3:
                 return 'Not Assigned';
             case 4:
-                return 'Rejected';
+                return 'Rejected by Driver';
             default:
                 return 'Unknown';
         }
