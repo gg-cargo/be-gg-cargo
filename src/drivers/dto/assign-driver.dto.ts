@@ -13,10 +13,10 @@ export class AssignDriverDto {
     @IsNumber({}, { message: 'User ID harus berupa angka' })
     assigned_by_user_id: number;
 
-    //notes
+    //note
     @IsOptional()
-    @IsString({ message: 'Notes harus berupa string' })
-    notes?: string;
+    @IsString({ message: 'Note harus berupa string' })
+    note?: string;
 
     @IsNotEmpty({ message: 'Jenis tugas tidak boleh kosong' })
     @IsIn(['pickup', 'delivery'], { message: 'Jenis tugas harus pickup atau delivery' })

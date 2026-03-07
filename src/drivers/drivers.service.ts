@@ -904,7 +904,7 @@ export class DriversService {
                 name: driver.getDataValue('name'),
                 status: 0,
                 photo: '',
-                notes: assignDriverDto.notes || '',
+                notes: assignDriverDto.note || '',
                 signature: '',
             };
             if (assignDriverDto.task_type === 'pickup') {
