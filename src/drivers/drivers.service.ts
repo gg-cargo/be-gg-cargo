@@ -2218,6 +2218,8 @@ export class DriversService {
                 return 'Failed';
             case 3:
                 return 'Not Assigned';
+            case 4:
+                return 'Rejected';
             default:
                 return 'Unknown';
         }
@@ -2542,7 +2544,7 @@ export class DriversService {
 
     /**
      * Driver menolak tugas (pickup atau delivery)
-     * Task akan otomatis dialihkan ke driver lain yang tersedia
+     * Update task status = 4 (Tolak Pesanan), clear driver assignment, reset order ke siap pickup/delivery
      */
     async rejectTask(
         taskId: number,
@@ -2560,7 +2562,7 @@ export class DriversService {
             let orderId: number;
             let noTracking: string;
             let driverName: string;
-            let hubId: number | null = null;
+            const historyStatusToRemove = taskType === 'pickup' ? 'Driver Assigned for Pickup' : 'Driver Assigned for Delivery';
 
             if (taskType === 'pickup') {
                 // 1. Validasi pickup task
@@ -2587,9 +2589,8 @@ export class DriversService {
                 orderId = pickupTask.getDataValue('order_id');
                 driverName = pickupTask.getDataValue('name');
 
-                // Ambil data order
                 const order = await this.orderModel.findByPk(orderId, {
-                    attributes: ['id', 'no_tracking', 'hub_source_id'],
+                    attributes: ['id', 'no_tracking'],
                     transaction,
                 });
 
@@ -2598,16 +2599,26 @@ export class DriversService {
                 }
 
                 noTracking = order.getDataValue('no_tracking');
-                hubId = order.getDataValue('hub_source_id');
 
-                // 2. Hapus assignment lama
-                await this.orderPickupDriverModel.destroy({
-                    where: { id: taskId },
-                    transaction,
-                });
+                // 2. Update orderPickupDriverModel: status = 4, driver_id = null
+                await this.orderPickupDriverModel.update(
+                    { status: 4, driver_id: null, name: '' },
+                    { where: { id: taskId }, transaction },
+                );
+
+                // 3. Update orderModel: reset ke siap pickup
+                await this.orderModel.update(
+                    {
+                        assign_driver: 0,
+                        pickup_by: '',
+                        status_pickup: 'siap pickup',
+                        status: ORDER_STATUS.READY_FOR_PICKUP,
+                        updatedAt: new Date(),
+                    },
+                    { where: { id: orderId }, transaction },
+                );
 
                 this.logger.log(`Driver ${driverId} (${driverName}) menolak pickup task ${taskId} untuk order ${orderId}. Reason: ${rejectionReason || 'N/A'}`);
-
             } else {
                 // delivery task
                 const deliveryTask = await this.orderDeliverDriverModel.findOne({
@@ -2633,7 +2644,7 @@ export class DriversService {
                 driverName = deliveryTask.getDataValue('name');
 
                 const order = await this.orderModel.findByPk(orderId, {
-                    attributes: ['id', 'no_tracking', 'hub_dest_id'],
+                    attributes: ['id', 'no_tracking'],
                     transaction,
                 });
 
@@ -2642,50 +2653,39 @@ export class DriversService {
                 }
 
                 noTracking = order.getDataValue('no_tracking');
-                hubId = order.getDataValue('hub_dest_id');
 
-                // Hapus assignment lama
-                await this.orderDeliverDriverModel.destroy({
-                    where: { id: taskId },
-                    transaction,
-                });
+                // Update orderDeliverDriverModel: status = 4, driver_id = null
+                await this.orderDeliverDriverModel.update(
+                    { status: 4, driver_id: null, name: '' },
+                    { where: { id: taskId }, transaction },
+                );
+
+                // Update orderModel: reset deliver assignment
+                await this.orderModel.update(
+                    {
+                        deliver_by: '0',
+                        status: ORDER_STATUS.IN_TRANSIT,
+                        updatedAt: new Date(),
+                    },
+                    { where: { id: orderId }, transaction },
+                );
 
                 this.logger.log(`Driver ${driverId} (${driverName}) menolak delivery task ${taskId} untuk order ${orderId}. Reason: ${rejectionReason || 'N/A'}`);
             }
 
-            // 4. Auto reassign ke driver lain yang tersedia
-            let newDriver: { id: number; name: string } | null = null;
-            let reassigned = false;
-
-            try {
-                // Cari driver terbaik untuk reassign (exclude driver yang reject)
-                newDriver = await this.findBestDriverForReassign(hubId, driverId, taskType);
-
-                if (newDriver) {
-                    // Assign ke driver baru
-                    await this.assignDriverToOrder({
-                        order_id: orderId,
-                        driver_id: newDriver.id,
-                        assigned_by_user_id: 1, // System auto assign
-                        task_type: taskType,
-                    }, transaction);
-
-                    reassigned = true;
-                    this.logger.log(`${taskType} task untuk order ${orderId} berhasil dialihkan ke driver ${newDriver.id} (${newDriver.name})`);
-                } else {
-                    this.logger.warn(`Tidak ada driver tersedia untuk reassign ${taskType} task order ${orderId}`);
-                }
-            } catch (reassignError) {
-                // Jika reassign gagal, tetap lanjutkan (rejection tetap berhasil)
-                this.logger.error(`Reassign gagal untuk order ${orderId}: ${reassignError instanceof Error ? reassignError.message : reassignError}`);
-            }
+            // 4. Hapus order history dengan status 'Driver Assigned for Pickup' / 'Driver Assigned for Delivery'
+            await this.orderHistoryModel.destroy({
+                where: {
+                    order_id: orderId,
+                    status: historyStatusToRemove,
+                },
+                transaction,
+            });
 
             await transaction.commit();
 
             return {
-                message: reassigned
-                    ? `Task berhasil ditolak dan dialihkan ke driver lain`
-                    : `Task berhasil ditolak. Tidak ada driver tersedia untuk dialihkan.`,
+                message: 'Pesanan berhasil ditolak',
                 success: true,
                 data: {
                     task_id: taskId,
@@ -2694,8 +2694,6 @@ export class DriversService {
                     no_tracking: noTracking,
                     rejected_by: driverName,
                     rejected_at: new Date(),
-                    reassigned,
-                    ...(newDriver && { new_driver: newDriver }),
                 },
             };
 

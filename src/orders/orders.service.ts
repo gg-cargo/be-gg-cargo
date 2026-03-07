@@ -1743,20 +1743,6 @@ export class OrdersService {
                         transaction,
                     },
                 );
-
-                // Catat di order histories (khusus pickup)
-                const { date, time } = getOrderHistoryDateTime();
-                await this.orderHistoryModel.create({
-                    order_id: order.id,
-                    status: 'Pickup - Menunggu Penugasan',
-                    remark: 'Pickup menunggu penugasan kurir',
-                    date,
-                    time,
-                    created_by: userId,
-                    created_at: new Date(),
-                    provinsi: '',
-                    kota: '',
-                }, { transaction });
             }
 
             // Commit transaction

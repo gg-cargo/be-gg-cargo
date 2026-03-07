@@ -17,10 +17,5 @@ export class RejectTaskResponseDto {
         no_tracking: string;
         rejected_by: string;
         rejected_at: Date;
-        reassigned: boolean;
-        new_driver?: {
-            id: number;
-            name: string;
-        };
     };
 }
