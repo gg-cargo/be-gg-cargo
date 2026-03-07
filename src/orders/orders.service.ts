@@ -1713,22 +1713,7 @@ export class OrdersService {
                 transaction
             });
 
-            // Commit transaction
-            await transaction.commit();
-            transactionCommitted = true;
-
-            // Schedule automatic "pesanan diproses" entry after 5 minutes
-            this.scheduleAutoProcessOrder(order.id, userId);
-
-            // Buat notification badge untuk order baru
-            await this.createNotificationBadge(order.id, 'Order Masuk', 'order');
-
-            // Buat notification badge untuk hub kosong jika ada hub_id yang 0
-            if (hubSourceId === 0 || hubDestId === 0) {
-                await this.createNotificationBadge(order.id, 'hub kosong', 'order');
-            }
-
-            // Buat record order_pickup_drivers (tanpa driver) untuk layanan selain Sewa Truk & Kirim Motor
+            // 9. Buat record order_pickup_drivers (tanpa driver) untuk layanan selain Sewa Truk & Kirim Motor
             if (
                 createOrderDto.layanan !== LayananType.SEWA_TRUK &&
                 createOrderDto.layanan !== LayananType.KIRIM_MOTOR
@@ -1742,12 +1727,12 @@ export class OrdersService {
                     notes: '',
                     signature: '',
                     status: 3, // Not Assigned
-                } as any);
+                } as any, { transaction });
 
                 // Update order untuk pickup menunggu penugasan
                 await this.orderModel.update(
                     {
-                        assign_driver: null,
+                        assign_driver: 0,
                         pickup_by: '',
                         status_pickup: 'siap pickup',
                         status: ORDER_STATUS.READY_FOR_PICKUP,
@@ -1755,6 +1740,7 @@ export class OrdersService {
                     },
                     {
                         where: { id: order.id },
+                        transaction,
                     },
                 );
 
@@ -1762,15 +1748,30 @@ export class OrdersService {
                 const { date, time } = getOrderHistoryDateTime();
                 await this.orderHistoryModel.create({
                     order_id: order.id,
-                    status: 'Driver Assigned for Pickup',
-                    remark: 'Kurir dalam perjalanan',
+                    status: 'Pickup - Menunggu Penugasan',
+                    remark: 'Pickup menunggu penugasan kurir',
                     date,
                     time,
                     created_by: userId,
                     created_at: new Date(),
                     provinsi: '',
                     kota: '',
-                });
+                }, { transaction });
+            }
+
+            // Commit transaction
+            await transaction.commit();
+            transactionCommitted = true;
+
+            // Schedule automatic "pesanan diproses" entry after 5 minutes
+            this.scheduleAutoProcessOrder(order.id, userId);
+
+            // Buat notification badge untuk order baru
+            await this.createNotificationBadge(order.id, 'Order Masuk', 'order');
+
+            // Buat notification badge untuk hub kosong jika ada hub_id yang 0
+            if (hubSourceId === 0 || hubDestId === 0) {
+                await this.createNotificationBadge(order.id, 'hub kosong', 'order');
             }
 
             return {
