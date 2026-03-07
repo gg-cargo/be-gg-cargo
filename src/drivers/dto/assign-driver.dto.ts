@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsIn } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class AssignDriverDto {
     @IsNotEmpty({ message: 'Order ID tidak boleh kosong' })
@@ -12,6 +12,11 @@ export class AssignDriverDto {
     @IsNotEmpty({ message: 'User ID yang melakukan penugasan tidak boleh kosong' })
     @IsNumber({}, { message: 'User ID harus berupa angka' })
     assigned_by_user_id: number;
+
+    //notes
+    @IsOptional()
+    @IsString({ message: 'Notes harus berupa string' })
+    notes?: string;
 
     @IsNotEmpty({ message: 'Jenis tugas tidak boleh kosong' })
     @IsIn(['pickup', 'delivery'], { message: 'Jenis tugas harus pickup atau delivery' })

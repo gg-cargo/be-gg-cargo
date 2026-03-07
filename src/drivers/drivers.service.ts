@@ -851,7 +851,7 @@ export class DriversService {
                 }
             }
 
-            // 4b. Cek apakah ada task dengan order_id sama dan driver_id kosong - jika ada, update entry tersebut
+            // Cek apakah ada task dengan order_id sama dan driver_id kosong - jika ada, update entry tersebut
             let existingUnassignedTask: any = null;
             const unassignedWhere = {
                 order_id: assignDriverDto.order_id,
@@ -869,7 +869,7 @@ export class DriversService {
                 });
             }
 
-            // 5. Update order berdasarkan task_type
+            // Update order berdasarkan task_type
             if (assignDriverDto.task_type === 'pickup') {
                 await this.orderModel.update(
                     {
@@ -898,14 +898,13 @@ export class DriversService {
                 );
             }
 
-            // 6. Update existing unassigned task ATAU buat record baru di tabel yang sesuai berdasarkan task_type
             const driverUpdatePayload = {
                 driver_id: assignDriverDto.driver_id,
                 assign_date: new Date(),
                 name: driver.getDataValue('name'),
-                status: 0, // pending
+                status: 0,
                 photo: '',
-                notes: '',
+                notes: assignDriverDto.notes || '',
                 signature: '',
             };
             if (assignDriverDto.task_type === 'pickup') {
@@ -940,19 +939,15 @@ export class DriversService {
 
             // Mark as read berdasarkan menuName
             if (menuName === 'Reweight') {
-                // Jika Reweight, mark Order Masuk sebagai read
                 await this.markOrderMasukAsRead(assignDriverDto.order_id);
             } else if (menuName === 'Order Ditugaskan') {
-                // Jika Order Ditugaskan, mark Order kirim sebagai read
                 await this.markOrderKirimAsRead(assignDriverDto.order_id);
             }
 
-            // 7. Catat di order histories
             const historyStatus = assignDriverDto.task_type === 'pickup'
                 ? 'Driver Assigned for Pickup'
                 : 'Driver Assigned for Delivery';
 
-            // Set remarks berdasarkan task_type
             let historyRemark: string;
             if (assignDriverDto.task_type === 'pickup') {
                 historyRemark = 'Kurir dalam perjalanan';
@@ -962,7 +957,6 @@ export class DriversService {
                 historyRemark = `Order ditugaskan kepada ${driver.getDataValue('name')} untuk tugas ${assignDriverDto.task_type}`;
             }
 
-            // Buat order history dengan format tanggal dan waktu yang benar
             const { date, time } = getOrderHistoryDateTime();
             await this.orderHistoryModel.create({
                 order_id: assignDriverDto.order_id,
@@ -972,8 +966,8 @@ export class DriversService {
                 time: time,
                 created_by: assignDriverDto.assigned_by_user_id,
                 created_at: new Date(),
-                provinsi: '', // default empty string untuk field wajib
-                kota: ''     // default empty string untuk field wajib
+                provinsi: '',
+                kota: ''
             }, { transaction });
 
             const driverPhone = driver.getDataValue('phone');
@@ -981,7 +975,6 @@ export class DriversService {
             const assignerName = assignedByUser.getDataValue('name');
             const orderTracking = order.getDataValue('no_tracking');
 
-            // 8. Commit transaction (hanya jika bukan existing transaction)
             if (shouldCommit) {
                 await transaction.commit();
             }
