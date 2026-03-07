@@ -1716,38 +1716,15 @@ export class DriversService {
             const isCompletedFilter = status === 'completed';
 
             // Build filter untuk driver (driver_id, hub_id, driver_name)
+            // hub_id: filter berdasarkan order (hub_source_id untuk pickup, hub_dest_id untuk delivery)
+            // Sertakan task dengan driver_id null (belum ditugaskan) kecuali saat filter driver_id spesifik
             const driverFilter: any = {};
+            let hubIdForOrderFilter: number | null = null;
             if (driver_id !== undefined && driver_id !== null) {
                 driverFilter.driver_id = driver_id;
             } else if (hub_id !== undefined && hub_id !== null) {
-                const driversInHub = await this.userModel.findAll({
-                    where: { hub_id },
-                    attributes: ['id'],
-                    raw: true,
-                });
-                const driverIds = driversInHub.map((d: any) => d.id);
-                if (driverIds.length === 0) {
-                    return {
-                        message: 'Daftar task berhasil diambil',
-                        success: true,
-                        data: {
-                            tasks: [],
-                            pagination: { page, limit, total: 0, total_pages: 0 },
-                            statistics: {
-                                total_tasks: 0,
-                                total_pickup: 0,
-                                total_delivery: 0,
-                                pending: 0,
-                                in_progress: 0,
-                                completed: 0,
-                                failed: 0,
-                                completed_pickup: 0,
-                                completed_delivery: 0,
-                            },
-                        },
-                    };
-                }
-                driverFilter.driver_id = { [Op.in]: driverIds };
+                hubIdForOrderFilter = hub_id;
+                // Tidak filter by driver - filter by order hub nanti di orderWhere
             }
             if (driver_name && driver_name.trim()) {
                 driverFilter.name = { [Op.like]: `%${driver_name.trim()}%` };
@@ -1803,6 +1780,9 @@ export class DriversService {
                     const orderWhere: any = {
                         id: { [Op.in]: orderIds },
                     };
+                    if (hubIdForOrderFilter !== null) {
+                        orderWhere.hub_source_id = hubIdForOrderFilter;
+                    }
 
                     if (isCompletedFilter) {
                         orderWhere.status_pickup = 'Completed';
@@ -1925,6 +1905,9 @@ export class DriversService {
                     const orderWhere: any = {
                         id: { [Op.in]: orderIds },
                     };
+                    if (hubIdForOrderFilter !== null) {
+                        orderWhere.hub_dest_id = hubIdForOrderFilter;
+                    }
 
                     if (isCompletedFilter) {
                         orderWhere.status_deliver = 'Completed';
