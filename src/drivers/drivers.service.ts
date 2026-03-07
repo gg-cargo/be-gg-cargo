@@ -2600,9 +2600,9 @@ export class DriversService {
 
                 noTracking = order.getDataValue('no_tracking');
 
-                // 2. Update orderPickupDriverModel: status = 4, driver_id = null
+                // 2. Update orderPickupDriverModel: status = 4, driver_id = null, notes = rejection reason
                 await this.orderPickupDriverModel.update(
-                    { status: 4, driver_id: null, name: '' },
+                    { status: 4, driver_id: null, name: '', notes: rejectionReason || '' },
                     { where: { id: taskId }, transaction },
                 );
 
@@ -2654,9 +2654,9 @@ export class DriversService {
 
                 noTracking = order.getDataValue('no_tracking');
 
-                // Update orderDeliverDriverModel: status = 4, driver_id = null
+                // Update orderDeliverDriverModel: status = 4, driver_id = null, notes = rejection reason
                 await this.orderDeliverDriverModel.update(
-                    { status: 4, driver_id: null, name: '' },
+                    { status: 4, driver_id: null, name: '', notes: rejectionReason || '' },
                     { where: { id: taskId }, transaction },
                 );
 
