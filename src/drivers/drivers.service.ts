@@ -2657,7 +2657,7 @@ export class DriversService {
                 await this.orderModel.update(
                     {
                         deliver_by: '0',
-                        status: ORDER_STATUS.IN_TRANSIT,
+                        status: ORDER_STATUS.OUT_FOR_DELIVERY,
                         updatedAt: new Date(),
                     },
                     { where: { id: orderId }, transaction },
@@ -2904,7 +2904,7 @@ export class DriversService {
             ? params.orderTracking.trim()
             : `#${params.orderId}`;
 
-        const message = `Halo ${params.driverName}, Anda baru saja ditugaskan untuk ${taskLabel} order ${orderIdentifier} oleh ${params.assignerName}. Mohon cek aplikasi GG Kurir untuk detail tugasnya. Terima kasih.`;
+        const message = `Halo ${params.driverName}, Anda baru saja ditugaskan untuk ${taskLabel} order ${orderIdentifier} oleh ${params.assignerName}. Mohon cek aplikasi 99Kurir untuk detail tugasnya. Terima kasih.`;
 
         try {
             await this.whatsappService.sendText({
