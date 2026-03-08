@@ -378,6 +378,23 @@ export class OrdersService {
                 transaction
             });
 
+            // Buat order history
+            const { date, time } = getOrderHistoryDateTime();
+            await this.orderHistoryModel.create(
+                {
+                    order_id: order.getDataValue('id'),
+                    status: 'Bypass Inbound Receive',
+                    remark: `pesanan tiba di hub ${hub.nama}`,
+                    date: date,
+                    time: time,
+                    created_by: action_by_user_id,
+                    created_at: new Date(),
+                    provinsi: order.getDataValue('provinsi_penerima') || '',
+                    kota: order.getDataValue('kota_penerima') || '',
+                },
+                { transaction }
+            );
+
             await transaction.commit();
 
             return {
