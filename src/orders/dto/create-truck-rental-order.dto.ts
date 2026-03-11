@@ -120,7 +120,7 @@ export class CreateTruckRentalOrderDto {
 
     @IsString()
     @IsOptional()
-    @MaxLength(100, { message: 'keterangan_barang maksimal 100 karakter' })
+    @MaxLength(200, { message: 'keterangan_barang maksimal 100 karakter' })
     keterangan_barang?: string;
 
     @IsNumber()
