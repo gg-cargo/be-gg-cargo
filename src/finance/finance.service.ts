@@ -1047,7 +1047,7 @@ export class FinanceService {
                     return sum + (isNaN(itemTotal) ? 0 : itemTotal);
                 }, 0);
                 // Pajak
-                const ppn = Math.round(subtotal * 0.1); // 10% PPN
+                const ppn = 0; // 0% PPN
                 const pph = 0; // default 0, bisa diatur sesuai kebutuhan
                 const kode_unik = Math.floor(100 + Math.random() * 900); // 3 digit random
                 const total = subtotal + ppn - pph;
@@ -1355,7 +1355,7 @@ export class FinanceService {
                     packing_amount: roundAmount(packingAmount),
                     pph_percentage: 2,
                     pph_amount: roundAmount(pphAmount),
-                    ppn_percentage: 11,
+                    ppn_percentage: 0,
                     ppn_amount: roundAmount(ppnAmount),
                     gross_up: invoice.getDataValue('isGrossUp') === 1,
                     total_all: roundAmount(totalAll),
