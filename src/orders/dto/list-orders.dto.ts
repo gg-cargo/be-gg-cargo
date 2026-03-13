@@ -1,7 +1,20 @@
-import { IsOptional, IsBoolean, IsString, IsIn } from 'class-validator';
+import { IsOptional, IsBoolean, IsString, IsIn, IsDateString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class ListOrdersDto {
+    @IsOptional()
+    @IsDateString()
+    start_date?: string;
+
+    @IsOptional()
+    @IsDateString()
+    end_date?: string;
+
+    @IsOptional()
+    @IsString()
+    @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+    keyword?: string;
+
     @IsOptional()
     @IsBoolean()
     @Transform(({ value }) => {
@@ -22,6 +35,6 @@ export class ListOrdersDto {
 
     @IsOptional()
     @IsString()
-    @IsIn(['barang', 'sewa_truk', 'international'])
-    tipe?: string;
+    @IsIn(['Reguler', 'Express', 'Paket', 'Sewa Truk', 'Kirim Motor', 'Kirim Hemat', 'International'])
+    layanan?: string;
 }

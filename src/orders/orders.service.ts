@@ -1027,7 +1027,7 @@ export class OrdersService {
 
             // Hitung total
             const subtotal = items.reduce((sum, i) => sum + i.unit_price * i.qty, 0);
-            const ppn = Math.round(subtotal * 0.1); // 10% PPN
+            const ppn = 0; // 0% PPN
             const pph = 0;
             const kode_unik = Math.floor(100 + Math.random() * 900);
 
@@ -2780,22 +2780,65 @@ export class OrdersService {
 
     async listOrders(userId: number, query?: ListOrdersDto) {
         let tipeFilter: any = {};
-        if (query?.tipe) {
-            switch (query.tipe) {
-                case 'barang':
-                    tipeFilter = { layanan: { [Op.notIn]: ['Sewa truck', 'International'] } };
+        let dateFilter: any = {};
+        let keywordFilter: any = {};
+        if (query?.keyword && query.keyword.length > 0) {
+            const kw = `%${query.keyword}%`;
+            keywordFilter = {
+                [Op.or]: [
+                    { no_tracking: { [Op.like]: kw } },
+                    { nama_pengirim: { [Op.like]: kw } },
+                    { nama_penerima: { [Op.like]: kw } },
+                ],
+            };
+        }
+        if (query?.start_date || query?.end_date) {
+            const startDate = query.start_date
+                ? new Date(query.start_date + 'T00:00:00.000Z')
+                : new Date(0);
+            const endDate = query.end_date
+                ? new Date(query.end_date + 'T23:59:59.999Z')
+                : new Date();
+            dateFilter = {
+                created_at: {
+                    [Op.between]: [startDate, endDate],
+                },
+            };
+        }
+        if (query?.layanan) {
+            switch (query.layanan) {
+                case 'Reguler':
+                    tipeFilter = { layanan: 'Reguler' };
                     break;
-                case 'sewa_truk':
-                    tipeFilter = { layanan: 'Sewa truck' };
+                case 'Express':
+                    tipeFilter = { layanan: 'Express' };
                     break;
-                case 'international':
+                case 'Paket':
+                    tipeFilter = { layanan: 'Paket' };
+                    break;
+                case 'Sewa Truk':
+                    tipeFilter = { layanan: 'Sewa Truk' };
+                    break;
+                case 'Kirim Motor':
+                    tipeFilter = { layanan: 'Kirim Motor' };
+                    break;
+                case 'Kirim Hemat':
+                    tipeFilter = { layanan: 'Kirim Hemat' };
+                    break;
+                case 'International':
                     tipeFilter = { layanan: 'International' };
                     break;
             }
         }
+        const baseConditions: any[] = [];
+        if (Object.keys(tipeFilter).length > 0) baseConditions.push(tipeFilter);
+        if (Object.keys(dateFilter).length > 0) baseConditions.push(dateFilter);
+        if (query?.keyword && query.keyword.length > 0) baseConditions.push(keywordFilter);
+        const baseWhere = baseConditions.length > 0 ? { [Op.and]: baseConditions } : {};
+
         if (query?.missing_items) {
             const missingItemsOrders = await this.orderModel.findAll({
-                where: tipeFilter,
+                where: baseWhere,
                 include: [
                     {
                         model: this.orderShipmentModel,
@@ -2860,7 +2903,7 @@ export class OrdersService {
                                 { hub_source_id: 0 }
                             ]
                         },
-                        tipeFilter
+                        ...baseConditions
                     ]
                 },
                 include: [
@@ -2928,7 +2971,7 @@ export class OrdersService {
 
         // Ambil orders milik user, join ke order_shipments, hitung total koli, hanya field tertentu
         const orders = await this.orderModel.findAll({
-            where: { [Op.and]: [{ order_by: userId }, tipeFilter] },
+            where: { [Op.and]: [{ order_by: userId }, ...baseConditions] },
             include: [
                 {
                     model: this.orderShipmentModel,
@@ -7689,7 +7732,7 @@ export class OrdersService {
         const subtotal = safeChargeableWeight * 1000; // Asumsi harga per kg
         const packing = createOrderDto.packing || 0;
         const asuransi = createOrderDto.asuransi || 0;
-        const ppn = Math.round(subtotal * 0.11); // 11% PPN
+        const ppn = 0; // 0% PPN
         const total = subtotal + packing + asuransi + ppn;
 
         return {
@@ -7713,7 +7756,7 @@ export class OrdersService {
     } {
         const subtotal = totalHarga;
         const asuransiAmount = asuransi || 0;
-        const ppn = Math.round(subtotal * 0.11); // 11% PPN
+        const ppn = 0; // 0% PPN
         const total = subtotal + asuransiAmount + ppn;
 
         return {
