@@ -738,33 +738,58 @@ export class FinanceService {
             const invoice = order.getDataValue('orderInvoice');
             const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
             const isInternational = order.getDataValue('layanan') === 'International';
-            const billedCurrency = 'IDR';
+            const billedCurrency = invoice.getDataValue('billed_currency') || 'IDR';
+
+            const roundAmount = (value: any) => {
+                const num = Number(value) || 0;
+                return billedCurrency === 'IDR' ? Math.round(num) : Math.round(num * 100) / 100;
+            };
 
             // Get bank data - jika invoice sudah punya bank yang dipilih, tampilkan hanya bank tersebut
             // Jika belum, tampilkan semua banks
+            // Khusus layanan Paket: selalu gunakan bank dengan account_name = WIDIAH
             let banks: any[] = [];
-            const invoiceBankName = invoice.getDataValue('bank_name');
-            const invoiceAccNo = invoice.getDataValue('acc_no');
-            const invoiceBeneficiaryName = invoice.getDataValue('beneficiary_name');
+            const layanan = order.getDataValue('layanan');
 
-            // Cek apakah invoice sudah punya bank yang dipilih (ada bank_name, acc_no, dan beneficiary_name)
-            if (invoiceBankName && invoiceAccNo && invoiceBeneficiaryName) {
-                // Cari bank yang sesuai dengan data di invoice
-                const selectedBank = await this.bankModel.findOne({
-                    where: {
-                        bank_name: invoiceBankName,
-                        no_account: invoiceAccNo,
-                        account_name: invoiceBeneficiaryName
-                    },
+            if (layanan === 'Paket') {
+                const widiahBank = await this.bankModel.findOne({
+                    where: { account_name: 'WIDIAH' },
                     attributes: ['id', 'no_account', 'account_name', 'bank_name'],
                     raw: true
                 });
+                banks = widiahBank ? [widiahBank] : [];
+            } else {
+                const invoiceBankName = invoice.getDataValue('bank_name');
+                const invoiceAccNo = invoice.getDataValue('acc_no');
+                const invoiceBeneficiaryName = invoice.getDataValue('beneficiary_name');
 
-                if (selectedBank) {
-                    // Tampilkan hanya bank yang dipilih
-                    banks = [selectedBank];
+                // Cek apakah invoice sudah punya bank yang dipilih (ada bank_name, acc_no, dan beneficiary_name)
+                if (invoiceBankName && invoiceAccNo && invoiceBeneficiaryName) {
+                    // Cari bank yang sesuai dengan data di invoice
+                    const selectedBank = await this.bankModel.findOne({
+                        where: {
+                            bank_name: invoiceBankName,
+                            no_account: invoiceAccNo,
+                            account_name: invoiceBeneficiaryName
+                        },
+                        attributes: ['id', 'no_account', 'account_name', 'bank_name'],
+                        raw: true
+                    });
+
+                    if (selectedBank) {
+                        // Tampilkan hanya bank yang dipilih
+                        banks = [selectedBank];
+                    } else {
+                        // Jika tidak ditemukan, ambil bank pertama sebagai default (fallback)
+                        const firstBank = await this.bankModel.findOne({
+                            attributes: ['id', 'no_account', 'account_name', 'bank_name'],
+                            order: [['id', 'ASC']],
+                            raw: true
+                        });
+                        banks = firstBank ? [firstBank] : [];
+                    }
                 } else {
-                    // Jika tidak ditemukan, ambil bank pertama sebagai default (fallback)
+                    // Jika belum ada bank yang dipilih, ambil bank pertama sebagai default
                     const firstBank = await this.bankModel.findOne({
                         attributes: ['id', 'no_account', 'account_name', 'bank_name'],
                         order: [['id', 'ASC']],
@@ -772,21 +797,14 @@ export class FinanceService {
                     });
                     banks = firstBank ? [firstBank] : [];
                 }
-            } else {
-                // Jika belum ada bank yang dipilih, ambil bank pertama sebagai default
-                const firstBank = await this.bankModel.findOne({
-                    attributes: ['id', 'no_account', 'account_name', 'bank_name'],
-                    order: [['id', 'ASC']],
-                    raw: true
-                });
-                banks = firstBank ? [firstBank] : [];
             }
 
             // Calculate totals
             const resolvedItemTagihan = invoiceDetails.map(detail => {
                 const unitPrice = detail.getDataValue('unit_price') || 0;
                 const qty = detail.getDataValue('qty') || 0;
-                let itemTotal = unitPrice * qty;
+                const unitPriceRounded = roundAmount(unitPrice);
+                let itemTotal = unitPriceRounded * qty;
 
                 const unitPriceSgd = detail.getDataValue('unit_price_sgd');
                 const totalPriceSgd = detail.getDataValue('total_price_sgd');
@@ -803,8 +821,8 @@ export class FinanceService {
                     deskripsi: detail.getDataValue('description'),
                     qty: qty,
                     uom: detail.getDataValue('uom'),
-                    harga_satuan: unitPrice,
-                    total: isNaN(itemTotal) ? 0 : itemTotal,
+                    harga_satuan: unitPriceRounded,
+                    total: isNaN(itemTotal) ? 0 : roundAmount(itemTotal),
                     unit_price_sgd: unitPriceSgd !== null && unitPriceSgd !== undefined ? Number(unitPriceSgd) : undefined,
                     total_price_sgd: totalPriceSgd !== null && totalPriceSgd !== undefined ? Number(totalPriceSgd) : undefined,
                     exchange_rate_idr: exchangeRateIdr !== null && exchangeRateIdr !== undefined ? Number(exchangeRateIdr) : undefined,
@@ -815,11 +833,6 @@ export class FinanceService {
                 const itemTotal = Number(item.total) || 0;
                 return sum + (isNaN(itemTotal) ? 0 : itemTotal);
             }, 0);
-
-            const roundAmount = (value: any) => {
-                const num = Number(value) || 0;
-                return billedCurrency === 'IDR' ? Math.round(num) : Math.round(num * 100) / 100;
-            };
 
             const diskon = invoice.getDataValue('discount') || 0;
             const ppn = invoice.getDataValue('ppn') || 0;
@@ -1168,7 +1181,12 @@ export class FinanceService {
             const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
             const pieces = order.getDataValue('pieces') || [];
             const isInternational = order.getDataValue('layanan') === 'International';
-            const billedCurrency = 'IDR';
+            const billedCurrency = invoice.getDataValue('billed_currency') || 'IDR';
+
+            const roundAmount = (value: any) => {
+                const num = Number(value) || 0;
+                return billedCurrency === 'IDR' ? Math.round(num) : Math.round(num * 100) / 100;
+            };
 
             // Calculate kubikasi from pieces
             let kubikasi = 0;
@@ -1246,7 +1264,8 @@ export class FinanceService {
             const resolvedBillingItems = invoiceDetails.map((detail: any) => {
                 const unitPrice = detail.getDataValue('unit_price') || 0;
                 const qty = detail.getDataValue('qty') || 0;
-                let total = unitPrice * qty;
+                const unitPriceRounded = roundAmount(unitPrice);
+                let total = unitPriceRounded * qty;
 
                 const unitPriceSgd = detail.getDataValue('unit_price_sgd');
                 const totalPriceSgd = detail.getDataValue('total_price_sgd');
@@ -1263,8 +1282,8 @@ export class FinanceService {
                     description: detail.getDataValue('description'),
                     quantity: roundToTwoInvoice(qty),
                     uom: detail.getDataValue('uom'),
-                    unit_price: unitPrice,
-                    total: isNaN(total) ? 0 : total,
+                    unit_price: unitPriceRounded,
+                    total: isNaN(total) ? 0 : roundAmount(total),
                     // field baru khusus international
                     unit_price_sgd: isInternational && unitPriceSgd !== null ? Number(unitPriceSgd) : undefined,
                     total_price_sgd: isInternational && totalPriceSgd !== null ? Number(totalPriceSgd) : undefined,
@@ -1277,11 +1296,6 @@ export class FinanceService {
                 const itemTotal = Number(item.total) || 0;
                 return sum + (isNaN(itemTotal) ? 0 : itemTotal);
             }, 0);
-
-            const roundAmount = (value: any) => {
-                const num = Number(value) || 0;
-                return billedCurrency === 'IDR' ? Math.round(num) : Math.round(num * 100) / 100;
-            };
 
             const ppnAmount = invoice.getDataValue('ppn') || 0;
             const pphAmount = invoice.getDataValue('pph') || 0;

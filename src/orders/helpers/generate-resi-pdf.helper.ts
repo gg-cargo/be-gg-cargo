@@ -422,6 +422,21 @@ export async function generateResiPDF(data: any): Promise<string> {
                     margin: [0, 0, 0, 8],
                 }];
             })(data.layanan),
+            // TOTAL TAGIHAN (hanya untuk layanan Paket)
+            ...(data.layanan === 'Paket' && data.total_tagihan != null && data.total_tagihan > 0
+                ? [{
+                    table: {
+                        widths: ['*', 120],
+                        body: [
+                            [
+                                { text: `Total Tagihan: Rp ${Number(data.total_tagihan).toLocaleString('id-ID')}`, fontSize: 11, bold: true, margin: [0, 5, 0, 2] },
+                            ],
+                        ],
+                    },
+                    layout: 'noBorders',
+                    margin: [0, 8, 0, 8],
+                }]
+                : []),
             // CATATAN PENTING
             {
                 text: 'Berat dan dimensi dapat berubah setelah dilakukan proses timbang dan ukur ulang.',

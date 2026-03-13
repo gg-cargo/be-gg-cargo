@@ -2532,6 +2532,47 @@ export class OrdersService {
         const order = await this.orderModel.findByPk(orderId, { raw: true });
         if (!order) throw new NotFoundException('Order tidak ditemukan');
 
+        // 1.1 Hitung total_tagihan (sama seperti PDF tagihan) - hanya untuk layanan Paket
+        let totalTagihan: number | null = null;
+        if (order.layanan === 'Paket') {
+        const invoice = await this.orderInvoiceModel.findOne({
+            where: { order_id: orderId },
+            include: [{ model: this.orderInvoiceDetailModel, as: 'orderInvoiceDetails' }]
+        });
+        if (invoice) {
+            const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
+            const isInternational = false; // Paket is never International
+            const billedCurrency = invoice.getDataValue('billed_currency') || 'IDR';
+
+            const resolvedItemTagihan = invoiceDetails.map((detail: any) => {
+                const unitPrice = detail.getDataValue('unit_price') || 0;
+                const qty = detail.getDataValue('qty') || 0;
+                let itemTotal = unitPrice * qty;
+
+                const totalPriceSgd = detail.getDataValue('total_price_sgd');
+                const exchangeRateIdr = detail.getDataValue('exchange_rate_idr');
+                if (isInternational && (itemTotal === 0 || isNaN(itemTotal)) && totalPriceSgd != null && exchangeRateIdr != null) {
+                    const totalSgd = Number(totalPriceSgd);
+                    const kurs = Number(exchangeRateIdr);
+                    itemTotal = !isNaN(totalSgd) && !isNaN(kurs) ? totalSgd * kurs : 0;
+                }
+                return { total: isNaN(itemTotal) ? 0 : itemTotal };
+            });
+
+            const subtotalLayanan = resolvedItemTagihan.reduce((sum: number, item: any) => {
+                const itemTotal = Number(item.total) || 0;
+                return sum + (isNaN(itemTotal) ? 0 : itemTotal);
+            }, 0);
+
+            const ppn = invoice.getDataValue('ppn') || 0;
+            const pph = invoice.getDataValue('pph') || 0;
+            const totalAkhir = subtotalLayanan + ppn - pph;
+            const roundAmount = (value: number) =>
+                billedCurrency === 'IDR' ? Math.round(value) : Math.round(value * 100) / 100;
+            totalTagihan = roundAmount(totalAkhir);
+        }
+        }
+
         // 2. Ambil data shipments dan pieces
         const shipments = await this.orderShipmentModel.findAll({ where: { order_id: orderId }, raw: true });
         const pieces = await this.orderPieceModel.findAll({ where: { order_id: orderId }, raw: true });
@@ -2633,6 +2674,7 @@ export class OrdersService {
             },
             customs_notes: order.customs_notes || null,
             ringkasan: shipmentItems, // Array item shipment satu-satu
+            total_tagihan: totalTagihan,
         };
 
         // 5.1. Tambahkan informasi vendor jika order sudah diteruskan ke vendor
@@ -2699,13 +2741,14 @@ export class OrdersService {
             url,
         });
 
-        // 8. Return response
+        // 8. Return response (total_tagihan hanya untuk layanan Paket)
         return {
             message: 'Resi berhasil dibuat',
             data: {
                 order_id: orderId,
                 no_tracking: noTracking,
                 url,
+                ...(order.layanan === 'Paket' && totalTagihan != null ? { total_tagihan: totalTagihan } : {}),
             },
         };
     }
