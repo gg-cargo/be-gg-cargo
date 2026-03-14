@@ -865,12 +865,19 @@ export class OrdersService {
                 });
 
                 if (pengirimanDetail) {
-                    await pengirimanDetail.update({
-                        qty: chargeableWeight,
-                        unit_price: unitPricePengiriman,
+                    const isPaket = order.getDataValue('layanan') === 'Paket';
+                    const updateData: any = {
+                        unit_price: isPaket ? itemTotal : unitPricePengiriman,
                         total: itemTotal,
                         remark
-                    }, { transaction });
+                    };
+                    if (isPaket) {
+                        updateData.qty = 1;
+                        updateData.uom = 'paket';
+                    } else {
+                        updateData.qty = chargeableWeight;
+                    }
+                    await pengirimanDetail.update(updateData, { transaction });
                 }
 
                 // Update order.total_harga dengan final_price dari tariff
