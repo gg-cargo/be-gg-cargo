@@ -36,6 +36,7 @@ import { DeparturesModule } from './departures/departures.module';
 import { TariffsModule } from './tariffs/tariffs.module';
 import { MasterServicesModule } from './services-master/services-master.module';
 import { BarangModule } from './barang/barang.module';
+import { FleetModule } from './fleet/fleet.module';
 
 @Module({
   imports: [
@@ -82,6 +83,8 @@ import { BarangModule } from './barang/barang.module';
     MasterServicesModule,
     // barang (master data untuk jenis barang: pempek, dokumen, dll)
     BarangModule,
+    // Fleet dashboard APIs
+    FleetModule,
   ],
   controllers: [AppController],
   providers: [AppService],
