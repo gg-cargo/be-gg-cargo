@@ -5,11 +5,17 @@ import { Order } from '../models/order.model';
 import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderHistory } from '../models/order-history.model';
 import { Vendor } from '../models/vendor.model';
+import { Hub } from '../models/hub.model';
 import {
   FleetShipmentsQueryDto,
   FleetShipmentsResponseDto,
   FleetShipmentItemDto,
 } from './dto/fleet-shipments.dto';
+import {
+  FleetDashboardSummaryResponseDto,
+  FleetDashboardHubSummaryDto,
+  FleetDashboardTotalSummaryDto,
+} from './dto/fleet-dashboard-summary.dto';
 
 @Injectable()
 export class FleetService {
@@ -20,6 +26,7 @@ export class FleetService {
     @InjectModel(OrderPickupDriver) private readonly orderPickupDriverModel: typeof OrderPickupDriver,
     @InjectModel(OrderHistory) private readonly orderHistoryModel: typeof OrderHistory,
     @InjectModel(Vendor) private readonly vendorModel: typeof Vendor,
+    @InjectModel(Hub) private readonly hubModel: typeof Hub,
   ) {}
 
   /**
@@ -74,6 +81,13 @@ export class FleetService {
       }
     }
 
+    // Filter langsung berdasarkan layanan (orders.layanan)
+    let layananFilterSql = '';
+    if (query.layanan) {
+      layananFilterSql = 'AND o.layanan = :layanan';
+      replacements.layanan = query.layanan;
+    }
+
     // Filter vendor
     let vendorFilterSql = '';
     if (query.vendor_id != null) {
@@ -104,25 +118,22 @@ export class FleetService {
         hc.nama AS current_hub_name,
         MIN(op.assign_date) AS pickup_date,
         MAX(oh.created_at) AS last_update,
-        MAX(oh.status) AS latest_status,
-        -- transit_days dihitung dari pickup_date (lihat fleet_shipments_api.md)
-        DATEDIFF(NOW(), MIN(op.assign_date)) AS transit_days_raw,
-        CASE
-          WHEN o.layanan = 'Kirim Hemat' THEN 5
-          WHEN o.layanan = 'Reguler' THEN 3
-          WHEN o.layanan = 'Express' THEN 1
-          ELSE 5
-        END AS sla_days
+        MAX(o.status) AS latest_status,
+        -- transit_time dihitung dari pickup_date (dalam jam)
+        TIMESTAMPDIFF(HOUR, MIN(op.assign_date), NOW()) AS transit_time_raw,
+        MAX(ss.sla_hours) AS sla_days
       FROM orders o
       LEFT JOIN vendors v ON v.id = o.vendor_id
       LEFT JOIN hubs hs ON hs.id = o.hub_source_id
       LEFT JOIN hubs hd ON hd.id = o.hub_dest_id
       LEFT JOIN hubs hc ON hc.id = o.current_hub
+      LEFT JOIN sub_services ss ON ss.sub_service_name = o.layanan
       LEFT JOIN order_pickup_drivers op ON op.order_id = o.id
       LEFT JOIN order_histories oh ON oh.order_id = o.id
       WHERE 1 = 1
         ${statusFilterSql}
         ${serviceFilterSql}
+        ${layananFilterSql}
         ${vendorFilterSql}
         ${searchFilterSql}
       GROUP BY
@@ -145,7 +156,7 @@ export class FleetService {
       havingClause = `
         HAVING
           pickup_date IS NOT NULL
-          AND DATEDIFF(NOW(), pickup_date) > sla_days
+          AND transit_time_raw > sla_days
       `;
     }
 
@@ -179,6 +190,7 @@ export class FleetService {
           WHERE 1 = 1
             ${statusFilterSql}
             ${serviceFilterSql}
+            ${layananFilterSql}
             ${vendorFilterSql}
             ${searchFilterSql}
         `;
@@ -192,19 +204,19 @@ export class FleetService {
       const data: FleetShipmentItemDto[] = rows.map((row) => {
         const pickupDate: Date | null = row.pickup_date ? new Date(row.pickup_date) : null;
         const lastUpdate: Date | null = row.last_update ? new Date(row.last_update) : null;
-        const transitDaysRaw: number =
-          row.transit_days_raw != null ? Number(row.transit_days_raw) : 0;
+        const transitTimeRaw: number =
+          row.transit_time_raw != null ? Number(row.transit_time_raw) : 0;
         const slaDays: number | null =
           row.sla_days != null ? Number(row.sla_days) : null;
 
-        const transitDays =
-          pickupDate && typeof transitDaysRaw === 'number' && !Number.isNaN(transitDaysRaw)
-            ? Math.max(transitDaysRaw, 0)
+        const transitTime =
+          pickupDate && typeof transitTimeRaw === 'number' && !Number.isNaN(transitTimeRaw)
+            ? Math.max(transitTimeRaw, 0)
             : 0;
 
         const effectiveSlaDays = slaDays ?? 0;
         const slaStatus: 'ON_TIME' | 'DELAY' =
-          effectiveSlaDays > 0 && transitDays > effectiveSlaDays ? 'DELAY' : 'ON_TIME';
+          effectiveSlaDays > 0 && transitTime > effectiveSlaDays ? 'DELAY' : 'ON_TIME';
 
         const serviceName: string = row.service_name || '-';
         const serviceIdFromName = this.mapServiceNameToId(serviceName);
@@ -225,8 +237,8 @@ export class FleetService {
           hub_dest_name: row.hub_dest_name || null,
           current_hub_id: row.current_hub ?? null,
           current_hub_name: row.current_hub_name || null,
-          pickup_date: pickupDate ? this.formatDateOnly(pickupDate) : null,
-          transit_days: transitDays,
+          pickup_date: pickupDate ? this.formatDateTime(pickupDate) : null,
+          transit_time: transitTime,
           latest_status: row.latest_status || null,
           sla_days: slaDays,
           sla_status: slaStatus,
@@ -242,6 +254,176 @@ export class FleetService {
       };
     } catch (error: any) {
       this.logger.error(`Error in getShipments: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  async getDashboardSummary(): Promise<FleetDashboardSummaryResponseDto> {
+    const sequelize = this.orderModel.sequelize as Sequelize;
+
+    try {
+      const hubs = await this.hubModel.findAll({
+        attributes: ['id', 'kode', 'nama'],
+        order: [['nama', 'ASC']],
+      });
+
+      const hubMap = new Map<number, FleetDashboardHubSummaryDto>();
+      for (const h of hubs) {
+        hubMap.set(h.id, {
+          hub_id: h.getDataValue('id'),
+          hub_kode: h.getDataValue('kode') || '',
+          hub_name: h.getDataValue('nama') || '',
+          order_jemput: 0,
+          inbound: 0,
+          outbound: 0,
+          order_kirim: 0,
+          vendor: 0,
+          completed: 0,
+        });
+      }
+
+      const total: FleetDashboardTotalSummaryDto = {
+        order_jemput: 0,
+        inbound: 0,
+        outbound: 0,
+        order_kirim: 0,
+        vendor: 0,
+        completed: 0,
+        total: 0,
+      };
+
+      // 2. order jemput - group by hub_source_id
+      const orderJemputRows: { hub_id: number; cnt: number }[] = await sequelize.query(
+        `SELECT hub_source_id AS hub_id, COUNT(*) AS cnt
+         FROM orders
+         WHERE (status_pickup IS NULL OR status_pickup IN ('siap pickup', 'Picked Up', 'Completed', 'Failed'))
+           AND is_gagal_pickup = 0
+           AND issetManifest_inbound = 0
+           AND issetManifest_outbound = 0
+           AND hub_source_id IS NOT NULL AND hub_source_id > 0
+         GROUP BY hub_source_id`,
+        { type: QueryTypes.SELECT },
+      );
+      for (const row of orderJemputRows) {
+        const hubId = Number(row.hub_id);
+        const cnt = Number(row.cnt);
+        if (hubMap.has(hubId)) hubMap.get(hubId)!.order_jemput = cnt;
+        total.order_jemput += cnt;
+      }
+
+      // 3. inbound - group by next_hub
+      const inboundRows: { hub_id: number; cnt: number }[] = await sequelize.query(
+        `SELECT CAST(next_hub AS UNSIGNED) AS hub_id, COUNT(*) AS cnt
+         FROM orders
+         WHERE status = 'In Transit'
+           AND (vendor_tracking_number IS NULL OR vendor_tracking_number = '')
+           AND next_hub IS NOT NULL AND next_hub != ''
+         GROUP BY next_hub`,
+        { type: QueryTypes.SELECT },
+      );
+      for (const row of inboundRows) {
+        const hubId = Number(row.hub_id);
+        const cnt = Number(row.cnt);
+        if (hubMap.has(hubId)) hubMap.get(hubId)!.inbound = cnt;
+        total.inbound += cnt;
+      }
+
+      // 4. outbound - group by current_hub
+      const outboundRows: { hub_id: number; cnt: number }[] = await sequelize.query(
+        `SELECT CAST(current_hub AS UNSIGNED) AS hub_id, COUNT(*) AS cnt
+         FROM orders
+         WHERE status = 'In Transit'
+           AND issetManifest_outbound = 1
+           AND current_hub IS NOT NULL AND current_hub != ''
+         GROUP BY current_hub`,
+        { type: QueryTypes.SELECT },
+      );
+      for (const row of outboundRows) {
+        const hubId = Number(row.hub_id);
+        const cnt = Number(row.cnt);
+        if (hubMap.has(hubId)) hubMap.get(hubId)!.outbound = cnt;
+        total.outbound += cnt;
+      }
+
+      // 5. order kirim - group by current_hub
+      const orderKirimRows: { hub_id: number; cnt: number }[] = await sequelize.query(
+        `SELECT CAST(current_hub AS UNSIGNED) AS hub_id, COUNT(*) AS cnt
+         FROM orders
+         WHERE status = 'Out for Delivery'
+           AND current_hub IS NOT NULL AND current_hub != ''
+         GROUP BY current_hub`,
+        { type: QueryTypes.SELECT },
+      );
+      for (const row of orderKirimRows) {
+        const hubId = Number(row.hub_id);
+        const cnt = Number(row.cnt);
+        if (hubMap.has(hubId)) hubMap.get(hubId)!.order_kirim = cnt;
+        total.order_kirim += cnt;
+      }
+
+      // 6. vendor - group by current_hub or hub_source_id
+      const vendorRows: { hub_id: number; cnt: number }[] = await sequelize.query(
+        `SELECT hub_id, COUNT(*) AS cnt
+         FROM (
+           SELECT CASE
+             WHEN current_hub IS NOT NULL AND TRIM(current_hub) != '' THEN CAST(current_hub AS UNSIGNED)
+             ELSE hub_source_id
+           END AS hub_id
+           FROM orders
+           WHERE vendor_id IS NOT NULL
+             AND vendor_tracking_number IS NOT NULL
+             AND vendor_tracking_number != ''
+         ) sub
+         WHERE hub_id IS NOT NULL AND hub_id > 0
+         GROUP BY hub_id`,
+        { type: QueryTypes.SELECT },
+      );
+      for (const row of vendorRows) {
+        const hubId = Number(row.hub_id);
+        const cnt = Number(row.cnt);
+        if (hubMap.has(hubId)) hubMap.get(hubId)!.vendor = cnt;
+        total.vendor += cnt;
+      }
+
+      // 7. completed - group by current_hub
+      const completedRows: { hub_id: number; cnt: number }[] = await sequelize.query(
+        `SELECT CAST(current_hub AS UNSIGNED) AS hub_id, COUNT(*) AS cnt
+         FROM orders
+         WHERE status = 'Delivered'
+           AND current_hub IS NOT NULL AND current_hub != ''
+         GROUP BY current_hub`,
+        { type: QueryTypes.SELECT },
+      );
+      for (const row of completedRows) {
+        const hubId = Number(row.hub_id);
+        const cnt = Number(row.cnt);
+        if (hubMap.has(hubId)) hubMap.get(hubId)!.completed = cnt;
+        total.completed += cnt;
+      }
+
+      // 8. Urutkan hub by nama
+      const hubsData = Array.from(hubMap.values()).sort(
+        (a, b) => a.hub_name.localeCompare(b.hub_name),
+      );
+
+      // 9. Total = jumlah semua status
+      const totalAll =
+        total.order_jemput +
+        total.inbound +
+        total.outbound +
+        total.order_kirim +
+        total.vendor +
+        total.completed;
+
+      return {
+        hubs: hubsData,
+        total: {
+          ...total,
+          total: totalAll,
+        },
+      };
+    } catch (error: any) {
+      this.logger.error(`Error in getDashboardSummary: ${error.message}`, error.stack);
       throw error;
     }
   }

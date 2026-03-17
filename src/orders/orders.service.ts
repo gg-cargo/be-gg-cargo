@@ -1597,53 +1597,6 @@ export class OrdersService {
                 created_by: userId,
             }, { transaction });
 
-            // 5. Simpan ke tabel order_list
-            // @ts-ignore
-            await this.orderListModel.create({
-                //pengirim
-                no_tracking: noTracking,
-                nama_pengirim: createOrderDto.nama_pengirim,
-                alamat_pengirim: createOrderDto.alamat_pengirim,
-                provinsi_pengirim: createOrderDto.provinsi_pengirim,
-                kota_pengirim: createOrderDto.kota_pengirim,
-                kecamatan_pengirim: createOrderDto.kecamatan_pengirim,
-                kelurahan_pengirim: createOrderDto.kelurahan_pengirim,
-                kodepos_pengirim: createOrderDto.kodepos_pengirim,
-                no_telepon_pengirim: createOrderDto.no_telepon_pengirim,
-                email_pengirim: createOrderDto.email_pengirim,
-
-                //penerima
-                nama_penerima: createOrderDto.nama_penerima,
-                alamat_penerima: createOrderDto.alamat_penerima,
-                provinsi_penerima: createOrderDto.provinsi_penerima,
-                kota_penerima: createOrderDto.kota_penerima,
-                kecamatan_penerima: createOrderDto.kecamatan_penerima,
-                kelurahan_penerima: createOrderDto.kelurahan_penerima,
-                kodepos_penerima: createOrderDto.kodepos_penerima,
-                no_telepon_penerima: createOrderDto.no_telepon_penerima,
-                email_penerima: createOrderDto.email_penerima || '',
-
-                //pickup
-                status_pickup: 'Pending',
-                nama_barang: createOrderDto.nama_barang || '',
-                harga_barang: createOrderDto.harga_barang || 0,
-                asuransi: createOrderDto.asuransi || 0,
-                pickup_time: createOrderDto.pickup_time || new Date(),
-                total_berat: shipmentData.totalBerat?.toString() || '0',
-                total_harga: 0, // Akan dihitung nanti
-                status: 'Menunggu diproses',
-                payment_status: 'pending',
-                pickup_id: 0,
-                is_gagal_pickup: 0,
-                order_by: userId,
-                svc_source_id: 0,
-                hub_source_id: hubSourceId,
-                svc_dest_id: 0,
-                hub_dest_id: hubDestId,
-                jumlah_koli: shipmentData.totalKoli || 0,
-                total_price: 0,
-            }, { transaction });
-
             // 6. Buat invoice
             const invoiceAmounts = this.calculateInvoiceAmounts(shipmentData, createOrderDto);
             const invoiceDate = new Date();
@@ -6925,7 +6878,7 @@ export class OrdersService {
             const { date, time } = getOrderHistoryDateTime();
             await this.orderHistoryModel.create({
                 order_id: orderId,
-                status: 'Reweight Finalized',
+                status: 'Reweight',
                 remark: `pesanan diproses di ${hubAsalName}`,
                 date: date,
                 time: time,

@@ -28,6 +28,14 @@ export class FleetShipmentsQueryDto {
   @IsNumber()
   service_id?: number;
 
+  /**
+   * Filter langsung berdasarkan kolom orders.layanan
+   * Contoh: "Kirim Hemat", "Reguler", "Express"
+   */
+  @IsOptional()
+  @IsString()
+  layanan?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
@@ -68,7 +76,7 @@ export class FleetShipmentItemDto {
   current_hub_id: number | null;
   current_hub_name: string | null;
   pickup_date: string | null;
-  transit_days: number;
+  transit_time: number;
   latest_status: string | null;
   sla_days: number | null;
   sla_status: 'ON_TIME' | 'DELAY';
