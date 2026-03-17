@@ -728,7 +728,7 @@ export class DeliveryNotesService {
                         {
                             order_id: order.id,
                             status: 'Piece Inbound Scanned',
-                            remark: `pesanan tiba di hub ${destinationHub.nama}`,
+                            remark: `pesanan tiba di hub ${destinationHub.getDataValue('nama')}`,
                             date: date,
                             time: time,
                             created_by: dto.inbound_by_user_id,

@@ -7,11 +7,6 @@ import { FleetShipmentsQueryDto, FleetShipmentsResponseDto } from './dto/fleet-s
 export class FleetController {
   constructor(private readonly fleetService: FleetService) {}
 
-  /**
-   * GET /api/fleet/shipments
-   *
-   * Endpoint utama untuk dashboard Fleet menampilkan daftar shipment / resi.
-   */
   @UseGuards(JwtAuthGuard)
   @Get('shipments')
   async getShipments(

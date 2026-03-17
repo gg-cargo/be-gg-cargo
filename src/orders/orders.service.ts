@@ -384,7 +384,7 @@ export class OrdersService {
                 {
                     order_id: order.getDataValue('id'),
                     status: 'Bypass Inbound Receive',
-                    remark: `pesanan tiba di hub ${hub.nama}`,
+                    remark: `pesanan tiba di hub ${hub.getDataValue('nama')}`,
                     date: date,
                     time: time,
                     created_by: action_by_user_id,
