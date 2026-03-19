@@ -42,7 +42,7 @@ export class DeliveryNotesService {
 
     private generateDeliveryNoteNumber(date: Date, hubKode: string, seq: number): string {
         const yyyy = date.getFullYear();
-        const mon = date.toLocaleString('en-US', { month: 'short' });
+        const mon = String(date.getMonth() + 1).padStart(2, '0');
         const dd = String(date.getDate()).padStart(2, '0');
         const seqStr = String(seq).padStart(3, '0');
         return `${yyyy}${mon}${dd}${hubKode}${seqStr}`;

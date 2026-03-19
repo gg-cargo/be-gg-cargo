@@ -62,6 +62,11 @@ export class OpsOrdersQueryDto {
     @IsString({ message: 'Vendor tracking number harus berupa string' })
     @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
     vendor_tracking_number?: string;
+
+    @IsOptional()
+    @IsString({ message: 'No delivery note harus berupa string' })
+    @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+    no_delivery_note?: string;
 }
 
 export class CustomerDto {

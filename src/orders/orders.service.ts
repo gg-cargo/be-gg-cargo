@@ -5938,6 +5938,50 @@ export class OrdersService {
                 };
             }
 
+            // 4.2 Filter no_delivery_note (Nota Kirim)
+            // Catatan: di tabel order_delivery_notes, kolom no_tracking berisi daftar resi (sering dipisah koma).
+            // Jadi untuk filter DN, kita ambil semua resi dari delivery note yang match, lalu filter orders.no_tracking IN resiList.
+            let deliveryNoteFilter = {};
+            if (query.no_delivery_note) {
+                const dn = String(query.no_delivery_note).trim();
+                const dnRows = await this.orderDeliveryNoteModel.findAll({
+                    where: { no_delivery_note: { [Op.like]: `%${dn}%` } },
+                    attributes: ['no_tracking'],
+                    raw: true
+                }) as Array<{ no_tracking?: string | null }>;
+
+                const resiSet = new Set<string>();
+                for (const row of dnRows) {
+                    const raw = (row?.no_tracking ?? '') as any;
+                    if (!raw) continue;
+                    // split by comma/space/newline/pipe
+                    String(raw)
+                        .split(/[\s,|]+/g)
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .forEach((s) => resiSet.add(s));
+                }
+
+                const resiList = Array.from(resiSet);
+                if (resiList.length === 0) {
+                    return {
+                        message: 'Daftar order berhasil diambil',
+                        data: {
+                            summary: await this.calculateSummaryStatistics(areaFilter),
+                            pagination: {
+                                current_page: query.page || 1,
+                                limit: query.limit || 20,
+                                total_items: 0,
+                                total_pages: 0
+                            },
+                            orders: []
+                        }
+                    };
+                }
+
+                deliveryNoteFilter = { no_tracking: { [Op.in]: resiList } };
+            }
+
             // 5. Buat filter layanan
             let layananFilter = {};
             // 5.1. Buat filter berdasarkan tipe (prioritas lebih tinggi dari layanan)
@@ -5999,6 +6043,7 @@ export class OrdersService {
                     statusFilter,
                     searchFilter,
                     vendorTrackingFilter,
+                    deliveryNoteFilter,
                     layananFilter,
                     tipeFilter,
                     nextHubFilter,
