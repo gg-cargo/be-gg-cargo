@@ -68,10 +68,34 @@ import { UpdateItemDetailsDto } from './dto/update-item-details.dto';
 import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response.dto';
 import { JobAssign } from '../models/job-assign.model';
 import { TruckList } from '../models/truck-list.model';
-import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
-import { StartDeliveryDto, StartDeliveryResponseDto } from './dto/start-delivery.dto';
-import { BypassInboundDto, BypassInboundResponseDto } from './dto/bypass-inbound.dto';
-import { AssignVendorTrackingDto, AssignVendorTrackingResponseDto } from './dto/assign-vendor-tracking.dto';
+import {
+    RevertInTransitDto,
+    RevertInTransitResponseDto,
+    RevertInTransitBulkDto,
+    RevertInTransitBulkResponseDto,
+    RevertInTransitBulkResultDto,
+} from './dto/revert-in-transit.dto';
+import {
+    StartDeliveryBulkDto,
+    StartDeliveryBulkResponseDto,
+    StartDeliveryBulkResultDto,
+    StartDeliveryDto,
+    StartDeliveryResponseDto,
+} from './dto/start-delivery.dto';
+import {
+    BypassInboundBulkDto,
+    BypassInboundBulkResponseDto,
+    BypassInboundBulkResultDto,
+    BypassInboundDto,
+    BypassInboundResponseDto,
+} from './dto/bypass-inbound.dto';
+import {
+    AssignVendorTrackingDto,
+    AssignVendorTrackingResponseDto,
+    AssignVendorTrackingBulkDto,
+    AssignVendorTrackingBulkResponseDto,
+    AssignVendorTrackingBulkResultDto,
+} from './dto/assign-vendor-tracking.dto';
 import { Vendor } from '../models/vendor.model';
 import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
@@ -244,6 +268,135 @@ export class OrdersService {
         }
     }
 
+    /**
+     * Bulk revert in transit (ubah banyak order sekaligus).
+     * Memproses per-no_tracking dan mengembalikan hasil success/failed untuk tiap resi.
+     */
+    async revertInTransitToWaitingBulk(
+        dto: RevertInTransitBulkDto,
+        updatedByUserId: number
+    ): Promise<RevertInTransitBulkResponseDto> {
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+
+        const transaction = await this.orderModel.sequelize.transaction();
+
+        try {
+            const items = dto?.items ?? [];
+            const noTrackingList = items.map((i) => i?.no_tracking).filter(Boolean) as string[];
+
+            const results: RevertInTransitBulkResultDto[] = [];
+
+            if (noTrackingList.length === 0) {
+                await transaction.commit();
+                return {
+                    status: 'success',
+                    message: 'Tidak ada resi untuk diproses',
+                    results: [],
+                };
+            }
+
+            const orders = await this.orderModel.findAll({
+                where: { no_tracking: { [Op.in]: noTrackingList } },
+                attributes: ['id', 'no_tracking', 'status', 'reweight_status', 'hub_dest_id'],
+                transaction,
+                lock: transaction.LOCK.UPDATE as any,
+            });
+
+            const orderMap = new Map<string, any>();
+            for (const o of orders) {
+                const key = o.getDataValue('no_tracking');
+                if (key) orderMap.set(String(key), o);
+            }
+
+            const updateData: any = {
+                reweight_status: 1,
+                status: 'Pending',
+                assign_driver: 0,
+                updated_at: new Date(),
+            };
+            if (dto?.hub_id !== undefined) {
+                updateData.hub_dest_id = dto.hub_id;
+            }
+
+            const idsToUpdate: number[] = [];
+
+            // proses per item (validasi + mapping hasil)
+            for (const item of items) {
+                const noTracking = item?.no_tracking;
+                if (!noTracking) continue;
+
+                const order = orderMap.get(noTracking);
+                if (!order) {
+                    results.push({
+                        no_tracking: noTracking,
+                        status: 'failed',
+                        message: 'Order tidak ditemukan',
+                    });
+                    continue;
+                }
+
+                const currentStatus = order.getDataValue('status');
+                const reweightStatus = order.getDataValue('reweight_status');
+
+                if (currentStatus === 'Delivered' || currentStatus === 'Out for Delivery') {
+                    results.push({
+                        no_tracking: noTracking,
+                        status: 'failed',
+                        message: `Order tidak dapat diubah dari status ${currentStatus}`,
+                    });
+                    continue;
+                }
+
+                if (currentStatus !== 'In Transit') {
+                    if (Number(reweightStatus) === 1) {
+                        results.push({
+                            no_tracking: noTracking,
+                            status: 'success',
+                            message: 'Order sudah dalam status menunggu pengiriman',
+                        });
+                    } else {
+                        results.push({
+                            no_tracking: noTracking,
+                            status: 'failed',
+                            message: 'Order bukan dalam status In Transit',
+                        });
+                    }
+                    continue;
+                }
+
+                idsToUpdate.push(order.getDataValue('id'));
+                results.push({
+                    no_tracking: noTracking,
+                    status: 'success',
+                    message: 'Status berhasil diubah ke menunggu pengiriman',
+                });
+            }
+
+            if (idsToUpdate.length > 0) {
+                await this.orderModel.update(updateData, {
+                    where: { id: { [Op.in]: idsToUpdate } },
+                    transaction,
+                });
+            }
+
+            await transaction.commit();
+            return {
+                status: 'success',
+                message: 'Bulk revert in transit selesai diproses',
+                results,
+            };
+        } catch (error: any) {
+            await transaction.rollback();
+            this.logger.error(`Error revertInTransitToWaitingBulk: ${error?.message}`, error?.stack);
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Gagal memproses bulk revert in transit');
+        }
+    }
+
 
     async startDeliveryFromInTransit(
         noTracking: string,
@@ -313,6 +466,142 @@ export class OrdersService {
                 throw error;
             }
             throw new InternalServerErrorException('Gagal mengubah status order');
+        }
+    }
+
+    /**
+     * Bulk start delivery (ubah banyak order sekaligus) dari 'In Transit' ke 'Out for Delivery'.
+     * Memproses per `no_tracking` dan mengembalikan success/failed untuk tiap resi.
+     */
+    async startDeliveryFromInTransitBulk(
+        dto: StartDeliveryBulkDto,
+        updatedByUserId: number
+    ): Promise<StartDeliveryBulkResponseDto> {
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+
+        const transaction = await this.orderModel.sequelize.transaction();
+
+        try {
+            const items = dto?.items ?? [];
+            const noTrackingList = items.map((i) => i?.no_tracking).filter(Boolean) as string[];
+
+            const results: StartDeliveryBulkResultDto[] = [];
+
+            if (noTrackingList.length === 0) {
+                await transaction.commit();
+                return {
+                    status: 'success',
+                    message: 'Tidak ada resi untuk diproses',
+                    results: [],
+                };
+            }
+
+            // Ambil semua order sekaligus (untuk menghindari N+1 query)
+            const orders = await this.orderModel.findAll({
+                where: { no_tracking: { [Op.in]: noTrackingList } },
+                attributes: ['id', 'no_tracking', 'status', 'kota_penerima', 'provinsi_penerima'],
+                transaction,
+                lock: transaction.LOCK.UPDATE as any,
+            });
+
+            const orderMap = new Map<string, any>();
+            for (const o of orders) {
+                const key = o.getDataValue('no_tracking');
+                if (key) orderMap.set(String(key), o);
+            }
+
+            const idsToUpdate: number[] = [];
+            const historyRecords: any[] = [];
+
+            const now = new Date();
+            const { date, time } = getOrderHistoryDateTime();
+
+            for (const item of items) {
+                const noTracking = item?.no_tracking;
+                if (!noTracking) continue;
+
+                const order = orderMap.get(noTracking);
+                if (!order) {
+                    results.push({
+                        no_tracking: noTracking,
+                        status: 'failed',
+                        message: 'Order tidak ditemukan',
+                    });
+                    continue;
+                }
+
+                const currentStatus = order.getDataValue('status');
+
+                // Duplikasi logika dari startDeliveryFromInTransit
+                if (currentStatus === 'Delivered' || currentStatus === 'Cancelled') {
+                    results.push({
+                        no_tracking: noTracking,
+                        status: 'failed',
+                        message: `Order tidak dapat diubah dari status ${currentStatus}`,
+                    });
+                    continue;
+                }
+
+                if (currentStatus === 'Out for Delivery') {
+                    results.push({
+                        no_tracking: noTracking,
+                        status: 'success',
+                        message: 'Order sudah dalam status Order Kirim (Out for Delivery)',
+                    });
+                    continue;
+                }
+
+                idsToUpdate.push(order.getDataValue('id'));
+                historyRecords.push({
+                    order_id: order.getDataValue('id'),
+                    status: ORDER_STATUS.OUT_FOR_DELIVERY,
+                    remark: `Pesanan diantar ke customer - kota ${order.getDataValue('kota_penerima')}`,
+                    date,
+                    time,
+                    provinsi: order.getDataValue('provinsi_penerima') || '',
+                    kota: order.getDataValue('kota_penerima') || '',
+                    created_by: updatedByUserId,
+                    created_at: new Date(),
+                });
+
+                results.push({
+                    no_tracking: noTracking,
+                    status: 'success',
+                    message: 'Status berhasil diubah ke Order Kirim (Out for Delivery)',
+                });
+            }
+
+            // Bulk update + bulk history insert
+            if (idsToUpdate.length > 0) {
+                await this.orderModel.update(
+                    {
+                        status: 'Out for Delivery',
+                        updated_at: now,
+                    },
+                    {
+                        where: { id: { [Op.in]: idsToUpdate } },
+                        transaction,
+                    }
+                );
+            }
+
+            if (historyRecords.length > 0) {
+                await this.orderHistoryModel.bulkCreate(historyRecords, { transaction });
+            }
+
+            await transaction.commit();
+
+            return {
+                status: 'success',
+                message: 'Bulk start delivery selesai diproses',
+                results,
+            };
+        } catch (error: any) {
+            await transaction.rollback();
+            this.logger.error(`Error startDeliveryFromInTransitBulk: ${error?.message}`, error?.stack);
+            throw new InternalServerErrorException('Gagal memproses bulk start delivery');
         }
     }
 
@@ -413,6 +702,153 @@ export class OrdersService {
                 throw error;
             }
             throw new InternalServerErrorException('Gagal memproses bypass inbound');
+        }
+    }
+
+    async bypassInboundReceiveBulk(
+        dto: BypassInboundBulkDto
+    ): Promise<BypassInboundBulkResponseDto> {
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+
+        const transaction = await this.orderModel.sequelize.transaction();
+        const results: BypassInboundBulkResultDto[] = [];
+
+        try {
+            const { hub_id, action_by_user_id, items } = dto;
+
+            // 1. Validasi user & hub sekali di awal
+            const [actor, hub] = await Promise.all([
+                this.userModel.findByPk(action_by_user_id, { transaction }),
+                this.hubModel.findByPk(hub_id, { attributes: ['id', 'nama'], transaction }),
+            ]);
+
+            if (!actor) {
+                throw new NotFoundException('User yang melakukan bypass tidak ditemukan');
+            }
+            if (!hub) {
+                throw new NotFoundException('Hub tidak ditemukan');
+            }
+
+            const actorName = actor.getDataValue('name');
+            const hubName = hub.getDataValue('nama');
+
+            // 2. Ambil semua no_tracking yang akan diproses
+            const noTrackingList = (items || []).map((i) => i.no_tracking).filter(Boolean);
+            if (noTrackingList.length === 0) {
+                await transaction.commit();
+                return {
+                    status: 'success',
+                    message: 'Tidak ada resi untuk diproses',
+                    results: [],
+                };
+            }
+
+            // 3. Ambil semua orders sekaligus
+            const orders = await this.orderModel.findAll({
+                where: { no_tracking: { [Op.in]: noTrackingList } },
+                attributes: ['id', 'no_tracking', 'status', 'current_hub', 'provinsi_penerima', 'kota_penerima'],
+                transaction,
+                lock: transaction.LOCK.UPDATE as any,
+            });
+
+            const orderMap = new Map<string, typeof orders[0]>();
+            for (const o of orders) {
+                orderMap.set(o.getDataValue('no_tracking'), o);
+            }
+
+            const now = new Date();
+            const { date, time } = getOrderHistoryDateTime();
+
+            const orderIdsToUpdate: number[] = [];
+            const historyRecords: any[] = [];
+
+            // 4. Loop untuk validasi & siapkan data bulk
+            for (const item of items) {
+                const noTracking = item.no_tracking;
+                const order = orderMap.get(noTracking);
+
+                if (!order) {
+                    results.push({
+                        no_tracking: noTracking,
+                        status: 'failed',
+                        message: `Order ${noTracking} tidak ditemukan`,
+                    });
+                    continue;
+                }
+
+                const orderId = order.getDataValue('id');
+                orderIdsToUpdate.push(orderId);
+
+                historyRecords.push({
+                    order_id: orderId,
+                    status: 'Bypass Inbound Receive',
+                    remark: `pesanan tiba di hub ${hubName}`,
+                    date,
+                    time,
+                    created_by: action_by_user_id,
+                    created_at: new Date(),
+                    provinsi: order.getDataValue('provinsi_penerima') || '',
+                    kota: order.getDataValue('kota_penerima') || '',
+                });
+
+                results.push({
+                    no_tracking: noTracking,
+                    status: 'success',
+                    message: `Penerimaan barang ${noTracking} berhasil diproses secara manual (Bypass)`,
+                });
+            }
+
+            // 5. Bulk update order_pieces
+            if (orderIdsToUpdate.length > 0) {
+                await this.orderPieceModel.update(
+                    {
+                        inbound_status: 1,
+                        hub_current_id: hub_id,
+                        inbound_by: action_by_user_id,
+                        updatedAt: now,
+                    },
+                    {
+                        where: { order_id: { [Op.in]: orderIdsToUpdate } },
+                        transaction,
+                    }
+                );
+
+                // 6. Bulk update orders
+                await this.orderModel.update(
+                    {
+                        current_hub: String(hub_id),
+                        issetManifest_inbound: 1,
+                        issetManifest_outbound: 0,
+                        updatedAt: now,
+                    },
+                    {
+                        where: { id: { [Op.in]: orderIdsToUpdate } },
+                        transaction,
+                    }
+                );
+
+                // 7. Bulk insert order_histories
+                if (historyRecords.length > 0) {
+                    await this.orderHistoryModel.bulkCreate(historyRecords, { transaction });
+                }
+            }
+
+            await transaction.commit();
+
+            return {
+                status: 'success',
+                message: 'Bulk bypass inbound selesai diproses',
+                results,
+            };
+        } catch (error) {
+            await transaction.rollback();
+            this.logger.error(`Error bypassInboundReceiveBulk: ${error.message}`);
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Gagal memproses bulk bypass inbound');
         }
     }
     async listTruckRentalOrders(userId: number, q: ListTruckRentalDto) {
@@ -6344,6 +6780,144 @@ export class OrdersService {
                 throw error;
             }
             throw new InternalServerErrorException('Gagal meng-assign nomor resi vendor');
+        }
+    }
+
+    /**
+     * Bulk assign vendor tracking number.
+     * Mengembalikan hasil per-no_tracking (success/failed).
+     */
+    async assignVendorTrackingBulk(
+        dto: AssignVendorTrackingBulkDto,
+    ): Promise<AssignVendorTrackingBulkResponseDto> {
+        if (!this.orderModel.sequelize) {
+            throw new InternalServerErrorException('Database connection tidak tersedia');
+        }
+
+        const transaction = await this.orderModel.sequelize.transaction();
+
+        try {
+            const items = dto?.items ?? [];
+            const results: AssignVendorTrackingBulkResultDto[] = [];
+
+            const noTrackingList = items.map((i) => i?.no_tracking).filter(Boolean) as string[];
+            if (noTrackingList.length === 0) {
+                await transaction.commit();
+                return {
+                    status: 'success',
+                    message: 'Tidak ada resi untuk diproses',
+                    results: [],
+                };
+            }
+
+            // Ambil semua order sekali untuk menghindari N+1 query
+            const orders = await this.orderModel.findAll({
+                where: { no_tracking: { [Op.in]: noTrackingList } },
+                attributes: ['id', 'no_tracking', 'vendor_id'],
+                transaction,
+                lock: transaction.LOCK.UPDATE as any,
+            });
+
+            const orderMap = new Map<string, any>();
+            for (const o of orders) {
+                const key = o.getDataValue('no_tracking');
+                if (key) orderMap.set(String(key), o);
+            }
+
+            // Group update berdasarkan vendor_tracking_number (agar pakai update massal per nilai)
+            const updateGroups = new Map<string, Set<number>>();
+
+            const fallbackVendorTrackingNumber = dto?.vendor_tracking_number;
+
+            for (const item of items) {
+                const noTracking = item?.no_tracking;
+                const vendorTrackingNumber =
+                    item?.vendor_tracking_number ?? fallbackVendorTrackingNumber;
+
+                if (!noTracking) {
+                    results.push({
+                        no_tracking: String(noTracking ?? ''),
+                        status: 'failed',
+                        message: 'no_tracking wajib diisi',
+                        vendor_tracking_number: vendorTrackingNumber,
+                    });
+                    continue;
+                }
+
+                const order = orderMap.get(noTracking);
+                if (!order) {
+                    results.push({
+                        no_tracking: noTracking,
+                        status: 'failed',
+                        message: 'Order tidak ditemukan',
+                        vendor_tracking_number: vendorTrackingNumber,
+                    });
+                    continue;
+                }
+
+                if (!vendorTrackingNumber) {
+                    results.push({
+                        no_tracking: noTracking,
+                        status: 'failed',
+                        message: 'vendor_tracking_number wajib diisi',
+                        vendor_tracking_number: vendorTrackingNumber,
+                    });
+                    continue;
+                }
+
+                const vendorId = order.getDataValue('vendor_id');
+                if (!vendorId) {
+                    results.push({
+                        no_tracking: noTracking,
+                        status: 'failed',
+                        message: 'Order belum ditugaskan ke vendor',
+                        vendor_tracking_number: vendorTrackingNumber,
+                    });
+                    continue;
+                }
+
+                const orderId = order.getDataValue('id');
+                const trackingKey = String(vendorTrackingNumber);
+                if (!updateGroups.has(trackingKey)) updateGroups.set(trackingKey, new Set<number>());
+                updateGroups.get(trackingKey)!.add(orderId);
+
+                results.push({
+                    no_tracking: noTracking,
+                    status: 'success',
+                    message: 'Nomor resi vendor berhasil di-assign ke order',
+                    vendor_tracking_number: trackingKey,
+                });
+            }
+
+            // Jalankan update massal per tracking number
+            const updatedAt = new Date();
+            for (const [trackingKey, idSet] of updateGroups.entries()) {
+                const ids = Array.from(idSet);
+                if (ids.length === 0) continue;
+
+                await this.orderModel.update(
+                    {
+                        vendor_tracking_number: trackingKey,
+                        updated_at: updatedAt,
+                    },
+                    {
+                        where: { id: { [Op.in]: ids } },
+                        transaction,
+                    }
+                );
+            }
+
+            await transaction.commit();
+
+            return {
+                status: 'success',
+                message: 'Bulk assign vendor tracking selesai diproses',
+                results,
+            };
+        } catch (error: any) {
+            await transaction.rollback();
+            this.logger.error(`Error assignVendorTrackingBulk: ${error?.message}`, error?.stack);
+            throw new InternalServerErrorException('Gagal meng-assign nomor resi vendor (bulk)');
         }
     }
 

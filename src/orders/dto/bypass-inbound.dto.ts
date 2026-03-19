@@ -1,4 +1,5 @@
-import { IsInt, IsNotEmpty, IsString } from 'class-validator';
+import { IsArray, IsInt, IsNotEmpty, IsString, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class BypassInboundDto {
     @IsString()
@@ -20,6 +21,37 @@ export class BypassInboundResponseDto {
         current_status: string;
         bypassed_by: string;
     };
+}
+
+export class BypassInboundBulkItemDto {
+    @IsString()
+    @IsNotEmpty()
+    no_tracking: string;
+}
+
+export class BypassInboundBulkDto {
+    @IsInt()
+    hub_id: number;
+
+    @IsInt()
+    action_by_user_id: number;
+
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => BypassInboundBulkItemDto)
+    items: BypassInboundBulkItemDto[];
+}
+
+export class BypassInboundBulkResultDto {
+    no_tracking: string;
+    status: 'success' | 'failed';
+    message: string;
+}
+
+export class BypassInboundBulkResponseDto {
+    status: 'success';
+    message: string;
+    results: BypassInboundBulkResultDto[];
 }
 
 

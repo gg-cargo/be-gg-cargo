@@ -1,6 +1,11 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { BypassInboundDto, BypassInboundResponseDto } from './dto/bypass-inbound.dto';
+import {
+    BypassInboundBulkDto,
+    BypassInboundBulkResponseDto,
+    BypassInboundDto,
+    BypassInboundResponseDto,
+} from './dto/bypass-inbound.dto';
 import { OrdersService } from './orders.service';
 
 @Controller('inbound')
@@ -12,5 +17,14 @@ export class InboundController {
     @HttpCode(HttpStatus.OK)
     async bypassReceive(@Body() dto: BypassInboundDto): Promise<BypassInboundResponseDto> {
         return this.ordersService.bypassInboundReceive(dto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('bypass-receive/bulk')
+    @HttpCode(HttpStatus.OK)
+    async bypassReceiveBulk(
+        @Body() dto: BypassInboundBulkDto,
+    ): Promise<BypassInboundBulkResponseDto> {
+        return this.ordersService.bypassInboundReceiveBulk(dto);
     }
 }

@@ -43,9 +43,24 @@ import { UpdateItemDetailsDto } from './dto/update-item-details.dto';
 import { UpdateItemDetailsResponseDto } from './dto/update-item-details-response.dto';
 import { CreateInternationalOrderDto } from './dto/create-international-order.dto';
 import { InternationalOrderResponseDto } from './dto/international-order-response.dto';
-import { RevertInTransitDto, RevertInTransitResponseDto } from './dto/revert-in-transit.dto';
-import { AssignVendorTrackingDto, AssignVendorTrackingResponseDto } from './dto/assign-vendor-tracking.dto';
-import { StartDeliveryDto, StartDeliveryResponseDto } from './dto/start-delivery.dto';
+import {
+    RevertInTransitBulkDto,
+    RevertInTransitBulkResponseDto,
+    RevertInTransitDto,
+    RevertInTransitResponseDto,
+} from './dto/revert-in-transit.dto';
+import {
+    AssignVendorTrackingDto,
+    AssignVendorTrackingResponseDto,
+    AssignVendorTrackingBulkDto,
+    AssignVendorTrackingBulkResponseDto,
+} from './dto/assign-vendor-tracking.dto';
+import {
+    StartDeliveryBulkDto,
+    StartDeliveryBulkResponseDto,
+    StartDeliveryDto,
+    StartDeliveryResponseDto,
+} from './dto/start-delivery.dto';
 // (imports JwtAuthGuard & BadRequestException sudah ada di atas)
 
 @Controller('orders')
@@ -716,6 +731,17 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Patch('revert-in-transit/bulk')
+    @HttpCode(HttpStatus.OK)
+    async revertInTransitBulk(
+        @Body() dto: RevertInTransitBulkDto,
+        @Request() req: any,
+    ): Promise<RevertInTransitBulkResponseDto> {
+        const userId = req.user.id;
+        return this.ordersService.revertInTransitToWaitingBulk(dto, userId);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Patch(':no_tracking/start-delivery')
     @HttpCode(HttpStatus.OK)
     async startDelivery(
@@ -728,6 +754,17 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Patch('start-delivery/bulk')
+    @HttpCode(HttpStatus.OK)
+    async startDeliveryBulk(
+        @Body() dto: StartDeliveryBulkDto,
+        @Request() req: any,
+    ): Promise<StartDeliveryBulkResponseDto> {
+        const userId = req.user.id;
+        return this.ordersService.startDeliveryFromInTransitBulk(dto, userId);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Patch(':no_tracking/vendor-tracking')
     @HttpCode(HttpStatus.OK)
     async assignVendorTracking(
@@ -735,6 +772,15 @@ export class OrdersController {
         @Body() dto: AssignVendorTrackingDto,
     ): Promise<AssignVendorTrackingResponseDto> {
         return this.ordersService.assignVendorTracking(noTracking, dto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch('vendor-tracking/bulk')
+    @HttpCode(HttpStatus.OK)
+    async assignVendorTrackingBulk(
+        @Body() dto: AssignVendorTrackingBulkDto,
+    ): Promise<AssignVendorTrackingBulkResponseDto> {
+        return this.ordersService.assignVendorTrackingBulk(dto);
     }
 
     // ============================================
