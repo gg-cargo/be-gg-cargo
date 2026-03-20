@@ -555,8 +555,8 @@ export class DeliveryNotesService {
         if (!hubTujuan) throw new NotFoundException('Hub tujuan tidak ditemukan');
         if (dto.hub_transit_id && !hubTransit) throw new NotFoundException('Hub transit tidak ditemukan');
 
-        const vehicle = await this.truckListModel.findOne({ where: { no_polisi: dto.no_polisi } });
-        if (!vehicle) throw new NotFoundException('Kendaraan dengan no_polisi tersebut tidak ditemukan');
+        // const vehicle = await this.truckListModel.findOne({ where: { no_polisi: dto.no_polisi } });
+        // if (!vehicle) throw new NotFoundException('Kendaraan dengan no_polisi tersebut tidak ditemukan');
 
         const transporter = await this.userModel.findByPk(dto.transporter_id, { attributes: ['id', 'name', 'level'], raw: true });
         if (!transporter) throw new NotFoundException('Transporter tidak ditemukan');
@@ -586,7 +586,7 @@ export class DeliveryNotesService {
             no_tracking: newResi.join(','),
             transporter_id: dto.transporter_id,
             nama_transporter: (transporter as any).name || existing.nama_transporter,
-            jenis_kendaraan: dto.jenis_kendaraan || vehicle.jenis_mobil || existing.jenis_kendaraan,
+            jenis_kendaraan: dto.jenis_kendaraan || existing.jenis_kendaraan,
             no_polisi: dto.no_polisi,
             no_seal: sealString !== null ? sealString : (existing as any).no_seal,
             hub_id: hubTujuan.getDataValue('id'),
@@ -610,7 +610,7 @@ export class DeliveryNotesService {
                 assign_sj: existing.no_delivery_note,
                 status: ORDER_STATUS.IN_TRANSIT,
                 transporter_id: dto.transporter_id,
-                truck_id: vehicle.no_polisi,
+                // truck_id: vehicle.no_polisi,
                 current_hub: String(dto.hub_asal_id),
                 next_hub: String(dto.hub_transit_id ?? dto.hub_tujuan_id),
             }, { where: { id: { [Op.in]: addedOrders.map((o: any) => o.id) } } });
