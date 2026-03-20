@@ -346,11 +346,13 @@ export class DeliveryNotesService {
 
         const where: any = {};
 
-        // Filter berdasarkan hub asal user yang sedang login
-        if (userHubId) {
-            where.agent_id = userHubId;
-        } else if (userServiceCenterId) {
-            where.agent_id = userServiceCenterId;
+        // Filter berdasarkan hub asal user yang sedang login (kecuali jika ada hub_tujuan_id)
+        if (!query.hub_tujuan_id) {
+            if (userHubId) {
+                where.agent_id = userHubId;
+            } else if (userServiceCenterId) {
+                where.agent_id = userServiceCenterId;
+            }
         }
 
         if (query.search) {
