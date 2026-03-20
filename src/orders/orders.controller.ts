@@ -9,6 +9,7 @@ import { CreateOrderResponseDto } from './dto/create-order-response.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateOrderResponseDto } from './dto/order-response.dto';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
+import { UpdateOrderHistoryDto } from './dto/update-order-history.dto';
 import { UpdatePickupNoteDto } from './dto/update-pickup-note.dto';
 import { ReweightPieceDto } from './dto/reweight-piece.dto';
 import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
@@ -321,6 +322,16 @@ export class OrdersController {
         @Body() dto: CreateOrderHistoryDto,
     ) {
         return this.ordersService.addOrderHistory(id, dto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id/history/:historyId')
+    async updateOrderHistory(
+        @Param('id', ParseIntPipe) id: number,
+        @Param('historyId', ParseIntPipe) historyId: number,
+        @Body() dto: UpdateOrderHistoryDto,
+    ) {
+        return this.ordersService.updateOrderHistory(id, historyId, dto);
     }
 
     @UseGuards(JwtAuthGuard)

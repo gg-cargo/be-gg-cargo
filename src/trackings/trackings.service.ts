@@ -81,6 +81,7 @@ export class TrackingsService {
 
         // 4. Format riwayat perjalanan
         const formattedHistories = histories.map((history: any) => ({
+            id: history.id,
             tanggal: history.date,
             waktu: history.time,
             status: history.status,

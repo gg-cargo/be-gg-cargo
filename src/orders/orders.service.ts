@@ -18,6 +18,7 @@ import { generateResiPDF } from './helpers/generate-resi-pdf.helper';
 import { generatePickupNotePDF } from './helpers/generate-pickup-note-pdf.helper';
 import { generateDeliveryNotePDF } from './helpers/generate-delivery-note-pdf.helper';
 import { CreateOrderHistoryDto } from './dto/create-order-history.dto';
+import { UpdateOrderHistoryDto } from './dto/update-order-history.dto';
 import { ReweightPieceDto } from './dto/reweight-piece.dto';
 import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
 import { ReweightBulkDto } from './dto/reweight-bulk.dto';
@@ -441,7 +442,7 @@ export class OrdersService {
             await this.orderHistoryModel.create({
                 order_id: order.getDataValue('id'),
                 status: ORDER_STATUS.OUT_FOR_DELIVERY,
-                remark: `Pesanan diantar ke customer - kota ${order.getDataValue('kota_penerima')}`,
+                remark: `Pesanan diantar ke customer`,
                 date,
                 time,
                 provinsi: order.getDataValue('provinsi_penerima') || '',
@@ -557,7 +558,7 @@ export class OrdersService {
                 historyRecords.push({
                     order_id: order.getDataValue('id'),
                     status: ORDER_STATUS.OUT_FOR_DELIVERY,
-                    remark: `Pesanan diantar ke customer - kota ${order.getDataValue('kota_penerima')}`,
+                    remark: `Pesanan diantar ke customer`,
                     date,
                     time,
                     provinsi: order.getDataValue('provinsi_penerima') || '',
@@ -3170,6 +3171,38 @@ export class OrdersService {
 
         return {
             message: 'Riwayat tracking berhasil ditambahkan',
+            data: history,
+        };
+    }
+
+    async updateOrderHistory(orderId: number, historyId: number, dto: UpdateOrderHistoryDto) {
+        const order = await this.orderModel.findByPk(orderId, { raw: true });
+        if (!order) throw new NotFoundException('Order tidak ditemukan');
+
+        const history = await this.orderHistoryModel.findOne({
+            where: {
+                id: historyId,
+                order_id: orderId,
+            },
+        });
+        if (!history) throw new NotFoundException('Riwayat tracking tidak ditemukan');
+
+        const payload: Partial<OrderHistory> = {
+            updated_at: new Date(),
+        };
+
+        if (dto.status !== undefined) {
+            payload.status = dto.status;
+        }
+
+        if (dto.keterangan !== undefined) {
+            payload.remark = dto.keterangan || '-';
+        }
+
+        await history.update(payload);
+
+        return {
+            message: 'Riwayat tracking berhasil diperbarui',
             data: history,
         };
     }
