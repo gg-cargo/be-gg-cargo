@@ -601,11 +601,11 @@ export class DeliveryNotesService {
         }
 
         // Ambil orders untuk operasi update
-        const addedOrders = await this.orderModel.findAll({ where: { no_tracking: { [Op.in]: added } }, raw: true });
+        const currentOrders = await this.orderModel.findAll({ where: { no_tracking: { [Op.in]: newResi } }, raw: true });
         const removedOrders = await this.orderModel.findAll({ where: { no_tracking: { [Op.in]: removed } }, raw: true });
 
-        // Tambah orders baru ke nota
-        if (addedOrders.length) {
+        // Sinkronkan semua orders yang masih ada di nota
+        if (currentOrders.length) {
             await this.orderModel.update({
                 assign_sj: existing.no_delivery_note,
                 status: ORDER_STATUS.IN_TRANSIT,
@@ -615,7 +615,7 @@ export class DeliveryNotesService {
                 issetManifest_outbound: 1,
                 current_hub: String(dto.hub_asal_id),
                 next_hub: String(dto.hub_transit_id ?? dto.hub_tujuan_id),
-            }, { where: { id: { [Op.in]: addedOrders.map((o: any) => o.id) } } });
+            }, { where: { id: { [Op.in]: currentOrders.map((o: any) => o.id) } } });
         }
 
         // Lepas orders yang dihapus dari nota
