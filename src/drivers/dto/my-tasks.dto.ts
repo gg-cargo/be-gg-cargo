@@ -46,6 +46,11 @@ export class MyTasksQueryDto {
     @IsOptional()
     @IsString({ message: 'driver_name harus berupa string' })
     driver_name?: string;
+
+    /** General search (no_tracking, nama_pengirim, nama_penerima) */
+    @IsOptional()
+    @IsString({ message: 'search harus berupa string' })
+    search?: string;
 }
 
 export class DriverTaskDto {

@@ -1320,6 +1320,8 @@ export class DriversService {
                 limit = 20,
             } = query;
 
+            const searchTerm = query && (query as any).search ? String((query as any).search).trim() : undefined;
+
             const offset = (page - 1) * limit;
 
             // Build filter untuk status
@@ -1393,6 +1395,17 @@ export class DriversService {
                     const orderWhere: any = {
                         id: { [Op.in]: orderIds },
                     };
+
+                    if (searchTerm) {
+                        orderWhere[Op.and] = orderWhere[Op.and] || [];
+                        orderWhere[Op.and].push({
+                            [Op.or]: [
+                                { no_tracking: { [Op.like]: `%${searchTerm}%` } },
+                                { nama_pengirim: { [Op.like]: `%${searchTerm}%` } },
+                                { nama_penerima: { [Op.like]: `%${searchTerm}%` } },
+                            ],
+                        });
+                    }
 
                     // Untuk task selesai (completed dengan foto), pastikan status_pickup = 'Completed'
                     if (isCompletedFilter) {
@@ -1536,6 +1549,17 @@ export class DriversService {
                     const orderWhere: any = {
                         id: { [Op.in]: orderIds },
                     };
+
+                    if (searchTerm) {
+                        orderWhere[Op.and] = orderWhere[Op.and] || [];
+                        orderWhere[Op.and].push({
+                            [Op.or]: [
+                                { no_tracking: { [Op.like]: `%${searchTerm}%` } },
+                                { nama_pengirim: { [Op.like]: `%${searchTerm}%` } },
+                                { nama_penerima: { [Op.like]: `%${searchTerm}%` } },
+                            ],
+                        });
+                    }
 
                     // Untuk task selesai (completed dengan foto), pastikan status_deliver = 'Completed'
                     if (isCompletedFilter) {
