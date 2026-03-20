@@ -335,6 +335,15 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Delete(':id/history/:historyId')
+    async deleteOrderHistory(
+        @Param('id', ParseIntPipe) id: number,
+        @Param('historyId', ParseIntPipe) historyId: number,
+    ) {
+        return this.ordersService.deleteOrderHistory(id, historyId);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Get()
     async listOrders(@Req() req, @Query() query: ListOrdersDto) {
         // Asumsi user login ada di req.user.id

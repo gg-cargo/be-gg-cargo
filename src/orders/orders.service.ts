@@ -3207,6 +3207,28 @@ export class OrdersService {
         };
     }
 
+    async deleteOrderHistory(orderId: number, historyId: number) {
+        const order = await this.orderModel.findByPk(orderId, { raw: true });
+        if (!order) throw new NotFoundException('Order tidak ditemukan');
+
+        const history = await this.orderHistoryModel.findOne({
+            where: {
+                id: historyId,
+                order_id: orderId,
+            },
+        });
+        if (!history) throw new NotFoundException('Riwayat tracking tidak ditemukan');
+
+        await this.orderHistoryModel.destroy({
+            where: { id: historyId, order_id: orderId },
+        });
+
+        return {
+            message: 'Riwayat tracking berhasil dihapus',
+            data: { id: historyId },
+        };
+    }
+
     async listOrders(userId: number, query?: ListOrdersDto) {
         let tipeFilter: any = {};
         let dateFilter: any = {};
