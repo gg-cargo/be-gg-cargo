@@ -530,6 +530,7 @@ export class DeliveryNotesService {
                     } : null,
                 },
                 orders_list: ordersList,
+                no_seal: (deliveryNote as any).no_seal ? String((deliveryNote as any).no_seal).split(',').map((s: string) => s.trim()).filter(Boolean) : null,
             },
         };
     }

@@ -31,6 +31,7 @@ export class DeliveryNoteDetailDto {
     transporter: DeliveryNoteDetailTransporterDto;
     rute: DeliveryNoteDetailRouteDto;
     orders_list: DeliveryNoteDetailOrderDto[];
+    no_seal: string[] | null;
 }
 
 export class DeliveryNoteDetailResponseDto {
