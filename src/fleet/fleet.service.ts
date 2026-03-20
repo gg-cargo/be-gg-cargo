@@ -222,6 +222,7 @@ export class FleetService {
         const serviceIdFromName = this.mapServiceNameToId(serviceName);
 
         return {
+          order_id: row.id,
           resi: row.resi,
           service: {
             id: serviceIdFromName,
