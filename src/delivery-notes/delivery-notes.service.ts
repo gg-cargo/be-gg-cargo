@@ -610,11 +610,12 @@ export class DeliveryNotesService {
                 assign_sj: existing.no_delivery_note,
                 status: ORDER_STATUS.IN_TRANSIT,
                 transporter_id: dto.transporter_id,
-                // truck_id: vehicle.no_polisi,
+                truck_id: dto.no_polisi,
+                issetManifest_inbound: 0,
+                issetManifest_outbound: 1,
                 current_hub: String(dto.hub_asal_id),
                 next_hub: String(dto.hub_transit_id ?? dto.hub_tujuan_id),
             }, { where: { id: { [Op.in]: addedOrders.map((o: any) => o.id) } } });
-            // TODO: insert order_histories untuk masing-masing order (Order Added to Delivery Note)
         }
 
         // Lepas orders yang dihapus dari nota
@@ -624,7 +625,6 @@ export class DeliveryNotesService {
                 status: ORDER_STATUS.OUT_FOR_DELIVERY,
                 next_hub: null,
             }, { where: { id: { [Op.in]: removedOrders.map((o: any) => o.id) } } });
-            // TODO: insert order_histories untuk masing-masing order (Order Removed from Delivery Note)
         }
 
         // Kembalikan ringkasan perubahan
