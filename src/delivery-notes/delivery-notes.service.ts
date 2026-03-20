@@ -364,6 +364,9 @@ export class DeliveryNotesService {
         if (query.tanggal) {
             where.tanggal = query.tanggal;
         }
+        if (query.hub_tujuan_id) {
+            where.hub_id = query.hub_tujuan_id;
+        }
 
         const { rows, count } = await this.orderDeliveryNoteModel.findAndCountAll({
             where,

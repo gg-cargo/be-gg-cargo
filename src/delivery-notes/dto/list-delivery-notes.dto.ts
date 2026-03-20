@@ -24,6 +24,11 @@ export class ListDeliveryNotesQueryDto {
     @IsOptional()
     @IsString({ message: 'tanggal harus berupa string (YYYY-MM-DD)' })
     tanggal?: string;
+
+    @Type(() => Number)
+    @IsInt({ message: 'hub_tujuan_id harus berupa angka' })
+    @IsOptional()
+    hub_tujuan_id?: number;
 }
 
 export class DeliveryNoteListItemDto {
