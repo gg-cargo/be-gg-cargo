@@ -891,7 +891,12 @@ export class FinanceService {
                         no_account: bank.no_account,
                         account_name: bank.account_name,
                         bank_name: bank.bank_name
-                    }))
+                    })),
+                    // Untuk PDF tagihan (generate-invoice-pdf.helper)
+                    notes: (() => {
+                        const n = invoice.getDataValue('notes');
+                        return typeof n === 'string' && n.trim() !== '' ? n.trim() : undefined;
+                    })(),
                 }
             };
 

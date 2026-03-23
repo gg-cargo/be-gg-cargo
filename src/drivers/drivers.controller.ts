@@ -76,11 +76,15 @@ export class DriversController {
     @Get('my-tasks')
     async getMyTasks(
         @Query() query: MyTasksQueryDto,
+        @Query('search') search: string | undefined,
         @Request() req: any
     ): Promise<MyTasksResponseDto> {
         const driverId = req.user?.id;
         if (!driverId) {
             throw new UnauthorizedException('User tidak terautentikasi');
+        }
+        if (search) {
+            (query as any).search = String(search).trim();
         }
 
         return this.driversService.getMyTasks(driverId, query);

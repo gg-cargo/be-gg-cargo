@@ -281,6 +281,16 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                 ],
                 margin: [0, 2, 0, 10],
             },
+            ...(data.invoice_details.notes ? [{
+                table: {
+                    widths: [50, 5, '*'],
+                    body: [
+                        ['Notes', ':', data.invoice_details.notes || '-'],
+                    ]
+                },
+                layout: 'noBorders',
+                margin: [0, 0, 0, 25],
+            }] : []),
             // BANK INFORMATION
             {
                 stack: [
@@ -321,17 +331,7 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                             margin: [0, 0, 0, 2],
                         }]
                     ),
-                    // Notes (jika ada)
-                    ...(data.invoice_details.notes ? [{
-                        table: {
-                            widths: [120, 5, '*'],
-                            body: [
-                                ['Notes', ':', data.invoice_details.notes || '-'],
-                            ]
-                        },
-                        layout: 'noBorders',
-                        margin: [0, 10, 0, 2],
-                    }] : []),
+                    // NOTES (di atas informasi pembayaran)
                 ],
                 margin: [0, 0, 0, 15],
             },

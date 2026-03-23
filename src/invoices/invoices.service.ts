@@ -227,7 +227,13 @@ export class InvoicesService {
                     no_rekening: '1234567890',
                     swift_code: 'CENAIDJA'
                 },
-                notes: 'Terima kasih telah menggunakan layanan GG KARGO'
+                notes: (() => {
+                    const n = orderInvoice.getDataValue('notes');
+                    const trimmed = typeof n === 'string' ? n.trim() : '';
+                    return trimmed !== ''
+                        ? trimmed
+                        : 'Terima kasih telah menggunakan layanan GG KARGO';
+                })(),
             }
         };
     }
