@@ -1729,8 +1729,10 @@ export class FinanceService {
                     calculationDetails.push(`Kurangi PPH: -Rp ${pph_amount.toLocaleString()}`);
                 }
 
-                // Update order total_harga dengan hasil perhitungan
-                if (!isInternational && calculatedTotalHarga > 0) {
+                // Update order total_harga dengan hasil perhitungan (termasuk 0 jika sengaja)
+                const totalHargaValid =
+                    Number.isFinite(calculatedTotalHarga) && calculatedTotalHarga >= 0;
+                if (!isInternational && totalHargaValid) {
                     await order.update({
                         total_harga: calculatedTotalHarga,
                         updated_at: new Date()
@@ -1739,7 +1741,9 @@ export class FinanceService {
                     updateHistory.push(`Total harga order diperbarui: Rp ${calculatedTotalHarga.toLocaleString()}`);
                     updateHistory.push(`Detail perhitungan: ${calculationDetails.join(' → ')}`);
                 } else if (!isInternational) {
-                    updateHistory.push(`Warning: Total harga hasil perhitungan tidak valid (Rp ${calculatedTotalHarga.toLocaleString()})`);
+                    updateHistory.push(
+                        `Warning: Total harga hasil perhitungan tidak valid (harus ≥ 0 dan berupa angka; dapat: ${calculatedTotalHarga})`
+                    );
                 }
 
                 // 14. Update Notes
