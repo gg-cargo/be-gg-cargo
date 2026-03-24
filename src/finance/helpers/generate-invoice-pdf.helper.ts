@@ -166,7 +166,11 @@ export async function generateInvoicePDF(data: any): Promise<string> {
             },
             // TABEL ITEM
             (() => {
-                const isInternational = data?.invoice_details?.detail_pengiriman?.layanan === 'International';
+                const layananPengiriman = data?.invoice_details?.detail_pengiriman?.layanan || '';
+                const layananNorm = String(layananPengiriman).toLowerCase().trim();
+                const isSewaTruk =
+                    layananNorm === 'sewa truk' || layananNorm === 'sewa truck';
+                const isInternational = layananPengiriman === 'International';
 
                 const headers = isInternational
                     ? [
@@ -213,11 +217,15 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                         const jumlahKoliText = Number.isFinite(jumlahKoliNumber)
                             ? `${jumlahKoliNumber.toFixed(2)} pcs`
                             : '-';
+                        const qtyColText = isSewaTruk ? String(item.qty ?? '-') : jumlahKoliText;
+                        const uomColText = isSewaTruk
+                            ? String(item.uom ?? '-')
+                            : `${item.qty} ${item.uom}`;
                         if (isInternational) {
                             return [
                                 { text: item.deskripsi, fontSize: 9 },
-                                { text: jumlahKoliText, fontSize: 9, alignment: 'center' },
-                                { text: `${item.qty} ${item.uom}`, fontSize: 9, alignment: 'center' },
+                                { text: qtyColText, fontSize: 9, alignment: 'center' },
+                                { text: uomColText, fontSize: 9, alignment: 'center' },
                                 { text: formatCurrency(item.total), fontSize: 9, alignment: 'right' },
                                 { text: formatSgd(item.unit_price_sgd), fontSize: 9, alignment: 'right' },
                                 { text: formatSgd(item.total_price_sgd), fontSize: 9, alignment: 'right' },
@@ -226,8 +234,8 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                         }
                         return [
                             { text: item.deskripsi, fontSize: 9 },
-                            { text: jumlahKoliText, fontSize: 9, alignment: 'center' },
-                            { text: `${item.qty} ${item.uom}`, fontSize: 9, alignment: 'center' },
+                            { text: qtyColText, fontSize: 9, alignment: 'center' },
+                            { text: uomColText, fontSize: 9, alignment: 'center' },
                             { text: formatCurrency(item.harga_satuan), fontSize: 9, alignment: 'right' },
                             { text: formatCurrency(item.total), fontSize: 9, alignment: 'right' },
                         ];
