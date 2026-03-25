@@ -215,12 +215,11 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                         const jumlahKoli = data?.invoice_details?.detail_pengiriman?.jumlah_koli;
                         const jumlahKoliNumber = Number(jumlahKoli);
                         const jumlahKoliText = Number.isFinite(jumlahKoliNumber)
-                            ? `${jumlahKoliNumber.toFixed(2)} pcs`
+                            ? `${jumlahKoliNumber.toFixed(2)}`
                             : '-';
                         const qtyColText = isSewaTruk ? String(item.qty ?? '-') : jumlahKoliText;
-                        const uomColText = isSewaTruk
-                            ? String(item.uom ?? '-')
-                            : `${item.qty} ${item.uom}`;
+                        // Show only UOM for all services (do not include qty here)
+                        const uomColText = String(item.uom ?? '-');
                         if (isInternational) {
                             return [
                                 { text: item.deskripsi, fontSize: 9 },
