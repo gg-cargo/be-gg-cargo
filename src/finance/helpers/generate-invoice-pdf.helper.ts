@@ -219,13 +219,16 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                         const jumlahKoliText = Number.isFinite(jumlahKoliNumber)
                             ? formatQtyPcs(jumlahKoliNumber)
                             : '-';
-                        const itemUomNorm = String(item.uom ?? '').trim().toUpperCase();
-                        const isKgUom = itemUomNorm === 'KG';
+                        const rawAdditionalFee = item.additional_fee;
+                        const isAdditionalFee =
+                            rawAdditionalFee === true ||
+                            rawAdditionalFee === 1 ||
+                            rawAdditionalFee === '1';
 
                         let qtyColText: string;
                         if (isSewaTruk) {
                             qtyColText = String(item.qty ?? '-');
-                        } else if (!isKgUom) {
+                        } else if (!isAdditionalFee) {
                             const itemQtyNum = Number(item.qty);
                             qtyColText = Number.isFinite(itemQtyNum)
                                 ? formatQtyPcs(itemQtyNum)

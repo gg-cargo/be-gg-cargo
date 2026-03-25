@@ -820,6 +820,7 @@ export class FinanceService {
                 return {
                     deskripsi: detail.getDataValue('description'),
                     qty: qty,
+                    additional_fee: detail.getDataValue('additional_fee'),
                     uom: detail.getDataValue('uom'),
                     harga_satuan: unitPriceRounded,
                     total: isNaN(itemTotal) ? 0 : roundAmount(itemTotal),
