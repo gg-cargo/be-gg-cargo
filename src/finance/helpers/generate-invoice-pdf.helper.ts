@@ -209,17 +209,34 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                     return new Intl.NumberFormat('id-ID').format(Number(amount));
                 };
 
+                const formatQtyPcs = (n: number) => `${Math.round(n)} pcs`;
+
                 const body = [
                     headers,
                     ...data.invoice_details.item_tagihan.map((item: any) => {
                         const jumlahKoli = data?.invoice_details?.detail_pengiriman?.jumlah_koli;
                         const jumlahKoliNumber = Number(jumlahKoli);
                         const jumlahKoliText = Number.isFinite(jumlahKoliNumber)
-                            ? `${jumlahKoliNumber.toFixed(2)}`
+                            ? formatQtyPcs(jumlahKoliNumber)
                             : '-';
-                        const qtyColText = isSewaTruk ? String(item.qty ?? '-') : jumlahKoliText;
-                        // Show only UOM for all services (do not include qty here)
-                        const uomColText = String(item.uom ?? '-');
+                        const itemUomNorm = String(item.uom ?? '').trim().toUpperCase();
+                        const isKgUom = itemUomNorm === 'KG';
+
+                        let qtyColText: string;
+                        if (isSewaTruk) {
+                            qtyColText = String(item.qty ?? '-');
+                        } else if (!isKgUom) {
+                            const itemQtyNum = Number(item.qty);
+                            qtyColText = Number.isFinite(itemQtyNum)
+                                ? formatQtyPcs(itemQtyNum)
+                                : String(item.qty ?? '-');
+                        } else {
+                            qtyColText = jumlahKoliText;
+                        }
+
+                        const uomColText = isSewaTruk
+                            ? String(item.uom ?? '-')
+                            : `${item.qty} ${item.uom}`;
                         if (isInternational) {
                             return [
                                 { text: item.deskripsi, fontSize: 9 },
