@@ -66,6 +66,7 @@ export class FleetShipmentVendorDto {
 }
 
 export class FleetShipmentItemDto {
+  order_id: number;
   resi: string;
   service: FleetShipmentServiceDto;
   vendor: FleetShipmentVendorDto;
@@ -78,6 +79,8 @@ export class FleetShipmentItemDto {
   pickup_date: string | null;
   transit_time: number;
   latest_status: string | null;
+  /** 0 = belum reweight final, 1 = sudah reweight (sama seperti orders.reweight_status) */
+  reweight_status: number;
   sla_days: number | null;
   sla_status: 'ON_TIME' | 'DELAY';
   last_update: string | null;

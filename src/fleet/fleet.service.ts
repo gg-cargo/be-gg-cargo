@@ -119,6 +119,7 @@ export class FleetService {
         MIN(op.assign_date) AS pickup_date,
         MAX(oh.created_at) AS last_update,
         MAX(o.status) AS latest_status,
+        o.reweight_status,
         -- transit_time dihitung dari pickup_date (dalam jam)
         TIMESTAMPDIFF(HOUR, MIN(op.assign_date), NOW()) AS transit_time_raw,
         MAX(ss.sla_hours) AS sla_days
@@ -147,7 +148,8 @@ export class FleetService {
         o.hub_dest_id,
         hd.nama,
         o.current_hub,
-        hc.nama
+        hc.nama,
+        o.reweight_status
     `;
 
     // Tambah HAVING untuk delay_only jika perlu
@@ -220,6 +222,7 @@ export class FleetService {
 
         const serviceName: string = row.service_name || '-';
         const serviceIdFromName = this.mapServiceNameToId(serviceName);
+        const reweightStatusNum = Number(row.reweight_status);
 
         return {
           order_id: row.id,
@@ -241,6 +244,7 @@ export class FleetService {
           pickup_date: pickupDate ? this.formatDateTime(pickupDate) : null,
           transit_time: transitTime,
           latest_status: row.latest_status || null,
+          reweight_status: Number.isFinite(reweightStatusNum) ? reweightStatusNum : 0,
           sla_days: slaDays,
           sla_status: slaStatus,
           last_update: lastUpdate ? this.formatDateTime(lastUpdate) : null,
