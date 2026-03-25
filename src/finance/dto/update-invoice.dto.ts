@@ -19,6 +19,10 @@ export class BillingItemDto {
     @IsNumber()
     unit_price: number;
 
+    @IsBoolean()
+    @IsOptional()
+    additional_fee?: boolean;
+
     @IsNumber()
     total: number;
 

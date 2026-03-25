@@ -1596,6 +1596,7 @@ export class FinanceService {
                             description: item.description,
                             qty: qty,
                             uom: item.uom,
+                            additional_fee: item.additional_fee,
                             unit_price: unitPrice,
                             total: isNaN(itemTotal) ? 0 : itemTotal,
                             unit_price_sgd: isInternational ? unitPriceSgd : null,

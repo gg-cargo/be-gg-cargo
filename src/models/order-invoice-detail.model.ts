@@ -79,6 +79,14 @@ export class OrderInvoiceDetail extends Model {
     remark: string;
 
     @Column({
+        type: DataType.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'Menandai baris tagihan sebagai biaya tambahan',
+    })
+    additional_fee: boolean;
+
+    @Column({
         type: DataType.DATE,
         allowNull: false,
         defaultValue: DataType.NOW,
