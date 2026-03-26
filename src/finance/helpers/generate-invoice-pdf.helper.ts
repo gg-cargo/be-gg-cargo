@@ -216,9 +216,6 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                     ...data.invoice_details.item_tagihan.map((item: any) => {
                         const jumlahKoli = data?.invoice_details?.detail_pengiriman?.jumlah_koli;
                         const jumlahKoliNumber = Number(jumlahKoli);
-                        const jumlahKoliText = Number.isFinite(jumlahKoliNumber)
-                            ? formatQtyPcs(jumlahKoliNumber)
-                            : '-';
                         const rawAdditionalFee = item.additional_fee;
                         const isAdditionalFee =
                             rawAdditionalFee === true ||
@@ -234,7 +231,10 @@ export async function generateInvoicePDF(data: any): Promise<string> {
                                 ? formatQtyPcs(itemQtyNum)
                                 : String(item.qty ?? '-');
                         } else {
-                            qtyColText = jumlahKoliText;
+                            const uomForQty = String(item.uom ?? '').trim() || '-';
+                            qtyColText = Number.isFinite(jumlahKoliNumber)
+                                ? `${Math.round(jumlahKoliNumber)} ${uomForQty}`
+                                : '-';
                         }
 
                         const uomColText = isSewaTruk
