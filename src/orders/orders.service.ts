@@ -8548,8 +8548,8 @@ export class OrdersService {
 
             await this.orderModel.update({
                 vendor_id: vendor.getDataValue('id'),
-                status: ORDER_STATUS.IN_TRANSIT,
                 updated_at: new Date(),
+                notes_vendor: dto.assignment_note || '',
             }, {
                 where: { no_tracking: noResi }
             });

@@ -899,6 +899,13 @@ export class Order extends Model {
     vendor_tracking_number: string;
 
     @Column({
+        type: DataType.TEXT,
+        allowNull: true,
+        comment: 'Catatan internal terkait vendor / forward',
+    })
+    notes_vendor: string;
+
+    @Column({
         type: DataType.INTEGER,
         allowNull: true,
     })
