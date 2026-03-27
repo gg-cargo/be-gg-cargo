@@ -1312,6 +1312,27 @@ export class FinanceService {
             // Rumus: totalAll = (SUM(billing_items[].total)) - discount_voucher_contract + asuransi_amount + packing_amount + ppn_amount - pph_amount
             const totalAll = subtotal - discountVoucherContract + asuransiAmount + packingAmount + ppnAmount - pphAmount;
 
+            // Berat aktual & berat volume (kg): sama seperti PDF resi (OrdersService.createResiReferensi)
+            const shipments = await this.orderShipmentModel.findAll({
+                where: { order_id: order.id },
+                raw: true,
+            });
+            let totalWeightResiStyle = 0;
+            let totalVolumeM3 = 0;
+            for (const s of shipments) {
+                const q = Number(s.qty) || 0;
+                const berat = Number(s.berat) || 0;
+                const panjang = Number(s.panjang) || 0;
+                const lebar = Number(s.lebar) || 0;
+                const tinggi = Number(s.tinggi) || 0;
+                totalWeightResiStyle += berat * q;
+                totalVolumeM3 += (panjang * lebar * tinggi * q) / 1000000;
+            }
+            totalWeightResiStyle = Math.round(totalWeightResiStyle);
+            const beratActualKg = roundToTwoInvoice(totalWeightResiStyle);
+            const volumeWeightKg = totalVolumeM3 * 250;
+            const beratVolumeKg = roundToTwoInvoice(volumeWeightKg);
+
             const response = {
                 invoice_data: {
                     invoice_no: invoice.getDataValue('invoice_no'),
@@ -1339,8 +1360,8 @@ export class FinanceService {
                             no_polisi_motor: order.getDataValue('no_polisi_motor'),
                             motor_notes: order.getDataValue('motor_notes'),
                             jumlah_koli: roundToTwoInvoice(pieces.length),
-                            berat_actual_kg: roundToTwoInvoice(parseFloat(order.getDataValue('total_berat')) || 0),
-                            berat_volume_kg: roundToTwoInvoice(parseFloat(order.getDataValue('total_berat')) || 0), // Assuming same as actual weight
+                            berat_actual_kg: beratActualKg,
+                            berat_volume_kg: beratVolumeKg,
                             berat_kubikasi_m3: roundToTwoInvoice(kubikasi)
                         },
                         status_pengiriman: order.getDataValue('status'),
