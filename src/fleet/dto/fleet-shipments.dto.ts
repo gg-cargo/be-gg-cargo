@@ -68,6 +68,10 @@ export class FleetShipmentVendorDto {
 export class FleetShipmentItemDto {
   order_id: number;
   resi: string;
+  customer: string | null;
+  layanan: string | null;
+  berat: string | null;
+  koli: number | null;
   service: FleetShipmentServiceDto;
   vendor: FleetShipmentVendorDto;
   hub_source_id: number | null;

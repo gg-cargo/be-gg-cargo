@@ -27,7 +27,7 @@ export class FleetService {
     @InjectModel(OrderHistory) private readonly orderHistoryModel: typeof OrderHistory,
     @InjectModel(Vendor) private readonly vendorModel: typeof Vendor,
     @InjectModel(Hub) private readonly hubModel: typeof Hub,
-  ) {}
+  ) { }
 
   /**
    * Core API untuk dashboard Fleet: daftar shipments / resi.
@@ -107,6 +107,10 @@ export class FleetService {
       SELECT
         o.id,
         o.no_tracking AS resi,
+        o.nama_pengirim AS customer,
+        o.layanan AS layanan,
+        (SELECT COALESCE(SUM(p.berat), 0) FROM order_pieces p WHERE p.order_id = o.id) AS berat,
+        (SELECT COUNT(*) FROM order_pieces p WHERE p.order_id = o.id) AS koli,
         o.layanan AS service_name,
         o.vendor_id,
         v.nama_vendor AS vendor_name,
@@ -140,6 +144,7 @@ export class FleetService {
       GROUP BY
         o.id,
         o.no_tracking,
+        o.nama_pengirim,
         o.layanan,
         o.vendor_id,
         v.nama_vendor,
@@ -227,6 +232,10 @@ export class FleetService {
         return {
           order_id: row.id,
           resi: row.resi,
+          customer: row.customer || null,
+          layanan: row.layanan || null,
+          berat: row.berat != null ? `${Number(row.berat).toFixed(1)} kg` : null,
+          koli: row.koli != null ? Number(row.koli) : null,
           service: {
             id: serviceIdFromName,
             name: serviceName,
