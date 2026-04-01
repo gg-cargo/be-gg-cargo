@@ -126,7 +126,8 @@ export class FleetService {
         o.reweight_status,
         -- transit_time dihitung dari pickup_date (dalam jam)
         TIMESTAMPDIFF(HOUR, MIN(op.assign_date), NOW()) AS transit_time_raw,
-        MAX(ss.sla_hours) AS sla_days
+        MAX(ss.sla_hours) AS sla_days,
+        (SELECT dn.no_delivery_note FROM order_delivery_notes dn WHERE dn.no_tracking LIKE CONCAT('%', o.no_tracking, '%') LIMIT 1) AS no_delivery_note
       FROM orders o
       LEFT JOIN vendors v ON v.id = o.vendor_id
       LEFT JOIN hubs hs ON hs.id = o.hub_source_id
@@ -256,6 +257,7 @@ export class FleetService {
           reweight_status: Number.isFinite(reweightStatusNum) ? reweightStatusNum : 0,
           sla_days: slaDays,
           sla_status: slaStatus,
+          no_delivery_note: row.no_delivery_note || null,
           last_update: lastUpdate ? this.formatDateTime(lastUpdate) : null,
         };
       });

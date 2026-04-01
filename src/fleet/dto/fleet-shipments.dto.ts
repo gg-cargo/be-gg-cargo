@@ -87,6 +87,7 @@ export class FleetShipmentItemDto {
   reweight_status: number;
   sla_days: number | null;
   sla_status: 'ON_TIME' | 'DELAY';
+  no_delivery_note: string | null;
   last_update: string | null;
 }
 
