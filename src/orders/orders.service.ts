@@ -32,6 +32,7 @@ import { AvailableDriversQueryDto, AvailableDriversResponseDto, AvailableDriverD
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { SubmitReweightDto, SubmitReweightResponseDto } from './dto/submit-reweight.dto';
 import { EditReweightRequestDto, EditReweightRequestResponseDto } from './dto/edit-reweight-request.dto';
+import { EditReweightRequestV2Dto, EditReweightRequestV2ResponseDto, ReweightCorrectionActionType } from './dto/edit-reweight-request-v2.dto';
 import { ORDER_STATUS, getOrderStatusFromPieces } from '../common/constants/order-status.constants';
 import { INVOICE_STATUS } from '../common/constants/invoice-status.constants';
 import { Op, fn, col, literal } from 'sequelize';
@@ -42,7 +43,11 @@ import { OrderInvoiceDetail } from '../models/order-invoice-detail.model';
 import { Bank } from '../models/bank.model';
 import { Level } from '../models/level.model';
 import { FileLog } from '../models/file-log.model';
-import { ReweightCorrectionRequest, REWEIGHT_CORRECTION_STATUS } from '../models/reweight-correction-request.model';
+import {
+    ReweightCorrectionRequest,
+    REWEIGHT_CORRECTION_STATUS,
+    REWEIGHT_CORRECTION_ACTION_TYPE,
+} from '../models/reweight-correction-request.model';
 import { OrderDeliveryNote } from '../models/order-delivery-note.model';
 import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
@@ -2932,42 +2937,42 @@ export class OrdersService {
         // 1.1 Hitung total_tagihan (sama seperti PDF tagihan) - hanya untuk layanan Paket
         let totalTagihan: number | null = null;
         if (order.layanan === 'Paket') {
-        const invoice = await this.orderInvoiceModel.findOne({
-            where: { order_id: orderId },
-            include: [{ model: this.orderInvoiceDetailModel, as: 'orderInvoiceDetails' }]
-        });
-        if (invoice) {
-            const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
-            const isInternational = false; // Paket is never International
-            const billedCurrency = invoice.getDataValue('billed_currency') || 'IDR';
-
-            const resolvedItemTagihan = invoiceDetails.map((detail: any) => {
-                const unitPrice = detail.getDataValue('unit_price') || 0;
-                const qty = detail.getDataValue('qty') || 0;
-                let itemTotal = unitPrice * qty;
-
-                const totalPriceSgd = detail.getDataValue('total_price_sgd');
-                const exchangeRateIdr = detail.getDataValue('exchange_rate_idr');
-                if (isInternational && (itemTotal === 0 || isNaN(itemTotal)) && totalPriceSgd != null && exchangeRateIdr != null) {
-                    const totalSgd = Number(totalPriceSgd);
-                    const kurs = Number(exchangeRateIdr);
-                    itemTotal = !isNaN(totalSgd) && !isNaN(kurs) ? totalSgd * kurs : 0;
-                }
-                return { total: isNaN(itemTotal) ? 0 : itemTotal };
+            const invoice = await this.orderInvoiceModel.findOne({
+                where: { order_id: orderId },
+                include: [{ model: this.orderInvoiceDetailModel, as: 'orderInvoiceDetails' }]
             });
+            if (invoice) {
+                const invoiceDetails = invoice.getDataValue('orderInvoiceDetails') || [];
+                const isInternational = false; // Paket is never International
+                const billedCurrency = invoice.getDataValue('billed_currency') || 'IDR';
 
-            const subtotalLayanan = resolvedItemTagihan.reduce((sum: number, item: any) => {
-                const itemTotal = Number(item.total) || 0;
-                return sum + (isNaN(itemTotal) ? 0 : itemTotal);
-            }, 0);
+                const resolvedItemTagihan = invoiceDetails.map((detail: any) => {
+                    const unitPrice = detail.getDataValue('unit_price') || 0;
+                    const qty = detail.getDataValue('qty') || 0;
+                    let itemTotal = unitPrice * qty;
 
-            const ppn = invoice.getDataValue('ppn') || 0;
-            const pph = invoice.getDataValue('pph') || 0;
-            const totalAkhir = subtotalLayanan + ppn - pph;
-            const roundAmount = (value: number) =>
-                billedCurrency === 'IDR' ? Math.round(value) : Math.round(value * 100) / 100;
-            totalTagihan = roundAmount(totalAkhir);
-        }
+                    const totalPriceSgd = detail.getDataValue('total_price_sgd');
+                    const exchangeRateIdr = detail.getDataValue('exchange_rate_idr');
+                    if (isInternational && (itemTotal === 0 || isNaN(itemTotal)) && totalPriceSgd != null && exchangeRateIdr != null) {
+                        const totalSgd = Number(totalPriceSgd);
+                        const kurs = Number(exchangeRateIdr);
+                        itemTotal = !isNaN(totalSgd) && !isNaN(kurs) ? totalSgd * kurs : 0;
+                    }
+                    return { total: isNaN(itemTotal) ? 0 : itemTotal };
+                });
+
+                const subtotalLayanan = resolvedItemTagihan.reduce((sum: number, item: any) => {
+                    const itemTotal = Number(item.total) || 0;
+                    return sum + (isNaN(itemTotal) ? 0 : itemTotal);
+                }, 0);
+
+                const ppn = invoice.getDataValue('ppn') || 0;
+                const pph = invoice.getDataValue('pph') || 0;
+                const totalAkhir = subtotalLayanan + ppn - pph;
+                const roundAmount = (value: number) =>
+                    billedCurrency === 'IDR' ? Math.round(value) : Math.round(value * 100) / 100;
+                totalTagihan = roundAmount(totalAkhir);
+            }
         }
 
         // 2. Ambil data shipments dan pieces
@@ -7802,6 +7807,432 @@ export class OrdersService {
         }
     }
 
+    async editReweightRequestV2(
+        orderId: number,
+        editReweightRequestDto: EditReweightRequestV2Dto,
+        userId: number
+    ): Promise<EditReweightRequestV2ResponseDto> {
+        try {
+            const order = await this.orderModel.findByPk(orderId);
+            if (!order) {
+                throw new NotFoundException('Order tidak ditemukan');
+            }
+
+            const reweightStatus = order.getDataValue('reweight_status');
+            if (reweightStatus !== 1) {
+                throw new BadRequestException('Order belum disubmit. Hanya order yang sudah final yang dapat dikoreksi');
+            }
+
+            const existingPendingBatch = await this.reweightCorrectionRequestModel.count({
+                where: {
+                    order_id: orderId,
+                    status: REWEIGHT_CORRECTION_STATUS.PENDING,
+                },
+            });
+            if (existingPendingBatch > 0) {
+                throw new BadRequestException('Masih ada permintaan koreksi reweight yang pending untuk order ini');
+            }
+
+            const requestingUser = await this.userModel.findByPk(userId);
+            if (!requestingUser) {
+                throw new NotFoundException('User yang mengajukan permintaan tidak ditemukan');
+            }
+
+            const userLevel = requestingUser.getDataValue('level');
+            if (![1, 2, 3, 4, 5, 6, 7, 8].includes(userLevel)) {
+                throw new BadRequestException('User tidak memiliki hak akses untuk mengajukan koreksi reweight');
+            }
+
+            const allPieces = await this.orderPieceModel.findAll({ where: { order_id: orderId } });
+            const piecesInOrder = new Map<number, any>();
+            for (const p of allPieces) {
+                piecesInOrder.set(Number(p.getDataValue('id')), p);
+            }
+
+            if (!editReweightRequestDto.actions || editReweightRequestDto.actions.length === 0) {
+                throw new BadRequestException('Minimal satu action harus diajukan');
+            }
+
+            const nonAddPieceIds = new Set<number>();
+            const removePieceIds = new Set<number>();
+            const rowsToCreate: any[] = [];
+
+            for (const actionItem of editReweightRequestDto.actions) {
+                const action = actionItem.action;
+
+                if (action === ReweightCorrectionActionType.ADD) {
+                    if (actionItem.piece_id != null) {
+                        throw new BadRequestException('Action ADD tidak boleh mengirim piece_id');
+                    }
+                    if (
+                        actionItem.berat == null ||
+                        actionItem.panjang == null ||
+                        actionItem.lebar == null ||
+                        actionItem.tinggi == null
+                    ) {
+                        throw new BadRequestException('Action ADD wajib mengirim berat, panjang, lebar, dan tinggi');
+                    }
+
+                    rowsToCreate.push({
+                        piece_id: null,
+                        action_type: REWEIGHT_CORRECTION_ACTION_TYPE.ADD,
+                        current_berat: null,
+                        current_panjang: null,
+                        current_lebar: null,
+                        current_tinggi: null,
+                        new_berat: Number(actionItem.berat),
+                        new_panjang: Number(actionItem.panjang),
+                        new_lebar: Number(actionItem.lebar),
+                        new_tinggi: Number(actionItem.tinggi),
+                    });
+                    continue;
+                }
+
+                if (actionItem.piece_id == null) {
+                    throw new BadRequestException(`Action ${action} wajib mengirim piece_id`);
+                }
+
+                const pieceId = Number(actionItem.piece_id);
+                if (nonAddPieceIds.has(pieceId)) {
+                    throw new BadRequestException(`Piece ${pieceId} duplikat dalam actions`);
+                }
+                nonAddPieceIds.add(pieceId);
+
+                const targetPiece = piecesInOrder.get(pieceId);
+                if (!targetPiece) {
+                    throw new NotFoundException(`Piece ${pieceId} tidak ditemukan di order ini`);
+                }
+                if (targetPiece.getDataValue('reweight_status') !== 1) {
+                    throw new BadRequestException(`Piece ${pieceId} belum di-reweight final`);
+                }
+
+                const currentData = {
+                    berat: Number(targetPiece.getDataValue('berat')),
+                    panjang: Number(targetPiece.getDataValue('panjang')),
+                    lebar: Number(targetPiece.getDataValue('lebar')),
+                    tinggi: Number(targetPiece.getDataValue('tinggi')),
+                };
+
+                if (action === ReweightCorrectionActionType.REMOVE) {
+                    removePieceIds.add(pieceId);
+                    rowsToCreate.push({
+                        piece_id: pieceId,
+                        action_type: REWEIGHT_CORRECTION_ACTION_TYPE.REMOVE,
+                        current_berat: currentData.berat,
+                        current_panjang: currentData.panjang,
+                        current_lebar: currentData.lebar,
+                        current_tinggi: currentData.tinggi,
+                        new_berat: null,
+                        new_panjang: null,
+                        new_lebar: null,
+                        new_tinggi: null,
+                    });
+                    continue;
+                }
+
+                if (
+                    actionItem.berat == null ||
+                    actionItem.panjang == null ||
+                    actionItem.lebar == null ||
+                    actionItem.tinggi == null
+                ) {
+                    throw new BadRequestException('Action UPDATE wajib mengirim berat, panjang, lebar, dan tinggi');
+                }
+
+                const newData = {
+                    berat: Number(actionItem.berat),
+                    panjang: Number(actionItem.panjang),
+                    lebar: Number(actionItem.lebar),
+                    tinggi: Number(actionItem.tinggi),
+                };
+
+                const changed = (
+                    currentData.berat !== newData.berat ||
+                    currentData.panjang !== newData.panjang ||
+                    currentData.lebar !== newData.lebar ||
+                    currentData.tinggi !== newData.tinggi
+                );
+
+                if (!changed) {
+                    throw new BadRequestException(`Piece ${pieceId} tidak memiliki perubahan data`);
+                }
+
+                rowsToCreate.push({
+                    piece_id: pieceId,
+                    action_type: REWEIGHT_CORRECTION_ACTION_TYPE.UPDATE,
+                    current_berat: currentData.berat,
+                    current_panjang: currentData.panjang,
+                    current_lebar: currentData.lebar,
+                    current_tinggi: currentData.tinggi,
+                    new_berat: newData.berat,
+                    new_panjang: newData.panjang,
+                    new_lebar: newData.lebar,
+                    new_tinggi: newData.tinggi,
+                });
+            }
+
+            const addCount = rowsToCreate.filter((x) => x.action_type === REWEIGHT_CORRECTION_ACTION_TYPE.ADD).length;
+            if (removePieceIds.size >= allPieces.length && addCount === 0) {
+                throw new BadRequestException('Order harus memiliki minimal satu piece');
+            }
+
+            const batchId = Number(`${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`);
+
+            const requests: Array<{
+                request_id: number;
+                action: ReweightCorrectionActionType;
+                piece_id: number | null;
+                current_data: { berat: number; panjang: number; lebar: number; tinggi: number } | null;
+                new_data: { berat: number; panjang: number; lebar: number; tinggi: number } | null;
+            }> = [];
+
+            for (const row of rowsToCreate) {
+                const created = await this.reweightCorrectionRequestModel.create({
+                    order_id: orderId,
+                    batch_id: batchId,
+                    piece_id: row.piece_id,
+                    action_type: row.action_type,
+                    current_berat: row.current_berat,
+                    current_panjang: row.current_panjang,
+                    current_lebar: row.current_lebar,
+                    current_tinggi: row.current_tinggi,
+                    new_berat: row.new_berat,
+                    new_panjang: row.new_panjang,
+                    new_lebar: row.new_lebar,
+                    new_tinggi: row.new_tinggi,
+                    note: editReweightRequestDto.note || '',
+                    alasan_koreksi: editReweightRequestDto.alasan_koreksi || '',
+                    status: REWEIGHT_CORRECTION_STATUS.PENDING,
+                    requested_by: userId,
+                } as any);
+
+                requests.push({
+                    request_id: Number(created.getDataValue('id')),
+                    action: String(created.getDataValue('action_type')) as ReweightCorrectionActionType,
+                    piece_id: created.getDataValue('piece_id') != null ? Number(created.getDataValue('piece_id')) : null,
+                    current_data: created.getDataValue('current_berat') != null
+                        ? {
+                            berat: Number(created.getDataValue('current_berat')),
+                            panjang: Number(created.getDataValue('current_panjang')),
+                            lebar: Number(created.getDataValue('current_lebar')),
+                            tinggi: Number(created.getDataValue('current_tinggi')),
+                        }
+                        : null,
+                    new_data: created.getDataValue('new_berat') != null
+                        ? {
+                            berat: Number(created.getDataValue('new_berat')),
+                            panjang: Number(created.getDataValue('new_panjang')),
+                            lebar: Number(created.getDataValue('new_lebar')),
+                            tinggi: Number(created.getDataValue('new_tinggi')),
+                        }
+                        : null,
+                });
+            }
+
+            const estimatedApprovalTime = new Date();
+            estimatedApprovalTime.setHours(estimatedApprovalTime.getHours() + 36);
+
+            return {
+                message: 'Permintaan koreksi reweight v2 berhasil diajukan dan sedang menunggu persetujuan admin IT',
+                success: true,
+                data: {
+                    order_id: orderId,
+                    batch_id: String(batchId),
+                    requested_by: requestingUser.getDataValue('name'),
+                    requested_at: new Date().toISOString(),
+                    note: editReweightRequestDto.note || '',
+                    status: 'Pending Approval',
+                    estimated_approval_time: estimatedApprovalTime.toISOString(),
+                    requests,
+                },
+            };
+        } catch (error) {
+            this.logger.error(`Error in editReweightRequestV2: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    async approveReweightCorrectionsByTrackingV2(
+        noTracking: string,
+        approvedByUserId: number
+    ): Promise<{ message: string; success: boolean; data: any }> {
+        try {
+            if (!approvedByUserId || isNaN(Number(approvedByUserId))) {
+                throw new BadRequestException('approved_by_user_id wajib diisi dan harus berupa angka');
+            }
+
+            const approver = await this.userModel.findByPk(approvedByUserId);
+            if (!approver) {
+                throw new NotFoundException('User approver tidak ditemukan');
+            }
+
+            const order = await this.orderModel.findOne({
+                where: { no_tracking: noTracking },
+                attributes: ['id', 'no_tracking'],
+            });
+            if (!order) {
+                throw new NotFoundException(`Order dengan no_tracking ${noTracking} tidak ditemukan`);
+            }
+
+            const orderId = Number(order.getDataValue('id'));
+            const pendingRequests = await this.reweightCorrectionRequestModel.findAll({
+                where: {
+                    order_id: orderId,
+                    status: REWEIGHT_CORRECTION_STATUS.PENDING,
+                },
+                order: [['created_at', 'ASC']],
+            });
+
+            if (!pendingRequests.length) {
+                throw new BadRequestException(`Tidak ada reweight correction request pending untuk no_tracking ${noTracking}`);
+            }
+
+            const firstBatchId = pendingRequests[0].getDataValue('batch_id');
+            if (firstBatchId == null) {
+                throw new BadRequestException('Request pending bukan format v2 (batch_id tidak ditemukan)');
+            }
+
+            const requests = pendingRequests.filter((req) => Number(req.getDataValue('batch_id')) === Number(firstBatchId));
+            const now = new Date();
+            const requestIds: number[] = [];
+            let processedPieces = 0;
+
+            for (const request of requests) {
+                const actionType = request.getDataValue('action_type') as REWEIGHT_CORRECTION_ACTION_TYPE;
+
+                if (actionType === REWEIGHT_CORRECTION_ACTION_TYPE.ADD) {
+                    const addBerat = Number(request.getDataValue('new_berat'));
+                    const addPanjang = Number(request.getDataValue('new_panjang'));
+                    const addLebar = Number(request.getDataValue('new_lebar'));
+                    const addTinggi = Number(request.getDataValue('new_tinggi'));
+
+                    const pieceCounter = await this.getNextPieceCounter(orderId);
+                    const generatedPieceId = `P${orderId}-${pieceCounter}`;
+                    const shipmentId = await this.findOrCreateShipmentForDimensions(orderId, addBerat, addPanjang, addLebar, addTinggi);
+
+                    await this.orderPieceModel.create({
+                        order_id: orderId,
+                        order_shipment_id: shipmentId,
+                        piece_id: generatedPieceId,
+                        berat: addBerat,
+                        panjang: addPanjang,
+                        lebar: addLebar,
+                        tinggi: addTinggi,
+                        reweight_status: 1,
+                        reweight_by: approvedByUserId,
+                        createdAt: now,
+                        updatedAt: now,
+                    } as any);
+
+                    requestIds.push(Number(request.getDataValue('id')));
+                    processedPieces += 1;
+                    continue;
+                }
+
+                const pieceId = request.getDataValue('piece_id');
+                if (!pieceId) {
+                    throw new BadRequestException('piece_id tidak valid pada request v2');
+                }
+
+                const existingPiece = await this.orderPieceModel.findByPk(pieceId);
+                if (!existingPiece) {
+                    throw new NotFoundException(`Piece dengan ID ${pieceId} tidak ditemukan`);
+                }
+
+                if (actionType === REWEIGHT_CORRECTION_ACTION_TYPE.REMOVE) {
+                    const oldShipmentId = existingPiece.getDataValue('order_shipment_id');
+                    await this.orderPieceModel.destroy({ where: { id: pieceId } });
+
+                    if (oldShipmentId) {
+                        await this.reduceShipmentQtyByShipmentId(oldShipmentId);
+                    }
+
+                    requestIds.push(Number(request.getDataValue('id')));
+                    processedPieces += 1;
+                    continue;
+                }
+
+                const oldBerat = existingPiece.getDataValue('berat');
+                const oldPanjang = existingPiece.getDataValue('panjang');
+                const oldLebar = existingPiece.getDataValue('lebar');
+                const oldTinggi = existingPiece.getDataValue('tinggi');
+
+                const newBerat = Number(request.getDataValue('new_berat'));
+                const newPanjang = Number(request.getDataValue('new_panjang'));
+                const newLebar = Number(request.getDataValue('new_lebar'));
+                const newTinggi = Number(request.getDataValue('new_tinggi'));
+
+                const dimensiChanged = (
+                    oldBerat !== newBerat ||
+                    oldPanjang !== newPanjang ||
+                    oldLebar !== newLebar ||
+                    oldTinggi !== newTinggi
+                );
+
+                if (dimensiChanged) {
+                    const oldShipmentId = existingPiece.getDataValue('order_shipment_id');
+                    const newShipmentId = await this.findOrCreateShipmentForDimensions(orderId, newBerat, newPanjang, newLebar, newTinggi);
+
+                    await this.orderPieceModel.update(
+                        { order_shipment_id: newShipmentId },
+                        { where: { id: pieceId } }
+                    );
+
+                    if (oldShipmentId && oldShipmentId !== newShipmentId) {
+                        await this.reduceShipmentQtyByShipmentId(oldShipmentId);
+                    }
+                }
+
+                await this.orderPieceModel.update(
+                    {
+                        berat: newBerat,
+                        panjang: newPanjang,
+                        lebar: newLebar,
+                        tinggi: newTinggi,
+                        reweight_status: 1,
+                        reweight_by: approvedByUserId,
+                        updatedAt: now,
+                    },
+                    { where: { id: pieceId } }
+                );
+
+                requestIds.push(Number(request.getDataValue('id')));
+                processedPieces += 1;
+            }
+
+            await this.reweightCorrectionRequestModel.update(
+                {
+                    status: REWEIGHT_CORRECTION_STATUS.APPROVED,
+                    approved_by: approvedByUserId,
+                    approved_at: now,
+                    updated_at: now,
+                },
+                { where: { id: { [Op.in]: requestIds } } }
+            );
+
+            return {
+                message: 'Reweight correction requests v2 berhasil disetujui',
+                success: true,
+                data: {
+                    order_id: orderId,
+                    no_tracking: noTracking,
+                    batch_id: String(firstBatchId),
+                    approved_by: approver.getDataValue('name'),
+                    processed_pieces: processedPieces,
+                    request_ids: requestIds,
+                },
+            };
+        } catch (error) {
+            this.logger.error(`Error approving reweight corrections v2 for ${noTracking}: ${error.message}`, error.stack);
+
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('Terjadi kesalahan saat menyetujui reweight correction requests v2');
+        }
+    }
+
     /**
      * Ambil semua data reweight correction requests
      */
@@ -7838,6 +8269,14 @@ export class OrdersService {
                 alasan_koreksi: string | null;
                 catatan: string | null;
                 status_reweight: number | null;
+                actions: Array<{
+                    piece_id: number | null;
+                    action: string;
+                    berat: number;
+                    panjang: number;
+                    lebar: number;
+                    tinggi: number;
+                }>;
                 dimensi_sekarang: Array<{ piece_id: number; berat: number; panjang: number; lebar: number; tinggi: number }>;
                 dimensi_baru: Array<{ piece_id: number; berat: number; panjang: number; lebar: number; tinggi: number }>;
             }>();
@@ -7871,6 +8310,7 @@ export class OrdersService {
                         alasan_koreksi: request.getDataValue('alasan_koreksi') || null,
                         catatan: request.getDataValue('note') || null,
                         status_reweight: request.getDataValue('status') ?? null,
+                        actions: [],
                         dimensi_sekarang: [],
                         dimensi_baru: [],
                     });
@@ -7879,21 +8319,50 @@ export class OrdersService {
                 const group = groupedByTracking.get(key)!;
                 const pieceId = request.getDataValue('piece')?.getDataValue('piece_id')
                     || request.getDataValue('piece_id');
+                const actionType = String(request.getDataValue('action_type') || REWEIGHT_CORRECTION_ACTION_TYPE.UPDATE);
+                const currentBerat = Number(request.getDataValue('current_berat') ?? 0);
+                const currentPanjang = Number(request.getDataValue('current_panjang') ?? 0);
+                const currentLebar = Number(request.getDataValue('current_lebar') ?? 0);
+                const currentTinggi = Number(request.getDataValue('current_tinggi') ?? 0);
+                const newBerat = Number(request.getDataValue('new_berat') ?? 0);
+                const newPanjang = Number(request.getDataValue('new_panjang') ?? 0);
+                const newLebar = Number(request.getDataValue('new_lebar') ?? 0);
+                const newTinggi = Number(request.getDataValue('new_tinggi') ?? 0);
+
+                const actionDimensions = actionType === REWEIGHT_CORRECTION_ACTION_TYPE.REMOVE
+                    ? {
+                        berat: currentBerat,
+                        panjang: currentPanjang,
+                        lebar: currentLebar,
+                        tinggi: currentTinggi,
+                    }
+                    : {
+                        berat: newBerat,
+                        panjang: newPanjang,
+                        lebar: newLebar,
+                        tinggi: newTinggi,
+                    };
+
+                group.actions.push({
+                    piece_id: pieceId != null ? Number(pieceId) : null,
+                    action: actionType,
+                    ...actionDimensions,
+                });
 
                 group.dimensi_sekarang.push({
-                    piece_id: pieceId,
-                    berat: request.getDataValue('current_berat'),
-                    panjang: request.getDataValue('current_panjang'),
-                    lebar: request.getDataValue('current_lebar'),
-                    tinggi: request.getDataValue('current_tinggi'),
+                    piece_id: pieceId != null ? Number(pieceId) : 0,
+                    berat: currentBerat,
+                    panjang: currentPanjang,
+                    lebar: currentLebar,
+                    tinggi: currentTinggi,
                 });
 
                 group.dimensi_baru.push({
-                    piece_id: pieceId,
-                    berat: request.getDataValue('new_berat'),
-                    panjang: request.getDataValue('new_panjang'),
-                    lebar: request.getDataValue('new_lebar'),
-                    tinggi: request.getDataValue('new_tinggi'),
+                    piece_id: pieceId != null ? Number(pieceId) : 0,
+                    berat: newBerat,
+                    panjang: newPanjang,
+                    lebar: newLebar,
+                    tinggi: newTinggi,
                 });
             }
 
@@ -7979,6 +8448,9 @@ export class OrdersService {
 
             for (const request of requests) {
                 const pieceId = request.getDataValue('piece_id');
+                if (pieceId == null) {
+                    throw new BadRequestException('piece_id tidak valid pada request koreksi ini');
+                }
                 const existingPiece = await this.orderPieceModel.findByPk(pieceId);
                 if (!existingPiece) {
                     throw new NotFoundException(`Piece dengan ID ${pieceId} tidak ditemukan`);
@@ -7989,10 +8461,10 @@ export class OrdersService {
                 const oldLebar = existingPiece.getDataValue('lebar');
                 const oldTinggi = existingPiece.getDataValue('tinggi');
 
-                const newBerat = request.getDataValue('new_berat');
-                const newPanjang = request.getDataValue('new_panjang');
-                const newLebar = request.getDataValue('new_lebar');
-                const newTinggi = request.getDataValue('new_tinggi');
+                const newBerat = Number(request.getDataValue('new_berat') ?? oldBerat);
+                const newPanjang = Number(request.getDataValue('new_panjang') ?? oldPanjang);
+                const newLebar = Number(request.getDataValue('new_lebar') ?? oldLebar);
+                const newTinggi = Number(request.getDataValue('new_tinggi') ?? oldTinggi);
 
                 const dimensiChanged = (
                     oldBerat !== newBerat ||

@@ -9,6 +9,12 @@ export enum REWEIGHT_CORRECTION_STATUS {
     REJECTED = 2
 }
 
+export enum REWEIGHT_CORRECTION_ACTION_TYPE {
+    ADD = 'ADD',
+    UPDATE = 'UPDATE',
+    REMOVE = 'REMOVE'
+}
+
 @Table({
     tableName: 'reweight_correction_requests',
     timestamps: true,
@@ -27,70 +33,87 @@ export class ReweightCorrectionRequest extends Model<ReweightCorrectionRequest> 
     })
     order_id: number;
 
+    @Index
+    @Column({
+        type: DataType.BIGINT,
+        allowNull: true,
+        comment: 'ID batch pengajuan koreksi reweight'
+    })
+    batch_id: number | null;
+
     @ForeignKey(() => OrderPiece)
     @Index
     @Column({
         type: DataType.INTEGER,
-        allowNull: false,
+        allowNull: true,
         comment: 'ID piece yang dikoreksi'
     })
-    piece_id: number;
+    piece_id: number | null;
+
+    @Index
+    @Column({
+        type: DataType.STRING(10),
+        allowNull: false,
+        defaultValue: REWEIGHT_CORRECTION_ACTION_TYPE.UPDATE,
+        comment: 'ADD | UPDATE | REMOVE'
+    })
+    action_type: REWEIGHT_CORRECTION_ACTION_TYPE;
 
     @Column({
         type: DataType.DOUBLE,
-        allowNull: false,
+        allowNull: true,
         comment: 'Berat saat ini sebelum koreksi'
     })
-    current_berat: number;
+    current_berat: number | null;
 
     @Column({
         type: DataType.DOUBLE,
-        allowNull: false,
+        allowNull: true,
         comment: 'Panjang saat ini sebelum koreksi'
     })
-    current_panjang: number;
+    current_panjang: number | null;
 
     @Column({
         type: DataType.DOUBLE,
-        allowNull: false,
+        allowNull: true,
         comment: 'Lebar saat ini sebelum koreksi'
     })
-    current_lebar: number;
+    current_lebar: number | null;
 
     @Column({
         type: DataType.DOUBLE,
-        allowNull: false,
+        allowNull: true,
         comment: 'Tinggi saat ini sebelum koreksi'
     })
-    current_tinggi: number;
+    current_tinggi: number | null;
 
     @Column({
         type: DataType.DOUBLE,
-        allowNull: false,
+        allowNull: true,
         comment: 'Berat baru yang diminta'
     })
-    new_berat: number;
+    new_berat: number | null;
 
     @Column({
         type: DataType.DOUBLE,
-        allowNull: false,
+        allowNull: true,
         comment: 'Panjang baru yang diminta'
     })
-    new_panjang: number;
+    new_panjang: number | null;
 
     @Column({
         type: DataType.DOUBLE,
-        allowNull: false,
+        allowNull: true,
         comment: 'Lebar baru yang diminta'
     })
-    new_lebar: number;
+    new_lebar: number | null;
 
     @Column({
         type: DataType.DOUBLE,
-        allowNull: false,
+        allowNull: true,
         comment: 'Tinggi baru yang diminta'
     })
-    new_tinggi: number;
+    new_tinggi: number | null;
 
     @Column({
         type: DataType.STRING(35),

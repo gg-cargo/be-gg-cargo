@@ -24,6 +24,7 @@ import { AvailableDriversQueryDto, AvailableDriversResponseDto } from './dto/ava
 import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dto';
 import { SubmitReweightDto, SubmitReweightResponseDto } from './dto/submit-reweight.dto';
 import { EditReweightRequestDto, EditReweightRequestResponseDto } from './dto/edit-reweight-request.dto';
+import { EditReweightRequestV2Dto, EditReweightRequestV2ResponseDto } from './dto/edit-reweight-request-v2.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { DeleteOrderDto } from './dto/delete-order.dto';
@@ -492,6 +493,20 @@ export class OrdersController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Post(':order_id/reweight/edit-request-v2')
+    async editReweightRequestV2(
+        @Param('order_id', ParseIntPipe) orderId: number,
+        @Body() editReweightRequestDto: EditReweightRequestV2Dto,
+        @Request() req: any
+    ): Promise<EditReweightRequestV2ResponseDto> {
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new BadRequestException('User ID tidak ditemukan');
+        }
+        return this.ordersService.editReweightRequestV2(orderId, editReweightRequestDto, userId);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Get('reweight-corrections')
     async getAllReweightCorrectionRequests() {
         return this.ordersService.getAllReweightCorrectionRequests();
@@ -520,6 +535,19 @@ export class OrdersController {
         @Body() body: { approved_by_user_id: number },
     ) {
         return this.ordersService.approveReweightCorrectionsByTracking(noTracking, body?.approved_by_user_id);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':no_tracking/reweight-corrections/approve-v2')
+    async approveReweightCorrectionsByTrackingV2(
+        @Param('no_tracking') noTracking: string,
+        @Request() req: any,
+    ) {
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new BadRequestException('User ID tidak ditemukan');
+        }
+        return this.ordersService.approveReweightCorrectionsByTrackingV2(noTracking, userId);
     }
 
     @UseGuards(JwtAuthGuard)
