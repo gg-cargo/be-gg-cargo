@@ -16,7 +16,8 @@ export class CityController {
         @Query('q') query?: string,
         @Query('origin') origin?: string,
         @Query('destination') destination?: string,
-        @Query('city_only') cityOnly?: string,
+        @Query('city') city?: string,
+        @Query('provinsi') provinsi?: string,
         @Query('page') page?: string,
         @Query('limit') limit?: string,
     ) {
@@ -32,10 +33,13 @@ export class CityController {
         }
 
         const trimmedQuery = query?.trim();
+        const trimmedCity = city?.trim();
+        const trimmedProvinsi = provinsi?.trim();
+
         if (trimmedQuery && trimmedQuery.length < 2) {
             throw new HttpException('Query minimal 2 karakter', HttpStatus.BAD_REQUEST);
         }
 
-        return this.cityService.searchCity(trimmedQuery, origin, destination, cityOnly, parsedPage, parsedLimit);
+        return this.cityService.searchCity(trimmedQuery, origin, destination, trimmedCity, trimmedProvinsi, parsedPage, parsedLimit);
     }
 } 

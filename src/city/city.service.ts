@@ -18,29 +18,38 @@ export class CityService {
         query?: string,
         origin?: string,
         destination?: string,
-        cityOnly?: string,
+        city?: string,
+        provinsi?: string,
         page: number = 1,
         limit: number = 20,
     ) {
         const searchQuery = `%${query || ''}%`;
         const hasQuery = Boolean(query && query.length > 0);
-        const isCityOnly = cityOnly === 'true';
+        const hasCity = Boolean(city && city.length > 0);
+        const hasProvinsi = Boolean(provinsi && provinsi.length > 0);
+        const shouldPaginate = !hasQuery && !hasCity && !hasProvinsi;
+        const cityQuery = `%${city || ''}%`;
+        const provinsiQuery = `%${provinsi || ''}%`;
 
         // Build where condition
         const whereCondition: any = {};
 
         if (hasQuery) {
-            if (isCityOnly) {
-                whereCondition.kota = { [Op.like]: searchQuery };
-            } else {
-                whereCondition[Op.or] = [
-                    { provinsi: { [Op.like]: searchQuery } },
-                    { kota: { [Op.like]: searchQuery } },
-                    { kecamatan: { [Op.like]: searchQuery } },
-                    { kelurahan: { [Op.like]: searchQuery } },
-                    { kode_pos: { [Op.like]: searchQuery } },
-                ];
-            }
+            whereCondition[Op.or] = [
+                { provinsi: { [Op.like]: searchQuery } },
+                { kota: { [Op.like]: searchQuery } },
+                { kecamatan: { [Op.like]: searchQuery } },
+                { kelurahan: { [Op.like]: searchQuery } },
+                { kode_pos: { [Op.like]: searchQuery } },
+            ];
+        }
+
+        if (hasCity) {
+            whereCondition.kota = { [Op.like]: cityQuery };
+        }
+
+        if (hasProvinsi) {
+            whereCondition.provinsi = { [Op.like]: provinsiQuery };
         }
 
         // Add origin filter
@@ -58,7 +67,7 @@ export class CityService {
         let results: any[] = [];
         let total = 0;
 
-        if (hasQuery) {
+        if (!shouldPaginate) {
             results = await this.cityModel.findAll({
                 where: whereCondition,
                 order: [
@@ -107,17 +116,18 @@ export class CityService {
             total,
             query: query,
             type: type,
-            ...(hasQuery ? {} : {
+            ...(shouldPaginate ? {
                 pagination: {
                     page,
                     limit,
                     total_pages: Math.ceil(total / limit),
                 },
-            }),
+            } : {}),
             filters: {
                 origin: origin === 'true',
                 destination: destination === 'true',
-                city_only: isCityOnly,
+                city: city || null,
+                provinsi: provinsi || null,
             }
         };
     }
