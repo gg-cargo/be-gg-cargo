@@ -52,6 +52,7 @@ import { OrderDeliveryNote } from '../models/order-delivery-note.model';
 import { FileService } from '../file/file.service';
 import { DriversService } from '../drivers/drivers.service';
 import { Hub } from '../models/hub.model';
+import { City } from '../models/city.model';
 import { generateOrderLabelsPDF } from './helpers/generate-order-labels-pdf.helper';
 import { convertPdfToImages } from './helpers/convert-pdf-to-images.helper';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
@@ -145,6 +146,8 @@ export class OrdersService {
         private readonly orderDeliveryNoteModel: typeof OrderDeliveryNote,
         @InjectModel(Hub)
         private readonly hubModel: typeof Hub,
+        @InjectModel(City)
+        private readonly cityModel: typeof City,
         @InjectModel(JobAssign)
         private readonly jobAssignModel: typeof JobAssign,
         @InjectModel(TruckList)
@@ -1849,12 +1852,20 @@ export class OrdersService {
         // Hitung total koli, berat, volume, dan berat volume
         const shipmentData = this.calculateShipmentData(createOrderDto.pieces);
 
-        // Tentukan hub source/dest berdasarkan alamat
-        const hubSourceId = await this.findHubIdForAddress(
-            createOrderDto.provinsi_pengirim,
-            createOrderDto.kota_pengirim,
-            createOrderDto.alamat_pengirim,
-        );
+        // Tentukan hub source dari city.hub_origin berdasarkan id_city
+        const city = await this.cityModel.findByPk(createOrderDto.id_city, {
+            attributes: ['id', 'hub_origin'],
+        });
+
+        if (!city) {
+            throw new NotFoundException(`City dengan ID ${createOrderDto.id_city} tidak ditemukan`);
+        }
+
+        const hubSourceId = city.getDataValue('hub_origin');
+        if (hubSourceId == null) {
+            throw new BadRequestException(`Hub origin untuk city ID ${createOrderDto.id_city} belum di-assign`);
+        }
+
         const hubDestId = await this.findHubIdForAddress(
             createOrderDto.provinsi_penerima,
             createOrderDto.kota_penerima,

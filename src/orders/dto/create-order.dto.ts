@@ -37,6 +37,10 @@ export class CreateOrderPieceDto {
 
 export class CreateOrderDto {
     // Data pengirim
+    @IsNumber()
+    @IsPositive()
+    id_city: number;
+
     @IsString() @IsNotEmpty() nama_pengirim: string;
     @IsString() @IsNotEmpty() @MaxLength(100, { message: 'alamat_pengirim maksimal 100 karakter' }) alamat_pengirim: string;
     @IsString() @IsNotEmpty() provinsi_pengirim: string;
