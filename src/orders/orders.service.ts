@@ -1863,7 +1863,7 @@ export class OrdersService {
 
         const hubSourceId = city.getDataValue('hub_origin');
         if (hubSourceId == null) {
-            throw new BadRequestException(`Hub origin untuk city ID ${createOrderDto.id_city} belum di-assign`);
+            throw new BadRequestException(`Kota pengirim belum ada hub 99delivery`);
         }
 
         const hubDestId = await this.findHubIdForAddress(
