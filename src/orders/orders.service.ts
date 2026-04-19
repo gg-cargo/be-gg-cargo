@@ -23,7 +23,7 @@ import { ReweightPieceDto } from './dto/reweight-piece.dto';
 import { ReweightPieceResponseDto } from './dto/reweight-response.dto';
 import { ReweightBulkDto } from './dto/reweight-bulk.dto';
 import { ReweightBulkResponseDto } from './dto/reweight-bulk-response.dto';
-import { EstimatePriceDto } from './dto/estimate-price.dto';
+import { EstimatePriceDto, LocationDto, ServiceOptionsDto } from './dto/estimate-price.dto';
 import { BypassReweightDto } from './dto/bypass-reweight.dto';
 import { BypassReweightResponseDto } from './dto/bypass-reweight-response.dto';
 import { OrderDetailResponseDto } from './dto/order-detail-response.dto';
@@ -1829,6 +1829,55 @@ export class OrdersService {
         }
     }
 
+    /**
+     * Subtotal pengiriman untuk create order: sama sumbernya dengan endpoint estimatePrice
+     * (asuransi/packing tidak diikutkan di sini; ditambahkan terpisah lewat calculateInvoiceAmounts).
+     */
+    private async getCreateOrderShippingSubtotalFromEstimate(
+        createOrderDto: CreateOrderDto,
+    ): Promise<number | null> {
+        const estimateDto: EstimatePriceDto = {
+            origin: {
+                provinsi: createOrderDto.provinsi_pengirim,
+                kota: createOrderDto.kota_pengirim,
+                kecamatan: createOrderDto.kecamatan_pengirim,
+                kelurahan: createOrderDto.kelurahan_pengirim,
+                kodepos: createOrderDto.kodepos_pengirim,
+            },
+            destination: {
+                provinsi: createOrderDto.provinsi_penerima,
+                kota: createOrderDto.kota_penerima,
+                kecamatan: createOrderDto.kecamatan_penerima,
+                kelurahan: createOrderDto.kelurahan_penerima,
+                kodepos: createOrderDto.kodepos_penerima,
+            },
+            item_details: {
+                items: createOrderDto.pieces.map((p) => ({
+                    qty: p.qty,
+                    berat: p.berat,
+                    panjang: p.panjang,
+                    lebar: p.lebar,
+                    tinggi: p.tinggi,
+                })),
+            },
+            service_options: {
+                layanan: createOrderDto.layanan,
+                asuransi: false,
+                packing: false,
+                motor_type: createOrderDto.motor_type,
+                truck_type: (createOrderDto as { truck_type?: string }).truck_type,
+                ...(createOrderDto.barang_id != null ? { barang_id: createOrderDto.barang_id } : {}),
+            },
+        };
+
+        const res = await this.estimatePrice(estimateDto);
+        if (!res?.success || res.data?.pricing == null) {
+            return null;
+        }
+        const bp = res.data.pricing.base_price;
+        return bp != null && Number.isFinite(Number(bp)) ? Number(bp) : null;
+    }
+
     async createOrder(createOrderDto: CreateOrderDto, userId: number): Promise<CreateOrderResponseDto> {
         // Validasi tambahan
         this.validateOrderData(createOrderDto);
@@ -1851,6 +1900,47 @@ export class OrdersService {
 
         // Hitung total koli, berat, volume, dan berat volume
         const shipmentData = this.calculateShipmentData(createOrderDto.pieces);
+
+        const chargeableForTariff = Math.max(
+            Math.max(shipmentData.totalBerat, shipmentData.beratVolume),
+            1,
+        );
+        let tariffShippingPrice: number | null = null;
+        try {
+            tariffShippingPrice = await this.getCreateOrderShippingSubtotalFromEstimate(createOrderDto);
+        } catch (err: any) {
+            if (err instanceof BadRequestException) {
+                throw err;
+            }
+            this.logger.warn(
+                `estimatePrice gagal saat createOrder, akan coba fallback tariff simulate: ${err?.message}`,
+            );
+        }
+        if (tariffShippingPrice == null) {
+            try {
+                const layanan = createOrderDto.layanan || 'Reguler';
+                const simulateDto: Record<string, any> = {
+                    service_type: 'Kirim Barang',
+                    sub_service: layanan,
+                    origin: createOrderDto.kota_pengirim || createOrderDto.provinsi_pengirim,
+                    destination: createOrderDto.kota_penerima || createOrderDto.provinsi_penerima,
+                    effective_date: new Date().toISOString().split('T')[0],
+                    weight_kg: chargeableForTariff,
+                    is_fragile: false,
+                };
+                if (createOrderDto.barang_id != null) {
+                    simulateDto.barang_id = createOrderDto.barang_id;
+                }
+                const simulateResult = await this.tariffsService.simulate(simulateDto);
+                if (simulateResult?.breakdown?.final_price != null) {
+                    tariffShippingPrice = Number(simulateResult.breakdown.final_price);
+                }
+            } catch (err: any) {
+                this.logger.warn(
+                    `Tariff simulate fallback gagal saat createOrder: ${err?.message}`,
+                );
+            }
+        }
 
         // Tentukan hub source dari city.hub_origin berdasarkan id_city
         const city = await this.cityModel.findByPk(createOrderDto.id_city, {
@@ -2050,8 +2140,12 @@ export class OrdersService {
                 created_by: userId,
             }, { transaction });
 
-            // 6. Buat invoice
-            const invoiceAmounts = this.calculateInvoiceAmounts(shipmentData, createOrderDto);
+            // 6. Buat invoice (subtotal pengiriman dari estimatePrice / fallback tariff simulate)
+            const invoiceAmounts = this.calculateInvoiceAmounts(
+                shipmentData,
+                createOrderDto,
+                tariffShippingPrice,
+            );
             const invoiceDate = new Date();
 
             const invoice = await this.orderInvoiceModel.create({
@@ -2091,14 +2185,23 @@ export class OrdersService {
             // 7. Buat invoice details
             const invoiceDetails: any[] = [];
 
-            // Tambahkan item pengiriman dengan chargeable weight
+            // Tambahkan item pengiriman (harga dari tariff simulate; layanan Paket: qty 1 / uom paket)
+            const isPaketLayanan = createOrderDto.layanan === LayananType.PAKET;
+            const pengirimanLineTotal = invoiceAmounts.subtotal;
+            const cwInvoice = invoiceAmounts.chargeableWeight;
+            const unitPricePengirimanBarang = isPaketLayanan
+                ? pengirimanLineTotal
+                : cwInvoice > 0
+                  ? pengirimanLineTotal / cwInvoice
+                  : pengirimanLineTotal;
             invoiceDetails.push({
                 invoice_id: invoice.id,
-                description: "Biaya Pengiriman Barang",
-                qty: invoiceAmounts.chargeableWeight,
-                uom: 'KG',
-                unit_price: 1000,
-                remark: `Berat terberat: ${invoiceAmounts.chargeableWeight.toFixed(2)} kg (Aktual: ${shipmentData.totalBerat.toFixed(2)} kg, Volume: ${shipmentData.beratVolume.toFixed(2)} kg)`,
+                description: 'Biaya Pengiriman Barang',
+                qty: isPaketLayanan ? 1 : cwInvoice,
+                uom: isPaketLayanan ? 'paket' : 'KG',
+                unit_price: unitPricePengirimanBarang,
+                total: pengirimanLineTotal,
+                remark: `Berat terberat: ${cwInvoice.toFixed(2)} kg (Aktual: ${shipmentData.totalBerat.toFixed(2)} kg, Volume: ${shipmentData.beratVolume.toFixed(2)} kg)`,
                 created_at: invoiceDate,
                 updated_at: invoiceDate,
             });
@@ -2111,6 +2214,7 @@ export class OrdersService {
                     qty: 1,
                     uom: 'KG',
                     unit_price: invoiceAmounts.packing,
+                    total: invoiceAmounts.packing,
                     remark: 'Biaya packing dan handling',
                     created_at: invoiceDate,
                     updated_at: invoiceDate,
@@ -2124,6 +2228,7 @@ export class OrdersService {
                     qty: 1,
                     uom: 'KG',
                     unit_price: invoiceAmounts.asuransi,
+                    total: invoiceAmounts.asuransi,
                     remark: 'Biaya asuransi pengiriman',
                     created_at: invoiceDate,
                     updated_at: invoiceDate,
@@ -4981,6 +5086,184 @@ export class OrdersService {
         }
     }
 
+    /**
+     * Metadata estimasi (hari, deskripsi) + harga dasar fallback jika tariff simulate tidak tersedia.
+     */
+    private getLegacyEstimateServiceMeta(
+        layanan: string,
+        chargeableWeight: number,
+        totalWeight: number,
+        service_options: ServiceOptionsDto,
+    ): {
+        layanan: string;
+        basePrice: number;
+        estimatedDays: number;
+        serviceDescription: string;
+        isValid: boolean;
+        errorMessage: string;
+    } {
+        let basePrice = 0;
+        let estimatedDays = 0;
+        let serviceDescription = '';
+        let isValid = true;
+        let errorMessage = '';
+
+        switch (layanan) {
+            case 'Kirim Hemat':
+                basePrice = chargeableWeight * 3000;
+                estimatedDays = 4;
+                serviceDescription = 'Layanan kirim hemat dengan estimasi 3-4+ hari';
+                break;
+
+            case 'Reguler':
+                basePrice = chargeableWeight * 6000;
+                estimatedDays = 3;
+                serviceDescription = 'Layanan reguler dengan estimasi 2-4 hari';
+                break;
+
+            case 'Paket':
+                if (totalWeight <= 25) {
+                    basePrice = 15000;
+                    estimatedDays = 2;
+                    serviceDescription = 'Layanan paket dengan batas maksimal 25kg';
+                } else {
+                    isValid = false;
+                    errorMessage = 'Berat melebihi batas maksimal 25kg untuk layanan Paket';
+                }
+                break;
+
+            case 'Express': {
+                const estimatedDistance = 10;
+                basePrice = 10000 + estimatedDistance * 3000;
+                estimatedDays = 1;
+                serviceDescription = 'Layanan express same day delivery';
+                break;
+            }
+
+            case 'Kirim Motor':
+                if (service_options.motor_type) {
+                    if (service_options.motor_type === '125cc') {
+                        basePrice = 120000;
+                    } else {
+                        basePrice = 150000;
+                    }
+                    estimatedDays = 5;
+                    serviceDescription = `Layanan kirim motor ${service_options.motor_type}`;
+                } else {
+                    isValid = false;
+                    errorMessage = 'Motor type wajib diisi untuk layanan Kirim Motor';
+                }
+                break;
+
+            case 'Sewa Truk':
+                if (service_options.truck_type) {
+                    if (service_options.truck_type === 'Pick Up') {
+                        basePrice = 300000;
+                    } else {
+                        basePrice = 800000;
+                    }
+                    const truckDistance = 20;
+                    basePrice += truckDistance * 2000;
+                    estimatedDays = 2;
+                    serviceDescription = `Layanan sewa truk ${service_options.truck_type}`;
+                } else {
+                    isValid = false;
+                    errorMessage = 'Truck type wajib diisi untuk layanan Sewa Truk';
+                }
+                break;
+
+            default:
+                isValid = false;
+                errorMessage = 'Layanan tidak dikenali';
+                break;
+        }
+
+        return {
+            layanan,
+            basePrice,
+            estimatedDays,
+            serviceDescription,
+            isValid,
+            errorMessage,
+        };
+    }
+
+    /**
+     * Harga dasar dari master tariff (simulate); jika gagal / tidak ada, pakai legacyBasePrice.
+     */
+    private async resolveEstimateBasePriceFromTariffSimulate(
+        layanan: string,
+        origin: LocationDto,
+        destination: LocationDto,
+        chargeableWeight: number,
+        service_options: ServiceOptionsDto,
+        legacyBasePrice: number,
+    ): Promise<number> {
+        const weightKg = Math.max(chargeableWeight, 1);
+        const originStr = origin.kota || origin.provinsi;
+        const destStr = destination.kota || destination.provinsi;
+        const effectiveDate = new Date().toISOString().split('T')[0];
+
+        try {
+            if (['Kirim Hemat', 'Reguler', 'Paket', 'Express'].includes(layanan)) {
+                const dto: Record<string, any> = {
+                    service_type: 'Kirim Barang',
+                    sub_service: layanan,
+                    origin: originStr,
+                    destination: destStr,
+                    effective_date: effectiveDate,
+                    weight_kg: weightKg,
+                    is_fragile: false,
+                };
+                if (service_options.barang_id != null) {
+                    dto.barang_id = service_options.barang_id;
+                }
+                const result = await this.tariffsService.simulate(dto);
+                if (result?.breakdown?.final_price != null) {
+                    return Number(result.breakdown.final_price);
+                }
+            } else if (layanan === 'Kirim Motor' && service_options.motor_type) {
+                const dto: Record<string, any> = {
+                    service_type: 'Kirim Barang',
+                    sub_service: 'Kirim Motor',
+                    origin: originStr,
+                    destination: destStr,
+                    effective_date: effectiveDate,
+                    weight_kg: weightKg,
+                    item_type: service_options.motor_type,
+                    is_fragile: false,
+                };
+                if (service_options.barang_id != null) {
+                    dto.barang_id = service_options.barang_id;
+                }
+                const result = await this.tariffsService.simulate(dto);
+                if (result?.breakdown?.final_price != null) {
+                    return Number(result.breakdown.final_price);
+                }
+            } else if (layanan === 'Sewa Truk' && service_options.truck_type) {
+                const dto: Record<string, any> = {
+                    service_type: 'Sewa Truk',
+                    sub_service: service_options.truck_type,
+                    origin: originStr,
+                    destination: destStr,
+                    effective_date: effectiveDate,
+                    distance_km: 20,
+                    vehicle_type: service_options.truck_type,
+                };
+                const result = await this.tariffsService.simulate(dto);
+                if (result?.breakdown?.final_price != null) {
+                    return Number(result.breakdown.final_price);
+                }
+            }
+        } catch (err: any) {
+            this.logger.warn(
+                `tariffsService.simulate gagal untuk estimatePrice (${layanan}): ${err?.message ?? err}`,
+            );
+        }
+
+        return legacyBasePrice;
+    }
+
     async estimatePrice(estimateDto: EstimatePriceDto) {
         const { origin, destination, item_details, service_options } = estimateDto;
 
@@ -5046,171 +5329,97 @@ export class OrdersService {
         // Chargeable weight = max(total berat aktual, total berat volume)
         const chargeableWeight = Math.max(totalWeight, totalBeratVolume);
 
-        // Fungsi untuk menghitung harga berdasarkan layanan
-        const calculateServicePrice = (layanan: string) => {
-            let basePrice = 0;
-            let estimatedDays = 0;
-            let serviceDescription = '';
-            let isValid = true;
-            let errorMessage = '';
-
-            switch (layanan) {
-                case 'Kirim Hemat':
-                    basePrice = chargeableWeight * 3000; // Rp3.000/kg
-                    estimatedDays = 4;
-                    serviceDescription = 'Layanan kirim hemat dengan estimasi 3-4+ hari';
-                    break;
-
-                case 'Reguler':
-                    basePrice = chargeableWeight * 6000; // Rp6.000/kg
-                    estimatedDays = 3;
-                    serviceDescription = 'Layanan reguler dengan estimasi 2-4 hari';
-                    break;
-
-                case 'Paket':
-                    if (totalWeight <= 25) {
-                        basePrice = 15000; // Rp15.000
-                        estimatedDays = 2;
-                        serviceDescription = 'Layanan paket dengan batas maksimal 25kg';
-                    } else {
-                        isValid = false;
-                        errorMessage = 'Berat melebihi batas maksimal 25kg untuk layanan Paket';
-                    }
-                    break;
-
-                case 'Express':
-                    // Estimasi jarak sederhana (bisa dikembangkan dengan API maps)
-                    const estimatedDistance = 10; // km
-                    basePrice = 10000 + (estimatedDistance * 3000); // Base + (jarak × Rp3.000/km)
-                    estimatedDays = 1;
-                    serviceDescription = 'Layanan express same day delivery';
-                    break;
-
-                case 'Kirim Motor':
-                    if (service_options.motor_type) {
-                        if (service_options.motor_type === '125cc') {
-                            basePrice = 120000; // Rp120.000
-                        } else {
-                            basePrice = 150000; // Rp150.000
-                        }
-                        estimatedDays = 5;
-                        serviceDescription = `Layanan kirim motor ${service_options.motor_type}`;
-                    } else {
-                        isValid = false;
-                        errorMessage = 'Motor type wajib diisi untuk layanan Kirim Motor';
-                    }
-                    break;
-
-                case 'Sewa Truk':
-                    if (service_options.truck_type) {
-                        if (service_options.truck_type === 'Pick Up') {
-                            basePrice = 300000; // Rp300.000
-                        } else {
-                            basePrice = 800000; // Rp800.000
-                        }
-                        // Tambahan biaya per km
-                        const truckDistance = 20; // km
-                        basePrice += truckDistance * 2000; // Rp2.000/km
-                        estimatedDays = 2;
-                        serviceDescription = `Layanan sewa truk ${service_options.truck_type}`;
-                    } else {
-                        isValid = false;
-                        errorMessage = 'Truck type wajib diisi untuk layanan Sewa Truk';
-                    }
-                    break;
-
-                default:
-                    isValid = false;
-                    errorMessage = 'Layanan tidak dikenali';
-                    break;
-            }
-
-            return {
-                layanan,
-                basePrice,
-                estimatedDays,
-                serviceDescription,
-                isValid,
-                errorMessage
-            };
-        };
-
         // Jika layanan tidak diisi, hitung untuk semua layanan yang relevan
         if (!service_options.layanan) {
             const servicesToCalculate = ['Kirim Hemat', 'Reguler', 'Paket', 'Express'];
-            const allServices = servicesToCalculate.map(service => calculateServicePrice(service));
+            const servicesWithPricing: any[] = [];
 
-            // Hitung biaya tambahan dan diskon untuk setiap layanan
-            const servicesWithPricing = allServices.map(service => {
+            for (const serviceName of servicesToCalculate) {
+                const meta = this.getLegacyEstimateServiceMeta(
+                    serviceName,
+                    chargeableWeight,
+                    totalWeight,
+                    service_options,
+                );
+                let basePrice = meta.basePrice;
+                if (meta.isValid) {
+                    basePrice = await this.resolveEstimateBasePriceFromTariffSimulate(
+                        serviceName,
+                        origin,
+                        destination,
+                        chargeableWeight,
+                        service_options,
+                        meta.basePrice,
+                    );
+                }
+                const service = { ...meta, basePrice };
+
                 if (!service.isValid) {
-                    return {
+                    servicesWithPricing.push({
                         ...service,
                         pricing: null,
-                        estimatedDeliveryDate: null
-                    };
+                        estimatedDeliveryDate: null,
+                    });
+                    continue;
                 }
 
-                // Hitung biaya tambahan
                 let additionalCosts = 0;
                 const additionalServices: any[] = [];
 
                 if (service_options.asuransi) {
-                    const asuransiCost = service.basePrice * 0.02; // 2% dari harga dasar
+                    const asuransiCost = service.basePrice * 0.02;
                     additionalCosts += asuransiCost;
                     additionalServices.push({
                         service: 'Asuransi',
                         cost: asuransiCost,
-                        description: 'Asuransi pengiriman 2% dari harga dasar'
+                        description: 'Asuransi pengiriman 2% dari harga dasar',
                     });
                 }
 
                 if (service_options.packing) {
-                    const packingCost = 5000; // Rp5.000
+                    const packingCost = 5000;
                     additionalCosts += packingCost;
                     additionalServices.push({
                         service: 'Packing',
                         cost: packingCost,
-                        description: 'Packing tambahan'
+                        description: 'Packing tambahan',
                     });
                 }
 
-                // Hitung diskon voucher (jika ada)
                 let discountAmount = 0;
                 let voucherInfo: any = null;
 
                 if (service_options.voucher_code) {
                     if (service_options.voucher_code === 'DISKONAKHIRBULAN') {
-                        discountAmount = service.basePrice * 0.1; // 10% diskon
+                        discountAmount = service.basePrice * 0.1;
                         voucherInfo = {
                             code: service_options.voucher_code,
                             discount_percentage: 10,
                             discount_amount: discountAmount,
-                            description: 'Diskon akhir bulan 10%'
+                            description: 'Diskon akhir bulan 10%',
                         };
                     }
                 }
 
-                // Hitung total harga
                 const subtotal = service.basePrice + additionalCosts;
                 const totalPrice = subtotal - discountAmount;
 
-                // Estimasi waktu transit
                 const estimatedDeliveryDate = new Date();
                 estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + service.estimatedDays);
 
-                return {
+                servicesWithPricing.push({
                     ...service,
                     pricing: {
                         base_price: service.basePrice,
                         additional_services: additionalServices,
-                        subtotal: subtotal,
+                        subtotal,
                         voucher: voucherInfo,
                         discount_amount: discountAmount,
                         total_price: totalPrice,
                     },
-                    estimatedDeliveryDate: estimatedDeliveryDate.toISOString().split('T')[0]
-                };
-            });
+                    estimatedDeliveryDate: estimatedDeliveryDate.toISOString().split('T')[0],
+                });
+            }
 
             return {
                 message: 'Estimasi harga untuk semua layanan berhasil dihitung',
@@ -5243,19 +5452,32 @@ export class OrdersService {
                         packing: service_options.packing || false,
                         voucher_code: service_options.voucher_code || null,
                     },
-                    services: servicesWithPricing
-                }
+                    services: servicesWithPricing,
+                },
             };
         }
 
         // Jika layanan diisi, hitung untuk layanan spesifik
-        const serviceResult = calculateServicePrice(service_options.layanan);
+        const serviceResult = this.getLegacyEstimateServiceMeta(
+            service_options.layanan,
+            chargeableWeight,
+            totalWeight,
+            service_options,
+        );
 
         if (!serviceResult.isValid) {
             throw new BadRequestException(serviceResult.errorMessage);
         }
 
-        const { basePrice, estimatedDays, serviceDescription } = serviceResult;
+        const basePrice = await this.resolveEstimateBasePriceFromTariffSimulate(
+            service_options.layanan,
+            origin,
+            destination,
+            chargeableWeight,
+            service_options,
+            serviceResult.basePrice,
+        );
+        const { estimatedDays, serviceDescription } = serviceResult;
 
         // Hitung biaya tambahan
         let additionalCosts = 0;
@@ -8832,7 +9054,11 @@ export class OrdersService {
     /**
      * Calculate invoice amounts
      */
-    private calculateInvoiceAmounts(shipmentData: any, createOrderDto: CreateOrderDto): {
+    private calculateInvoiceAmounts(
+        shipmentData: any,
+        createOrderDto: CreateOrderDto,
+        shippingSubtotalFromTariff?: number | null,
+    ): {
         subtotal: number;
         packing: number;
         asuransi: number;
@@ -8846,7 +9072,10 @@ export class OrdersService {
         // Pastikan chargeableWeight minimal 1 kg untuk menghindari division by zero
         const safeChargeableWeight = Math.max(chargeableWeight, 1);
 
-        const subtotal = safeChargeableWeight * 1000; // Asumsi harga per kg
+        const subtotal =
+            shippingSubtotalFromTariff != null && Number.isFinite(Number(shippingSubtotalFromTariff))
+                ? Number(shippingSubtotalFromTariff)
+                : safeChargeableWeight * 1000; // Fallback: asumsi harga per kg
         const packing = createOrderDto.packing || 0;
         const asuransi = createOrderDto.asuransi || 0;
         const ppn = 0; // 0% PPN

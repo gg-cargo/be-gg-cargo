@@ -86,6 +86,11 @@ export class ServiceOptionsDto {
     @IsOptional()
     @IsString()
     truck_type?: string;
+
+    /** Opsional: cocokkan tariff per barang (master_tarif.barang_id) */
+    @IsOptional()
+    @IsNumber()
+    barang_id?: number;
 }
 
 export class EstimatePriceDto {
