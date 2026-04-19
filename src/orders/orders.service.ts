@@ -3609,6 +3609,15 @@ export class OrdersService {
                 [fn('SUM', literal(`CASE WHEN status IN ('In Transit', 'Out for Delivery') AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_on_delivery'],
                 [fn('SUM', literal(`CASE WHEN status = 'Delivered' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_completed'],
                 [fn('SUM', literal(`CASE WHEN status = 'Cancelled' AND created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN 1 ELSE 0 END`)), 'monthly_canceled'],
+                [
+                    fn(
+                        'SUM',
+                        literal(
+                            `CASE WHEN created_at BETWEEN '${startOfMonth.toISOString()}' AND '${endOfMonth.toISOString()}' THEN COALESCE(total_harga, 0) ELSE 0 END`,
+                        ),
+                    ),
+                    'monthly_revenue',
+                ],
             ],
             raw: true,
         }) as any;
@@ -3633,6 +3642,8 @@ export class OrdersService {
                 on_delivery: parseInt(result?.monthly_on_delivery) || 0,
                 completed: parseInt(result?.monthly_completed) || 0,
                 canceled: parseInt(result?.monthly_canceled) || 0,
+                /** Total nominal order (total_harga) yang dibuat pada bulan berjalan */
+                pendapatan_bulanan: Number(result?.monthly_revenue) || 0,
             }
         };
 
