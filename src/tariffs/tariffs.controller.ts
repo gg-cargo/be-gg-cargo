@@ -13,6 +13,7 @@ import {
     HttpStatus,
     HttpException,
     Res,
+    Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -54,8 +55,8 @@ export class TariffsController {
 
     @UseGuards(JwtAuthGuard)
     @Patch(':id')
-    async update(@Param('id') id: string, @Body() dto: UpdateTariffDto) {
-        const result = await this.tariffsService.update(id, dto);
+    async update(@Param('id') id: string, @Body() dto: UpdateTariffDto, @Request() req: any) {
+        const result = await this.tariffsService.update(id, dto, req.user?.id);
         return { success: true, message: 'Tariff updated successfully', data: result };
     }
 
@@ -75,9 +76,9 @@ export class TariffsController {
 
     @UseGuards(JwtAuthGuard)
     @Post('bulk-create')
-    async bulkCreate(@Body() dto: BulkCreateTariffDto) {
+    async bulkCreate(@Body() dto: BulkCreateTariffDto, @Request() req: any) {
         try {
-            const result = await this.tariffsService.bulkCreate(dto);
+            const result = await this.tariffsService.bulkCreate(dto, req.user?.id);
             return {
                 success: true,
                 message: 'Bulk tariffs created successfully',

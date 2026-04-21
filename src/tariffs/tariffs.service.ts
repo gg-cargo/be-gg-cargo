@@ -38,7 +38,7 @@ export class TariffsService {
         private sequelize: Sequelize,
     ) { }
 
-    async bulkCreate(dto: BulkCreateTariffDto) {
+    async bulkCreate(dto: BulkCreateTariffDto, userId?: number) {
         const transaction = await this.sequelize.transaction();
         const createdTariffIds: string[] = [];
         const errors: any[] = [];
@@ -82,6 +82,7 @@ export class TariffsService {
                         is_active: tariffDto.is_active,
                         effective_start: tariffDto.effective_start,
                         effective_end: tariffDto.effective_end || null,
+                        created_by: userId ?? null,
                     } as any, { transaction });
 
                     // Create related records based on pricing model
@@ -448,7 +449,7 @@ export class TariffsService {
         return tariff;
     }
 
-    async update(id: string, dto: UpdateTariffDto) {
+    async update(id: string, dto: UpdateTariffDto, userId?: number) {
         const tariff = await this.findOne(id);
         const transaction = await this.sequelize.transaction();
 
@@ -511,6 +512,10 @@ export class TariffsService {
                 if ((dto as any)[field] !== undefined) {
                     tariff.setDataValue(field as keyof MasterTarif, (dto as any)[field]);
                 }
+            }
+            // Ensure legacy rows get creator attribution when first updated after auth-aware rollout.
+            if (!tariff.getDataValue('created_by') && userId) {
+                tariff.setDataValue('created_by' as keyof MasterTarif, userId as any);
             }
             await tariff.save({ transaction });
 

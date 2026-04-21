@@ -1,6 +1,7 @@
 import { Table, Column, Model, DataType, HasMany, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { TariffWeightTier } from './tarif-weight-tier.model';
 import { Barang } from './barang.model';
+import { User } from './user.model';
 import { TariffRoutePrice } from './tarif-route-price.model';
 import { TariffDistance } from './tarif-distance.model';
 import { TariffVehicleDaily } from './tarif-vehicle-daily.model';
@@ -73,6 +74,20 @@ export class MasterTarif extends Model<MasterTarif> {
 
     @BelongsTo(() => Barang)
     barang: Barang;
+
+    @ForeignKey(() => User)
+    @Column({ type: DataType.BIGINT.UNSIGNED, allowNull: true })
+    created_by: number;
+
+    @BelongsTo(() => User, 'created_by')
+    createdByUser: User;
+
+    @ForeignKey(() => User)
+    @Column({ type: DataType.BIGINT.UNSIGNED, allowNull: true })
+    approved_by: number;
+
+    @BelongsTo(() => User, 'approved_by')
+    approvedByUser: User;
 
     @HasMany(() => TariffWeightTier)
     weightTiers: TariffWeightTier[];
