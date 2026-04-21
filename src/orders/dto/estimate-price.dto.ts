@@ -33,7 +33,7 @@ export class ItemDetailDto {
     @IsNotEmpty()
     @IsNumber()
     @Min(0.1)
-    @Max(1000)
+    @Max(10000)
     berat: number;
 
     @IsOptional()
