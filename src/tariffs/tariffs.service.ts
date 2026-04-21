@@ -419,6 +419,18 @@ export class TariffsService {
             where,
             offset,
             limit,
+            include: [
+                {
+                    association: 'createdByUser',
+                    attributes: ['id', 'name'],
+                    required: false,
+                },
+                {
+                    association: 'approvedByUser',
+                    attributes: ['id', 'name'],
+                    required: false,
+                },
+            ],
             order: [['created_at', 'DESC']],
         });
 
