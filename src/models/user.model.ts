@@ -247,6 +247,48 @@ export class User extends Model {
   type_transporter: string;
 
   @Column({
+    type: DataType.STRING(20),
+    allowNull: true,
+    comment: 'Moda transporter: darat|laut|udara',
+  })
+  transport_mode: string;
+
+  @Column({
+    type: DataType.STRING(150),
+    allowNull: true,
+    comment: 'Nama agent untuk moda laut/udara',
+  })
+  agent_name: string;
+
+  @Column({
+    type: DataType.TEXT,
+    allowNull: true,
+    comment: 'Alamat agent untuk moda laut/udara',
+  })
+  agent_address: string;
+
+  @Column({
+    type: DataType.STRING(100),
+    allowNull: true,
+    comment: 'Kota agent untuk moda laut/udara',
+  })
+  agent_city: string;
+
+  @Column({
+    type: DataType.STRING(30),
+    allowNull: true,
+    comment: 'No telepon agent untuk moda laut/udara',
+  })
+  agent_phone: string;
+
+  @Column({
+    type: DataType.STRING(150),
+    allowNull: true,
+    comment: 'Email agent untuk moda laut/udara',
+  })
+  agent_email: string;
+
+  @Column({
     type: DataType.INTEGER,
     allowNull: false,
     defaultValue: 0,
