@@ -6,6 +6,7 @@ import { ListDeliveryNotesQueryDto, ListDeliveryNotesResponseDto } from './dto/l
 import { DeliveryNoteDetailResponseDto } from './dto/delivery-note-detail.dto';
 import { InboundScanDto, InboundScanResponseDto } from './dto/inbound-scan.dto';
 import { InboundConfirmWebDto, InboundConfirmWebResponseDto } from './dto/inbound-confirm-web.dto';
+import { CreateCustomDeliveryNoteDto } from './dto/create-custom-delivery-note.dto';
 
 @Controller('delivery-notes')
 export class DeliveryNotesController {
@@ -21,6 +22,18 @@ export class DeliveryNotesController {
         const result = await this.deliveryNotesService.createDeliveryNote(body, userId);
         return {
             message: 'Delivery note berhasil dibuat',
+            data: result,
+        };
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('custom')
+    async createCustomDeliveryNote(
+        @Body() body: CreateCustomDeliveryNoteDto,
+    ): Promise<{ message: string; data: { status: string; no_delivery_note: string; link: string } }> {
+        const result = await this.deliveryNotesService.createCustomDeliveryNote(body);
+        return {
+            message: 'Custom delivery note berhasil dibuat',
             data: result,
         };
     }

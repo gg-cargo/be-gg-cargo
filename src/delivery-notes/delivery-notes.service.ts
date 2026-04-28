@@ -21,6 +21,7 @@ import { InboundScanDto, InboundScanResponseDto } from './dto/inbound-scan.dto';
 import { InboundConfirmWebDto, InboundConfirmWebResponseDto } from './dto/inbound-confirm-web.dto';
 import { ScanPieceDto, ScanPieceResponseDto } from './dto/scan-piece.dto';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
+import { CreateCustomDeliveryNoteDto } from './dto/create-custom-delivery-note.dto';
 
 @Injectable()
 export class DeliveryNotesService {
@@ -321,6 +322,55 @@ export class DeliveryNotesService {
         });
 
         return { status: 'success', link };
+    }
+
+    async createCustomDeliveryNote(dto: CreateCustomDeliveryNoteDto): Promise<{ status: string; no_delivery_note: string; link: string }> {
+        if (!dto.orders || dto.orders.length === 0) {
+            throw new BadRequestException('orders tidak boleh kosong');
+        }
+
+        const noDeliveryNote = dto.no_delivery_note?.trim() || `CUST-DN-${Date.now()}`;
+        const qty = dto.orders.length;
+        const beratTotal = dto.orders.reduce((acc, order) => acc + (Number(order.berat_barang) || 0), 0);
+
+        const link = await generateDeliveryNotePDF({
+            no_delivery_note: noDeliveryNote,
+            from_hub: {
+                nama: dto.from_hub.nama,
+                alamat: dto.from_hub.alamat || '',
+            },
+            to_hub: {
+                nama: dto.to_hub.nama,
+                alamat: dto.to_hub.alamat || '',
+            },
+            transporter: {
+                nama: dto.transporter.nama,
+                jenis_kendaraan: dto.transporter.jenis_kendaraan || '-',
+                no_polisi: dto.transporter.no_polisi || '-',
+            },
+            summary: {
+                qty,
+                berat_total: beratTotal,
+            },
+            orders: dto.orders.map((order) => ({
+                no_tracking: order.no_tracking,
+                nama_pengirim: order.nama_pengirim || '-',
+                nama_penerima: order.nama_penerima || '-',
+                asal: order.asal || '-',
+                tujuan: order.tujuan || '-',
+                jumlah_koli: Number(order.jumlah_koli) || 0,
+                berat_barang: Number(order.berat_barang) || 0,
+            })) as any,
+            nama_transporter: dto.transporter.nama,
+            piece_ids: dto.piece_ids || [],
+            no_seal: dto.no_seal || [],
+        });
+
+        return {
+            status: 'success',
+            no_delivery_note: noDeliveryNote,
+            link,
+        };
     }
 
     async listDeliveryNotes(query: ListDeliveryNotesQueryDto, userId: number): Promise<ListDeliveryNotesResponseDto> {

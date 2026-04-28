@@ -43,7 +43,7 @@ export class TransportersService {
         // First get users without trucks to avoid join issues
         const users = await this.userModel.findAll({
             where: whereUser,
-            attributes: ['id', 'name', 'phone', 'email', 'hub_id', 'service_center_id', 'latlng', 'last_update_gps'],
+            attributes: ['id', 'name', 'phone', 'email', 'hub_id', 'service_center_id', 'latlng', 'last_update_gps', 'transport_mode'],
             raw: true,
         });
 
@@ -51,12 +51,17 @@ export class TransportersService {
 
         const userIds = users.map((u: any) => Number(u.id));
 
+        const transportModeByDriver: Record<number, string | null> = {};
+        users.forEach((u: any) => {
+            transportModeByDriver[Number(u.id)] = u.transport_mode ?? null;
+        });
+
         const availableTrucks = await this.truckModel.findAll({
             where: {
                 driver_id: { [Op.in]: userIds },
                 status: 0 // 0 = tidak digunakan
             },
-            attributes: ['id', 'driver_id', 'no_polisi', 'jenis_mobil', 'type'],
+            attributes: ['id', 'driver_id', 'no_polisi', 'jenis_mobil'],
             raw: true,
         });
 
@@ -71,7 +76,7 @@ export class TransportersService {
                 truck_id: truck.id,
                 no_polisi: truck.no_polisi,
                 jenis_mobil: truck.jenis_mobil,
-                type: truck.type,
+                type: transportModeByDriver[driverId],
             });
         });
 
@@ -82,6 +87,7 @@ export class TransportersService {
             email: u.email || null,
             hub_id: u.hub_id ?? null,
             service_center_id: u.service_center_id ?? null,
+            transport_mode: u.transport_mode ?? null,
             status_ketersediaan: 'Siap Menerima Tugas',
             lokasi_saat_ini: u.latlng || null,
             terakhir_update_gps: u.last_update_gps || null,
