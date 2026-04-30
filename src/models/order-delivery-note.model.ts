@@ -67,6 +67,13 @@ export class OrderDeliveryNote extends Model {
     transporter_id: number;
 
     @Column({
+        type: DataType.ENUM('darat', 'laut', 'udara'),
+        allowNull: false,
+        defaultValue: 'darat',
+    })
+    transport_mode: string;
+
+    @Column({
         type: DataType.STRING(200),
         allowNull: true,
     })
@@ -90,6 +97,42 @@ export class OrderDeliveryNote extends Model {
         comment: 'Nomor seal (maks 3) dipisah koma',
     })
     no_seal: string;
+
+    @Column({
+        type: DataType.STRING(100),
+        allowNull: true,
+    })
+    awb_number: string;
+
+    @Column({
+        type: DataType.STRING(200),
+        allowNull: true,
+    })
+    aircraft_name: string;
+
+    @Column({
+        type: DataType.STRING(100),
+        allowNull: true,
+    })
+    bl_number: string;
+
+    @Column({
+        type: DataType.STRING(200),
+        allowNull: true,
+    })
+    vessel_name: string;
+
+    @Column({
+        type: DataType.DATE,
+        allowNull: true,
+    })
+    etd: Date;
+
+    @Column({
+        type: DataType.DATE,
+        allowNull: true,
+    })
+    eta: Date;
 
     @Column({
         type: DataType.INTEGER,

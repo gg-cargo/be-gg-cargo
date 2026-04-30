@@ -49,10 +49,82 @@ export class DeliveryNotesService {
         return `${yyyy}${mon}${dd}${hubKode}${seqStr}`;
     }
 
+    private resolveTransportMetadata(dto: CreateDeliveryNoteDto): {
+        transportMode: 'darat' | 'laut' | 'udara';
+        noPolisi: string;
+        jenisKendaraan: string;
+        awbNumber: string | null;
+        aircraftName: string | null;
+        blNumber: string | null;
+        vesselName: string | null;
+        etd: Date | null;
+        eta: Date | null;
+    } {
+        const transportMode = (dto.transport_mode ?? 'darat') as 'darat' | 'laut' | 'udara';
+        const normalizedNoPolisi = dto.no_polisi?.trim();
+        const normalizedJenisKendaraan = dto.jenis_kendaraan?.trim();
+        const normalizedAwbNumber = dto.awb_number?.trim();
+        const normalizedAircraftName = dto.aircraft_name?.trim();
+        const normalizedBlNumber = dto.bl_number?.trim();
+        const normalizedVesselName = dto.vessel_name?.trim();
+        const etd = dto.etd ? new Date(dto.etd) : null;
+        const eta = dto.eta ? new Date(dto.eta) : null;
+
+        if (transportMode === 'udara') {
+            if (!normalizedAwbNumber) throw new BadRequestException('awb_number wajib diisi untuk transport_mode udara');
+            if (!normalizedAircraftName) throw new BadRequestException('aircraft_name wajib diisi untuk transport_mode udara');
+            if (!dto.etd) throw new BadRequestException('etd wajib diisi untuk transport_mode udara');
+            if (!dto.eta) throw new BadRequestException('eta wajib diisi untuk transport_mode udara');
+            return {
+                transportMode,
+                noPolisi: normalizedNoPolisi || normalizedAwbNumber,
+                jenisKendaraan: normalizedJenisKendaraan || normalizedAircraftName,
+                awbNumber: normalizedAwbNumber,
+                aircraftName: normalizedAircraftName,
+                blNumber: null,
+                vesselName: null,
+                etd,
+                eta,
+            };
+        }
+
+        if (transportMode === 'laut') {
+            if (!normalizedBlNumber) throw new BadRequestException('bl_number wajib diisi untuk transport_mode laut');
+            if (!normalizedVesselName) throw new BadRequestException('vessel_name wajib diisi untuk transport_mode laut');
+            if (!dto.etd) throw new BadRequestException('etd wajib diisi untuk transport_mode laut');
+            if (!dto.eta) throw new BadRequestException('eta wajib diisi untuk transport_mode laut');
+            return {
+                transportMode,
+                noPolisi: normalizedNoPolisi || normalizedBlNumber,
+                jenisKendaraan: normalizedJenisKendaraan || normalizedVesselName,
+                awbNumber: null,
+                aircraftName: null,
+                blNumber: normalizedBlNumber,
+                vesselName: normalizedVesselName,
+                etd,
+                eta,
+            };
+        }
+
+        if (!normalizedNoPolisi) throw new BadRequestException('no_polisi wajib diisi untuk transport_mode darat');
+        return {
+            transportMode,
+            noPolisi: normalizedNoPolisi,
+            jenisKendaraan: normalizedJenisKendaraan || '',
+            awbNumber: null,
+            aircraftName: null,
+            blNumber: null,
+            vesselName: null,
+            etd,
+            eta,
+        };
+    }
+
     async createDeliveryNote(dto: CreateDeliveryNoteDto, createdByUserId: number): Promise<CreateDeliveryNoteResponseDto> {
         if (!dto.resi_list || dto.resi_list.length === 0) {
             throw new BadRequestException('resi_list tidak boleh kosong');
         }
+        const transportMetadata = this.resolveTransportMetadata(dto);
 
         // Validasi hubs
         const [hubAsal, hubTujuan, hubTransit] = await Promise.all([
@@ -139,10 +211,17 @@ export class DeliveryNotesService {
             alamat_penerima: (firstOrder as any)?.alamat_penerima || null,
             no_telp_penerima: (firstOrder as any)?.no_telepon_penerima || null,
             transporter_id: dto.transporter_id,
+            transport_mode: transportMetadata.transportMode,
             nama_transporter: transporter?.name || '',
-            jenis_kendaraan: dto.jenis_kendaraan || '',
-            no_polisi: dto.no_polisi,
+            jenis_kendaraan: transportMetadata.jenisKendaraan,
+            no_polisi: transportMetadata.noPolisi,
             no_seal: sealString,
+            awb_number: transportMetadata.awbNumber,
+            aircraft_name: transportMetadata.aircraftName,
+            bl_number: transportMetadata.blNumber,
+            vessel_name: transportMetadata.vesselName,
+            etd: transportMetadata.etd,
+            eta: transportMetadata.eta,
             hub_id: hubTujuan.getDataValue('id'),
             agent_id: hubAsal.getDataValue('id'),
             status: 0,
@@ -161,7 +240,7 @@ export class DeliveryNotesService {
             const updateData = {
                 assign_sj: noDeliveryNote,
                 transporter_id: String(dto.transporter_id),
-                truck_id: dto.no_polisi,
+                truck_id: transportMetadata.noPolisi,
                 status: ORDER_STATUS.IN_TRANSIT,
                 issetManifest_inbound: 0,
                 issetManifest_outbound: 1,
@@ -590,6 +669,7 @@ export class DeliveryNotesService {
         if (!updatedByUserId) {
             throw new BadRequestException('User tidak valid');
         }
+        const transportMetadata = this.resolveTransportMetadata(dto);
 
         const whereClause = isNaN(Number(idOrNo)) ? { no_delivery_note: idOrNo } : { id: Number(idOrNo) };
         const existing = await this.orderDeliveryNoteModel.findOne({ where: whereClause, raw: true });
@@ -635,19 +715,26 @@ export class DeliveryNotesService {
         await this.orderDeliveryNoteModel.update({
             no_tracking: newResi.join(','),
             transporter_id: dto.transporter_id,
+            transport_mode: transportMetadata.transportMode,
             nama_transporter: (transporter as any).name || existing.nama_transporter,
-            jenis_kendaraan: dto.jenis_kendaraan || existing.jenis_kendaraan,
-            no_polisi: dto.no_polisi,
+            jenis_kendaraan: transportMetadata.jenisKendaraan || existing.jenis_kendaraan,
+            no_polisi: transportMetadata.noPolisi,
             no_seal: sealString !== null ? sealString : (existing as any).no_seal,
+            awb_number: transportMetadata.awbNumber,
+            aircraft_name: transportMetadata.aircraftName,
+            bl_number: transportMetadata.blNumber,
+            vessel_name: transportMetadata.vesselName,
+            etd: transportMetadata.etd,
+            eta: transportMetadata.eta,
             hub_id: hubTujuan.getDataValue('id'),
             agent_id: hubAsal.getDataValue('id'),
             hub_bypass: hubTransit ? String(hubTransit.id) : null,
         }, { where: { id: existing.id } });
 
         // Update status truck lama dan baru jika berganti
-        if (existing.no_polisi && existing.no_polisi !== dto.no_polisi) {
+        if (existing.no_polisi && existing.no_polisi !== transportMetadata.noPolisi) {
             await this.truckListModel.update({ status: 0 }, { where: { no_polisi: existing.no_polisi } });
-            await this.truckListModel.update({ status: 1 }, { where: { no_polisi: dto.no_polisi } });
+            await this.truckListModel.update({ status: 1 }, { where: { no_polisi: transportMetadata.noPolisi } });
         }
 
         // Ambil orders untuk operasi update
@@ -660,7 +747,7 @@ export class DeliveryNotesService {
                 assign_sj: existing.no_delivery_note,
                 status: ORDER_STATUS.IN_TRANSIT,
                 transporter_id: dto.transporter_id,
-                truck_id: dto.no_polisi,
+                truck_id: transportMetadata.noPolisi,
                 issetManifest_inbound: 0,
                 issetManifest_outbound: 1,
                 current_hub: String(dto.hub_asal_id),

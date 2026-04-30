@@ -1,4 +1,4 @@
-import { IsArray, ArrayNotEmpty, IsInt, IsOptional, IsString, IsNotEmpty } from 'class-validator';
+import { IsArray, ArrayNotEmpty, IsInt, IsOptional, IsString, IsNotEmpty, IsIn, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateDeliveryNoteDto {
@@ -24,13 +24,46 @@ export class CreateDeliveryNoteDto {
     @IsInt({ message: 'transporter_id harus berupa angka' })
     transporter_id: number;
 
+    @IsOptional()
+    @IsIn(['darat', 'laut', 'udara'], { message: 'transport_mode harus darat, laut, atau udara' })
+    transport_mode?: 'darat' | 'laut' | 'udara';
+
+    @IsOptional()
     @IsString({ message: 'no_polisi harus berupa string' })
     @IsNotEmpty({ message: 'no_polisi tidak boleh kosong' })
-    no_polisi: string;
+    no_polisi?: string;
 
     @IsOptional()
     @IsString({ message: 'jenis_kendaraan harus berupa string' })
     jenis_kendaraan?: string;
+
+    @IsOptional()
+    @IsString({ message: 'awb_number harus berupa string' })
+    @IsNotEmpty({ message: 'awb_number tidak boleh kosong' })
+    awb_number?: string;
+
+    @IsOptional()
+    @IsString({ message: 'aircraft_name harus berupa string' })
+    @IsNotEmpty({ message: 'aircraft_name tidak boleh kosong' })
+    aircraft_name?: string;
+
+    @IsOptional()
+    @IsString({ message: 'bl_number harus berupa string' })
+    @IsNotEmpty({ message: 'bl_number tidak boleh kosong' })
+    bl_number?: string;
+
+    @IsOptional()
+    @IsString({ message: 'vessel_name harus berupa string' })
+    @IsNotEmpty({ message: 'vessel_name tidak boleh kosong' })
+    vessel_name?: string;
+
+    @IsOptional()
+    @IsDateString({}, { message: 'etd harus berupa format waktu ISO string' })
+    etd?: string;
+
+    @IsOptional()
+    @IsDateString({}, { message: 'eta harus berupa format waktu ISO string' })
+    eta?: string;
 
     @IsOptional()
     @IsArray({ message: 'no_seal harus berupa array string' })
