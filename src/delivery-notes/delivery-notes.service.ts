@@ -398,6 +398,20 @@ export class DeliveryNotesService {
             piece_ids: pieceIds,
             // @ts-ignore - properti opsional untuk helper
             no_seal: sealArr,
+            // @ts-ignore - properti opsional untuk helper
+            transport_mode: (note as any).transport_mode,
+            // @ts-ignore - properti opsional untuk helper
+            awb_number: (note as any).awb_number,
+            // @ts-ignore - properti opsional untuk helper
+            aircraft_name: (note as any).aircraft_name,
+            // @ts-ignore - properti opsional untuk helper
+            bl_number: (note as any).bl_number,
+            // @ts-ignore - properti opsional untuk helper
+            vessel_name: (note as any).vessel_name,
+            // @ts-ignore - properti opsional untuk helper
+            etd: (note as any).etd,
+            // @ts-ignore - properti opsional untuk helper
+            eta: (note as any).eta,
         });
 
         return { status: 'success', link };

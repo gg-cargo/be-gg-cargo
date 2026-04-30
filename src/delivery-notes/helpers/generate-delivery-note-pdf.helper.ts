@@ -21,6 +21,13 @@ export async function generateDeliveryNotePDF(payload: {
     nama_transporter?: string;
     piece_ids?: string[];
     no_seal?: string[] | string;
+    transport_mode?: 'darat' | 'laut' | 'udara' | string;
+    awb_number?: string | null;
+    aircraft_name?: string | null;
+    bl_number?: string | null;
+    vessel_name?: string | null;
+    etd?: string | Date | null;
+    eta?: string | Date | null;
 }): Promise<string> {
     // Hindari floating point noise pada tampilan berat (mis. 889.9981209182)
     const beratTotalDisplay = Math.round(Number(payload?.summary?.berat_total || 0));
@@ -71,6 +78,30 @@ export async function generateDeliveryNotePDF(payload: {
         }
     }
 
+    const formatDateTime = (value?: string | Date | null): string => {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '-';
+        return date.toLocaleString('id-ID');
+    };
+
+    const transportRows: any[] = [];
+    if (payload.transport_mode === 'udara') {
+        transportRows.push(
+            [{ text: 'SMU/AWB', style: 'kvLabel' }, { text: payload.awb_number || '-', style: 'kvValue' }],
+            [{ text: 'Nama Pesawat', style: 'kvLabel' }, { text: payload.aircraft_name || '-', style: 'kvValue' }],
+            [{ text: 'ETD', style: 'kvLabel' }, { text: formatDateTime(payload.etd), style: 'kvValue' }],
+            [{ text: 'ETA', style: 'kvLabel' }, { text: formatDateTime(payload.eta), style: 'kvValue' }],
+        );
+    } else if (payload.transport_mode === 'laut') {
+        transportRows.push(
+            [{ text: 'BL', style: 'kvLabel' }, { text: payload.bl_number || '-', style: 'kvValue' }],
+            [{ text: 'Nama Kapal', style: 'kvLabel' }, { text: payload.vessel_name || '-', style: 'kvValue' }],
+            [{ text: 'ETD', style: 'kvLabel' }, { text: formatDateTime(payload.etd), style: 'kvValue' }],
+            [{ text: 'ETA', style: 'kvLabel' }, { text: formatDateTime(payload.eta), style: 'kvValue' }],
+        );
+    }
+
     const headerTop = {
         columns: [
             {
@@ -101,6 +132,7 @@ export async function generateDeliveryNotePDF(payload: {
                                 [{ text: 'Jenis Kendaraan', style: 'kvLabel' }, { text: (payload.transporter.jenis_kendaraan || '-'), style: 'kvValue' }],
                                 [{ text: 'No. Polisi', style: 'kvLabel' }, { text: (payload.transporter.no_polisi || '-'), style: 'kvValue' }],
                                 [{ text: 'No. Seal', style: 'kvLabel' }, { text: (Array.isArray((payload as any).no_seal) ? (payload as any).no_seal.join(', ') : ((payload as any).no_seal || '-')), style: 'kvValue' }],
+                                ...transportRows,
                             ]
                         },
                         layout: {
