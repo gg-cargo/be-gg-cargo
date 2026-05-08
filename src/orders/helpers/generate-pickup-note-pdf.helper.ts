@@ -106,7 +106,13 @@ export async function generatePickupNotePDF(payload: {
         // Tanggal pesanan dan layanan
         const orderInfo = {
             columns: [
-                { width: '*', text: `Tanggal Pesanan: ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}` },
+                {
+                    width: '*',
+                    stack: [
+                        { text: `Tanggal Pesanan: ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}` },
+                        { text: `No Resi: ${payload.no_tracking || '-'}`, margin: [0, 2, 0, 0] },
+                    ],
+                },
                 { width: '*', alignment: 'right', text: payload.layanan?.toUpperCase() || 'REGULER', style: 'serviceType' },
             ],
             margin: [0, 0, 0, 15],
@@ -197,7 +203,7 @@ export async function generatePickupNotePDF(payload: {
                     width: '50%',
                     stack: [
                         { text: 'KURIR/CHECKER', bold: true, margin: [0, 0, 0, 10] },
-                        { text: `${payload.courier_name || '-'}`, margin: [0, 91, 0, 5] },
+                        { text: `Nama: ${payload.courier_name || ' '}`, margin: [0, 91, 0, 5] },
                     ],
                 },
             ],

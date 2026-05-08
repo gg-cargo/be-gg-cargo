@@ -444,6 +444,23 @@ export async function generateResiPDF(data: any): Promise<string> {
                 fontSize: 8,
                 margin: [0, 0, 0, 10],
             },
+            {
+                stack: [
+                    {
+                        text: 'Barang tidak dicek, isi menjadi tanggungjawab pengirim.',
+                        italics: true,
+                        fontSize: 8,
+                        margin: [0, 0, 0, 2],
+                    },
+                    {
+                        text: 'NO KLAIM',
+                        italics: false,
+                        bold: true,
+                        fontSize: 9,
+                        margin: [0, 0, 0, 10],
+                    },
+                ],
+            },
             // FOOTER
             {
                 absolutePosition: { x: 0, y: 750 },
