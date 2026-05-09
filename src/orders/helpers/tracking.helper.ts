@@ -7,7 +7,7 @@ export class TrackingHelper {
         const day = now.getDate().toString().padStart(2, '0'); // Tanggal 2 digit
         // 6 digit random
         const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-        // Gabungkan menjadi GG + YYMMDD + 6 digit random
-        return `GG${year}${month}${day}${random}`;
+        // Gabungkan menjadi 99 + YYMMDD + 6 digit random
+        return `99${year}${month}${day}${random}`;
     }
 } 
