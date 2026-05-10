@@ -324,7 +324,7 @@ export class DeliveryNotesService {
         // Summary: qty & total berat
         const orders = await this.orderModel.findAll({
             where: { no_tracking: { [Op.in]: resiList } },
-            attributes: ['id', 'no_tracking', 'nama_pengirim', 'nama_penerima', 'total_berat', 'hub_source_id', 'hub_dest_id'],
+            attributes: ['id', 'no_tracking', 'nama_barang', 'nama_pengirim', 'nama_penerima', 'total_berat', 'hub_source_id', 'hub_dest_id'],
             raw: true,
         });
 
@@ -372,6 +372,7 @@ export class DeliveryNotesService {
 
         const ordersPayload = orders.map((o: any) => ({
             no_tracking: o.no_tracking,
+            nama_barang: o.nama_barang,
             nama_pengirim: o.nama_pengirim,
             nama_penerima: o.nama_penerima,
             jumlah_koli: aggMap.get(o.id)?.jumlah_koli ?? 0,
@@ -447,6 +448,7 @@ export class DeliveryNotesService {
             },
             orders: dto.orders.map((order) => ({
                 no_tracking: order.no_tracking,
+                nama_barang: order.nama_barang,
                 nama_pengirim: order.nama_pengirim || '-',
                 nama_penerima: order.nama_penerima || '-',
                 asal: order.asal || '-',

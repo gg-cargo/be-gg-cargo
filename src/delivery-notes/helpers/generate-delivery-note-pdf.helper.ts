@@ -17,7 +17,7 @@ export async function generateDeliveryNotePDF(payload: {
     to_hub: { nama: string; alamat: string } | null;
     transporter: { nama: string; jenis_kendaraan: string; no_polisi: string };
     summary: { qty: number; berat_total: number };
-    orders: Array<{ no_tracking: string; nama_pengirim: string; nama_penerima: string; jumlah_koli: number; berat_barang: number; }>;
+    orders: Array<{ no_tracking: string; nama_barang?: string | null; nama_pengirim: string; nama_penerima: string; jumlah_koli: number; berat_barang: number; }>;
     nama_transporter?: string;
     piece_ids?: string[];
     no_seal?: string[] | string;
@@ -169,6 +169,22 @@ export async function generateDeliveryNotePDF(payload: {
         margin: [0, 0, 0, 8]
     } as any;
 
+    // Deskripsi ringkas: semua nama barang unik dari resi (urutan pertama kali muncul), dipisah koma
+    const deskripsiBarangSummary = (() => {
+        const seenLower = new Set<string>();
+        const parts: string[] = [];
+        for (const o of payload.orders || []) {
+            const raw = o?.nama_barang;
+            if (raw == null || String(raw).trim() === '') continue;
+            const label = String(raw).trim();
+            const key = label.toLowerCase();
+            if (seenLower.has(key)) continue;
+            seenLower.add(key);
+            parts.push(label);
+        }
+        return parts.length > 0 ? parts.join(', ') : 'Barang';
+    })();
+
     // Summary table (No, Deskripsi Barang, Qty, Berat)
     const summaryTable = {
         headerRows: 1,
@@ -183,7 +199,7 @@ export async function generateDeliveryNotePDF(payload: {
                 ],
                 [
                     { text: '1', alignment: 'center' },
-                    { text: 'Barang' },
+                    { text: deskripsiBarangSummary, noWrap: false },
                     { text: String(payload.summary.qty), alignment: 'right' },
                     { text: `${beratTotalDisplay} Kg`, alignment: 'right' },
                 ],
@@ -204,6 +220,7 @@ export async function generateDeliveryNotePDF(payload: {
 
     const ordersHeader = [
         { text: 'No Tracking', style: 'th', fillColor: '#C6EAD6', noWrap: false },
+        { text: 'Nama Barang', style: 'th', fillColor: '#C6EAD6', noWrap: false },
         { text: 'Pengirim', style: 'th', fillColor: '#C6EAD6', noWrap: false },
         { text: 'Penerima', style: 'th', fillColor: '#C6EAD6', noWrap: false },
         { text: 'Asal', style: 'th', fillColor: '#C6EAD6', noWrap: false },
@@ -214,6 +231,7 @@ export async function generateDeliveryNotePDF(payload: {
 
     const ordersRows = payload.orders.map((o: any) => [
         { text: o.no_tracking, noWrap: false, style: 'cellWrap' },
+        { text: o.nama_barang || '-', noWrap: false, style: 'cellWrap' },
         { text: o.nama_pengirim || '-', noWrap: false, style: 'cellWrap' },
         { text: o.nama_penerima || '-', noWrap: false, style: 'cellWrap' },
         { text: o.asal || '-', noWrap: false, style: 'cellWrap' },
@@ -227,7 +245,7 @@ export async function generateDeliveryNotePDF(payload: {
         headerRows: 1,
         table: {
             // Lebar ditata agar tidak overflow halaman A4 (dengan margin)
-            widths: [75, 90, 90, 75, 75, 50, 50],
+            widths: [58, 76, 76, 68, 62, 62, 40, 40],
             body: [ordersHeader, ...ordersRows]
         },
         layout: {

@@ -31,6 +31,10 @@ export class CustomDeliveryNoteOrderDto {
     no_tracking: string;
 
     @IsOptional()
+    @IsString({ message: 'nama_barang harus berupa string' })
+    nama_barang?: string;
+
+    @IsOptional()
     @IsString({ message: 'nama_pengirim harus berupa string' })
     nama_pengirim?: string;
 
