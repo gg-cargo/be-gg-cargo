@@ -145,6 +145,41 @@ export class AuthService {
     }
   }
 
+  /**
+   * Kirim OTP ke email user berdasarkan nomor telepon (mis. setelah registrasi B2B berhasil).
+   * Tidak melempar error jika email gagal — sama seperti register().
+   */
+  async sendRegistrationOtpEmail(phone: string): Promise<void> {
+    const user = await this.userModel.findOne({ where: { phone } });
+    if (!user) {
+      this.logger.warn(`sendRegistrationOtpEmail: user tidak ditemukan untuk phone ${phone}`);
+      return;
+    }
+
+    await this.dumpOtpModel.destroy({ where: { phone } });
+
+    const otp = this.generateOTP();
+    await this.dumpOtpModel.create({
+      phone,
+      otp,
+      created_at: new Date(),
+    });
+
+    const email = user.getDataValue('email');
+    try {
+      await this.sendMailgunEmail({
+        to: [email],
+        subject: 'OTP Verifikasi - 99 Delivery',
+        html: this.generateOTPEmailHtml(user.getDataValue('name'), otp),
+      });
+      this.logger.log(`OTP registrasi dikirim via email ke ${email}`);
+    } catch (emailError) {
+      this.logger.error(`Gagal kirim email OTP ke ${email}: ${emailError.message}`);
+    }
+
+    this.logger.log(`OTP digenerate untuk ${phone}`);
+  }
+
   // Login User
   async login(loginDto: LoginDto) {
     try {

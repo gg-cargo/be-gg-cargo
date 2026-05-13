@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
+import { AuthModule } from '../auth/auth.module';
 import { CustomerCompaniesController } from './customer-companies.controller';
 import { CustomerCompaniesService } from './customer-companies.service';
 import { CustomerCompany } from '../models/customer-company.model';
@@ -11,6 +12,7 @@ import { FileLog } from '../models/file-log.model';
 
 @Module({
     imports: [
+        AuthModule,
         SequelizeModule.forFeature([
             CustomerCompany,
             CustomerCompanyMember,

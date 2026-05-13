@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import * as bcrypt from 'bcryptjs';
 import { Op, Transaction } from 'sequelize';
@@ -10,9 +10,12 @@ import { User } from '../models/user.model';
 import { FileLog } from '../models/file-log.model';
 import { RegisterCustomerCompanyDto } from './dto/register-customer-company.dto';
 import { AddCustomerCompanyDocumentDto } from './dto/add-customer-company-document.dto';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class CustomerCompaniesService {
+    private readonly logger = new Logger(CustomerCompaniesService.name);
+
     constructor(
         @InjectModel(CustomerCompany)
         private readonly customerCompanyModel: typeof CustomerCompany,
@@ -26,6 +29,7 @@ export class CustomerCompaniesService {
         private readonly userModel: typeof User,
         @InjectModel(FileLog)
         private readonly fileLogModel: typeof FileLog,
+        private readonly authService: AuthService,
     ) { }
 
     async register(dto: RegisterCustomerCompanyDto) {
@@ -107,7 +111,7 @@ export class CustomerCompaniesService {
                 sales_linked_at: salesUser ? now : null,
                 aktif: 1,
                 isApprove: 1,
-                phone_verify_at: now,
+                phone_verify_at: null,
                 created_at: now,
                 updated_at: now,
             }, { transaction });
@@ -193,8 +197,18 @@ export class CustomerCompaniesService {
 
             await transaction.commit();
 
+            try {
+                await this.authService.sendRegistrationOtpEmail(dto.account.phone);
+            } catch (err) {
+                this.logger.error(
+                    `Gagal mengirim OTP email setelah registrasi B2B: ${(err as Error).message}`,
+                    (err as Error).stack,
+                );
+            }
+
             return {
-                message: 'Registrasi customer company B2B berhasil',
+                message:
+                    'Registrasi customer company B2B berhasil. Silakan cek email untuk kode OTP verifikasi akun.',
                 data: {
                     company_id: company.id,
                     company_code: company.company_code,
