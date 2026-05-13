@@ -1,6 +1,14 @@
 import { Column, DataType, Model, Table, BelongsTo, HasMany } from 'sequelize-typescript';
-import { Level, ServiceCenter, Hub, Saldo, TransactionPayment, TruckList } from './index';
+import { Level } from './level.model';
+import { ServiceCenter } from './service-center.model';
+import { Hub } from './hub.model';
+import { Saldo } from './saldo.model';
+import { TransactionPayment } from './transaction-payment.model';
+import { TruckList } from './truck-list.model';
 import { UsersEmergencyContact } from './users_emergency_contact.model';
+import { CustomerCompany } from './customer-company.model';
+import { CustomerCompanyMember } from './customer-company-member.model';
+import { CustomerCompanyDocument } from './customer-company-document.model';
 
 @Table({
   tableName: 'users',
@@ -563,6 +571,21 @@ export class User extends Model {
 
   @HasMany(() => UsersEmergencyContact, { foreignKey: 'user_id', sourceKey: 'id', as: 'emergencyContacts' })
   emergencyContacts: UsersEmergencyContact[];
+
+  @HasMany(() => CustomerCompany, { foreignKey: 'referred_by_sales_id', sourceKey: 'id', as: 'referredCustomerCompanies' })
+  referredCustomerCompanies: CustomerCompany[];
+
+  @HasMany(() => CustomerCompany, { foreignKey: 'created_by', sourceKey: 'id', as: 'createdCustomerCompanies' })
+  createdCustomerCompanies: CustomerCompany[];
+
+  @HasMany(() => CustomerCompany, { foreignKey: 'updated_by', sourceKey: 'id', as: 'updatedCustomerCompanies' })
+  updatedCustomerCompanies: CustomerCompany[];
+
+  @HasMany(() => CustomerCompanyMember, { foreignKey: 'user_id', sourceKey: 'id', as: 'companyMemberships' })
+  companyMemberships: CustomerCompanyMember[];
+
+  @HasMany(() => CustomerCompanyDocument, { foreignKey: 'verified_by', sourceKey: 'id', as: 'verifiedCustomerCompanyDocuments' })
+  verifiedCustomerCompanyDocuments: CustomerCompanyDocument[];
 
   @BelongsTo(() => User, { foreignKey: 'referred_by_sales_id', targetKey: 'id', as: 'mySales' })
   mySales: User;

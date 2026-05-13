@@ -1,4 +1,5 @@
-import { Column, DataType, Model, Table } from 'sequelize-typescript';
+import { Column, DataType, HasMany, Model, Table } from 'sequelize-typescript';
+import { CustomerCompanyDocument } from './customer-company-document.model';
 
 @Table({
     tableName: 'file_log',
@@ -75,4 +76,7 @@ export class FileLog extends Model<FileLog> {
         onUpdate: 'CURRENT_TIMESTAMP',
     })
     updated_at: Date;
+
+    @HasMany(() => CustomerCompanyDocument, { foreignKey: 'file_log_id', sourceKey: 'id', as: 'customerCompanyDocuments' })
+    customerCompanyDocuments: CustomerCompanyDocument[];
 } 
