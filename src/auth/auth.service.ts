@@ -690,8 +690,6 @@ export class AuthService {
    */
   private getOtpEmailLogoPath(): string | null {
     const candidates = [
-      join(process.cwd(), 'public', 'logo-gg-2-old.png'),
-      join(process.cwd(), 'public', 'logo-gg.png'),
       join(process.cwd(), 'public', 'logo-gg-2.png'),
     ];
     for (const p of candidates) {
