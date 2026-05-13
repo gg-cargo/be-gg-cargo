@@ -5,6 +5,8 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import * as FormData from 'form-data';
 import axios from 'axios';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { User } from '../models/user.model';
 import { DumpOtp } from '../models/dump-otp.model';
 import { PasswordReset } from '../models/password-reset.model';
@@ -32,6 +34,9 @@ import {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+
+  /** Cache blok HTML logo OTP (base64 inline dari `public/logo-gg-2.png`). */
+  private otpEmailLogoBlockHtml: string | null = null;
 
   constructor(
     @InjectModel(User)
@@ -656,6 +661,32 @@ export class AuthService {
   }
 
   /**
+   * Logo 99 (`public/logo-gg-2.png`) untuk email OTP, di-embed base64 agar tampil tanpa host URL.
+   */
+  private getOtpEmailLogoBlockHtml(): string {
+    if (this.otpEmailLogoBlockHtml !== null) {
+      return this.otpEmailLogoBlockHtml;
+    }
+    try {
+      const logoPath = join(process.cwd(), 'public', 'logo-gg-2.png');
+      if (!existsSync(logoPath)) {
+        this.logger.warn(`File logo email OTP tidak ditemukan: ${logoPath}`);
+        this.otpEmailLogoBlockHtml = '';
+        return '';
+      }
+      const b64 = readFileSync(logoPath).toString('base64');
+      this.otpEmailLogoBlockHtml = `<div style="text-align:center;margin:0 0 20px 0;">
+            <img src="data:image/png;base64,${b64}" alt="99 Delivery" width="160" style="max-width:200px;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;" />
+          </div>`;
+      return this.otpEmailLogoBlockHtml;
+    } catch (e) {
+      this.logger.warn(`Gagal memuat logo email OTP: ${(e as Error).message}`);
+      this.otpEmailLogoBlockHtml = '';
+      return '';
+    }
+  }
+
+  /**
    * Generate HTML template untuk email OTP
    */
   private generateOTPEmailHtml(name: string, otp: string): string {
@@ -681,6 +712,7 @@ export class AuthService {
             <p>Verifikasi Kode OTP</p>
           </div>
           <div class="content">
+            ${this.getOtpEmailLogoBlockHtml()}
             <p>Halo <strong>${name}</strong>,</p>
             <p>Terima kasih telah melakukan registrasi di 99 Delivery. Gunakan kode OTP berikut untuk verifikasi akun Anda:</p>
             
