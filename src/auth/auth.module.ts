@@ -12,11 +12,24 @@ import { PasswordReset } from '../models/password-reset.model';
 import { Level } from '../models/level.model';
 import { Hub } from '../models/hub.model';
 import { ServiceCenter } from '../models/service-center.model';
+import { CustomerCompany } from '../models/customer-company.model';
+import { CustomerCompanyMember } from '../models/customer-company-member.model';
+import { CustomerCompanyDocument } from '../models/customer-company-document.model';
 
 @Module({
   imports: [
     ConfigModule,
-    SequelizeModule.forFeature([User, DumpOtp, PasswordReset, Level, Hub, ServiceCenter]),
+    SequelizeModule.forFeature([
+      User,
+      DumpOtp,
+      PasswordReset,
+      Level,
+      Hub,
+      ServiceCenter,
+      CustomerCompany,
+      CustomerCompanyMember,
+      CustomerCompanyDocument,
+    ]),
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'your-secret-key',

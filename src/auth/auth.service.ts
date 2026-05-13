@@ -7,7 +7,11 @@ import * as FormData from 'form-data';
 import axios from 'axios';
 import { createReadStream, existsSync } from 'fs';
 import { basename, join } from 'path';
+import { Op } from 'sequelize';
 import { User } from '../models/user.model';
+import { CustomerCompany } from '../models/customer-company.model';
+import { CustomerCompanyMember } from '../models/customer-company-member.model';
+import { CustomerCompanyDocument } from '../models/customer-company-document.model';
 import { DumpOtp } from '../models/dump-otp.model';
 import { PasswordReset } from '../models/password-reset.model';
 import { Level } from '../models/level.model';
@@ -55,6 +59,12 @@ export class AuthService {
     private hubModel: typeof Hub,
     @InjectModel(ServiceCenter)
     private serviceCenterModel: typeof ServiceCenter,
+    @InjectModel(CustomerCompany)
+    private customerCompanyModel: typeof CustomerCompany,
+    @InjectModel(CustomerCompanyMember)
+    private customerCompanyMemberModel: typeof CustomerCompanyMember,
+    @InjectModel(CustomerCompanyDocument)
+    private customerCompanyDocumentModel: typeof CustomerCompanyDocument,
     private jwtService: JwtService,
     private configService: ConfigService,
   ) { }
@@ -72,6 +82,55 @@ export class AuthService {
   // Generate Remember Token
   private generateRememberToken(): string {
     return Math.random().toString(36).substring(2) + Date.now().toString(36);
+  }
+
+  /**
+   * Ringkasan B2B untuk respons login: anggota aktif perusahaan bertipe b2b,
+   * dan apakah semua perusahaan terkait (anggota aktif) sudah punya NPWP valid
+   * (sama kriteria dengan gate pengiriman).
+   */
+  private async getLoginB2bNpwpSummary(userId: number): Promise<{
+    is_b2b: boolean;
+    npwp_uploaded: boolean | null;
+  }> {
+    const memberships = await this.customerCompanyMemberModel.findAll({
+      where: { user_id: userId, is_active: 1 },
+      attributes: ['company_id'],
+    });
+    if (!memberships.length) {
+      return { is_b2b: false, npwp_uploaded: null };
+    }
+
+    const companyIds = [...new Set(memberships.map((m) => Number(m.getDataValue('company_id'))))];
+
+    const companies = await this.customerCompanyModel.findAll({
+      where: { id: { [Op.in]: companyIds } },
+      attributes: ['id', 'company_type'],
+    });
+    const typeById = new Map<number, string>();
+    for (const c of companies) {
+      typeById.set(Number(c.getDataValue('id')), String(c.getDataValue('company_type') || '').toLowerCase());
+    }
+
+    const hasB2bMembership = companyIds.some((id) => typeById.get(id) === 'b2b');
+    if (!hasB2bMembership) {
+      return { is_b2b: false, npwp_uploaded: null };
+    }
+
+    for (const companyId of companyIds) {
+      const npwp = await this.customerCompanyDocumentModel.findOne({
+        where: {
+          company_id: companyId,
+          document_type: 'npwp',
+          status: { [Op.in]: ['uploaded', 'verified'] },
+        },
+      });
+      if (!npwp) {
+        return { is_b2b: true, npwp_uploaded: false };
+      }
+    }
+
+    return { is_b2b: true, npwp_uploaded: true };
   }
 
   // Register User
@@ -239,6 +298,8 @@ export class AuthService {
         throw new UnverifiedAccountException();
       }
 
+      const { is_b2b, npwp_uploaded } = await this.getLoginB2bNpwpSummary(user.id);
+
       // Generate tokens
       const payload = {
         sub: user.id,
@@ -290,6 +351,8 @@ export class AuthService {
           level_name: user.levelData?.nama,
           email_verified_at: user.email_verified_at,
           phone_verify_at: user.phone_verify_at,
+          is_b2b,
+          npwp_uploaded,
           area,
         },
         access_token: accessToken,
