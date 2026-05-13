@@ -153,12 +153,13 @@ export class RegisterCustomerCompanyDto {
     @Type(() => RegisterCustomerCompanyAddressDto)
     address: RegisterCustomerCompanyAddressDto;
 
-    /** Minimal berisi satu entri dengan document_type npwp. Tipe dokumen lain opsional. */
+    /** Semua dokumen legal opsional saat registrasi; NPWP dicek saat membuat pengiriman. */
+    @IsOptional()
     @Transform(({ value }) => (Array.isArray(value) ? value : []))
     @IsArray({ message: 'documents harus berupa array' })
     @ValidateNested({ each: true })
     @Type(() => RegisterCustomerCompanyDocumentDto)
-    documents: RegisterCustomerCompanyDocumentDto[];
+    documents?: RegisterCustomerCompanyDocumentDto[];
 
     @IsOptional()
     @IsString({ message: 'kode_referral_sales harus berupa string' })

@@ -9,6 +9,7 @@ import { CustomerCompanyDocument } from '../models/customer-company-document.mod
 import { User } from '../models/user.model';
 import { FileLog } from '../models/file-log.model';
 import { RegisterCustomerCompanyDto } from './dto/register-customer-company.dto';
+import { AddCustomerCompanyDocumentDto } from './dto/add-customer-company-document.dto';
 
 @Injectable()
 export class CustomerCompaniesService {
@@ -48,28 +49,27 @@ export class CustomerCompaniesService {
             }
 
             const documents = dto.documents || [];
-            if (!documents.some((d) => d.document_type === 'npwp')) {
-                throw new BadRequestException('Dokumen NPWP wajib');
-            }
 
-            const documentFileIds = documents.map((document) => document.file_log_id);
-            const uniqueFileIds = new Set(documentFileIds);
-            if (uniqueFileIds.size !== documentFileIds.length) {
-                throw new BadRequestException('file_log_id dokumen tidak boleh duplikat');
-            }
+            if (documents.length > 0) {
+                const documentFileIds = documents.map((document) => document.file_log_id);
+                const uniqueFileIds = new Set(documentFileIds);
+                if (uniqueFileIds.size !== documentFileIds.length) {
+                    throw new BadRequestException('file_log_id dokumen tidak boleh duplikat');
+                }
 
-            const fileLogs = await this.fileLogModel.findAll({
-                where: { id: { [Op.in]: documentFileIds } },
-                transaction,
-            });
+                const fileLogs = await this.fileLogModel.findAll({
+                    where: { id: { [Op.in]: documentFileIds } },
+                    transaction,
+                });
 
-            if (fileLogs.length !== documentFileIds.length) {
-                throw new BadRequestException('Beberapa file dokumen tidak ditemukan');
-            }
+                if (fileLogs.length !== documentFileIds.length) {
+                    throw new BadRequestException('Beberapa file dokumen tidak ditemukan');
+                }
 
-            const assignedFile = fileLogs.find((file) => Number(file.is_assigned) === 1);
-            if (assignedFile) {
-                throw new BadRequestException(`File dokumen dengan ID ${assignedFile.id} sudah terpakai`);
+                const assignedFile = fileLogs.find((file) => Number(file.is_assigned) === 1);
+                if (assignedFile) {
+                    throw new BadRequestException(`File dokumen dengan ID ${assignedFile.id} sudah terpakai`);
+                }
             }
 
             let salesUser: User | null = null;
@@ -167,26 +167,29 @@ export class CustomerCompaniesService {
                 updated_at: now,
             } as any, { transaction });
 
-            await this.customerCompanyDocumentModel.bulkCreate(
-                documents.map((document) => ({
-                    company_id: company.id,
-                    document_type: document.document_type,
-                    document_number: document.document_number || undefined,
-                    file_log_id: document.file_log_id,
-                    status: 'uploaded',
-                    created_at: now,
-                    updated_at: now,
-                })) as any,
-                { transaction },
-            );
+            if (documents.length > 0) {
+                const documentFileIds = documents.map((document) => document.file_log_id);
+                await this.customerCompanyDocumentModel.bulkCreate(
+                    documents.map((document) => ({
+                        company_id: company.id,
+                        document_type: document.document_type,
+                        document_number: document.document_number || undefined,
+                        file_log_id: document.file_log_id,
+                        status: 'uploaded',
+                        created_at: now,
+                        updated_at: now,
+                    })) as any,
+                    { transaction },
+                );
 
-            await this.fileLogModel.update(
-                { is_assigned: 1 },
-                {
-                    where: { id: { [Op.in]: documentFileIds } },
-                    transaction,
-                },
-            );
+                await this.fileLogModel.update(
+                    { is_assigned: 1 },
+                    {
+                        where: { id: { [Op.in]: documentFileIds } },
+                        transaction,
+                    },
+                );
+            }
 
             await transaction.commit();
 
@@ -198,6 +201,70 @@ export class CustomerCompaniesService {
                     company_status: company.status,
                     user_id: newUser.id,
                     sales_referral_code: trimmedReferralCode || null,
+                },
+            };
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
+    }
+
+    /**
+     * Lampirkan dokumen legal ke perusahaan B2B milik user (setelah login + upload file_log).
+     */
+    async addMyCompanyDocument(userId: number, dto: AddCustomerCompanyDocumentDto) {
+        const transaction = await this.customerCompanyModel.sequelize!.transaction();
+        try {
+            const member = await this.customerCompanyMemberModel.findOne({
+                where: { user_id: userId, is_active: 1 },
+                order: [['is_primary_pic', 'DESC'], ['id', 'ASC']],
+                transaction,
+            });
+            if (!member) {
+                throw new NotFoundException('Tidak ada perusahaan yang terhubung dengan akun ini');
+            }
+
+            if (dto.document_type === 'npwp') {
+                const existingNpwp = await this.customerCompanyDocumentModel.findOne({
+                    where: { company_id: member.company_id, document_type: 'npwp' },
+                    transaction,
+                });
+                if (existingNpwp) {
+                    throw new BadRequestException('Dokumen NPWP untuk perusahaan ini sudah ada');
+                }
+            }
+
+            const fileLog = await this.fileLogModel.findByPk(dto.file_log_id, { transaction });
+            if (!fileLog) {
+                throw new BadRequestException('File tidak ditemukan');
+            }
+            if (Number(fileLog.is_assigned) === 1) {
+                throw new BadRequestException('File sudah terpakai');
+            }
+
+            const now = new Date();
+            await this.customerCompanyDocumentModel.create({
+                company_id: member.company_id,
+                document_type: dto.document_type,
+                document_number: dto.document_number?.trim() || undefined,
+                file_log_id: dto.file_log_id,
+                status: 'uploaded',
+                created_at: now,
+                updated_at: now,
+            } as any, { transaction });
+
+            await this.fileLogModel.update(
+                { is_assigned: 1 },
+                { where: { id: dto.file_log_id }, transaction },
+            );
+
+            await transaction.commit();
+
+            return {
+                message: 'Dokumen perusahaan berhasil ditambahkan',
+                data: {
+                    company_id: member.company_id,
+                    document_type: dto.document_type,
                 },
             };
         } catch (error) {

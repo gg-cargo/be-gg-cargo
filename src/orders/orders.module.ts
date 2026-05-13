@@ -36,6 +36,8 @@ import { TariffsModule } from '../tariffs/tariffs.module';
 import { Vendor } from '../models/vendor.model';
 import { Barang } from '../models/barang.model';
 import { City } from '../models/city.model';
+import { CustomerCompanyMember } from '../models/customer-company-member.model';
+import { CustomerCompanyDocument } from '../models/customer-company-document.model';
 
 @Module({
     imports: [
@@ -70,7 +72,9 @@ import { City } from '../models/city.model';
             TruckList,
             Vendor,
             Barang,
-            City
+            City,
+            CustomerCompanyMember,
+            CustomerCompanyDocument,
         ])
     ],
     controllers: [OrdersController, InboundController],

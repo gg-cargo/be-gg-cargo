@@ -106,6 +106,8 @@ import {
 import { Vendor } from '../models/vendor.model';
 import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
+import { CustomerCompanyMember } from '../models/customer-company-member.model';
+import { CustomerCompanyDocument } from '../models/customer-company-document.model';
 
 @Injectable()
 export class OrdersService {
@@ -158,6 +160,10 @@ export class OrdersService {
         private readonly orderPickupDriverModel: typeof OrderPickupDriver,
         @InjectModel(OrderDeliverDriver)
         private readonly orderDeliverDriverModel: typeof OrderDeliverDriver,
+        @InjectModel(CustomerCompanyMember)
+        private readonly customerCompanyMemberModel: typeof CustomerCompanyMember,
+        @InjectModel(CustomerCompanyDocument)
+        private readonly customerCompanyDocumentModel: typeof CustomerCompanyDocument,
         private readonly fileService: FileService,
         private readonly driversService: DriversService,
         private readonly notificationBadgesService: NotificationBadgesService,
@@ -166,6 +172,37 @@ export class OrdersService {
         private readonly tariffsService: TariffsService,
         @Inject('SEQUELIZE') private readonly sequelize: Sequelize,
     ) { }
+
+    /**
+     * Anggota customer B2B: setiap perusahaan tempat user aktif harus punya dokumen NPWP (status uploaded atau verified)
+     * sebelum membuat pengiriman.
+     */
+    private async assertB2bCustomerNpwpBeforeShipment(userId: number): Promise<void> {
+        const memberships = await this.customerCompanyMemberModel.findAll({
+            where: { user_id: userId, is_active: 1 },
+            attributes: ['company_id'],
+        });
+        if (!memberships.length) {
+            return;
+        }
+
+        const companyIds = [...new Set(memberships.map((m) => Number(m.getDataValue('company_id'))))];
+
+        for (const companyId of companyIds) {
+            const npwp = await this.customerCompanyDocumentModel.findOne({
+                where: {
+                    company_id: companyId,
+                    document_type: 'npwp',
+                    status: { [Op.in]: ['uploaded', 'verified'] },
+                },
+            });
+            if (!npwp) {
+                throw new BadRequestException(
+                    'Dokumen NPWP perusahaan belum diunggah. Silakan unggah NPWP (POST /customer-companies/me/documents setelah upload file) sebelum membuat pengiriman.',
+                );
+            }
+        }
+    }
 
     /**
      * Helper function untuk menyimpan foto bukti bypass reweight
@@ -1881,6 +1918,8 @@ export class OrdersService {
     async createOrder(createOrderDto: CreateOrderDto, userId: number): Promise<CreateOrderResponseDto> {
         // Validasi tambahan
         this.validateOrderData(createOrderDto);
+
+        await this.assertB2bCustomerNpwpBeforeShipment(userId);
 
         // Validasi khusus untuk layanan Kirim Motor
         if (createOrderDto.layanan === LayananType.KIRIM_MOTOR) {
@@ -9444,6 +9483,7 @@ export class OrdersService {
         const transaction = await this.orderModel.sequelize!.transaction();
 
         try {
+            await this.assertB2bCustomerNpwpBeforeShipment(userId);
             // Generate no_tracking
             const noTracking = TrackingHelper.generateNoTracking();
 
@@ -9745,6 +9785,10 @@ export class OrdersService {
         try {
             // a. Validasi Awal dan Bersyarat
             this.validateInternationalOrder(createInternationalDto);
+
+            if (userId != null && Number(userId) > 0) {
+                await this.assertB2bCustomerNpwpBeforeShipment(userId);
+            }
 
             // b. Perhitungan dan Konversi
             const chargeableWeightData = this.calculateChargeableWeight(createInternationalDto.pieces);
