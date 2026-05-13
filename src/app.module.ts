@@ -37,6 +37,7 @@ import { TariffsModule } from './tariffs/tariffs.module';
 import { MasterServicesModule } from './services-master/services-master.module';
 import { BarangModule } from './barang/barang.module';
 import { FleetModule } from './fleet/fleet.module';
+import { CustomerCompaniesModule } from './customer-companies/customer-companies.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { FleetModule } from './fleet/fleet.module';
     BarangModule,
     // Fleet dashboard APIs
     FleetModule,
+    CustomerCompaniesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
