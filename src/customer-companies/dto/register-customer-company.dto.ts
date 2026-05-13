@@ -1,6 +1,5 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
-    ArrayMinSize,
     IsArray,
     IsEmail,
     IsIn,
@@ -40,15 +39,17 @@ export class RegisterCustomerCompanyDataDto {
     company_name: string;
 
     @IsOptional()
+    @Transform(({ value }) => (value === '' || value === null || value === undefined ? undefined : value))
     @IsString({ message: 'Nama legal perusahaan harus berupa string' })
     legal_name?: string;
 
     @IsEmail({}, { message: 'Format email perusahaan tidak valid' })
     company_email: string;
 
+    @IsOptional()
+    @Transform(({ value }) => (value === '' || value === null || value === undefined ? undefined : value))
     @IsString({ message: 'Nomor telepon perusahaan harus berupa string' })
-    @IsNotEmpty({ message: 'Nomor telepon perusahaan tidak boleh kosong' })
-    company_phone: string;
+    company_phone?: string;
 
     @IsOptional()
     @Type(() => Number)
@@ -68,6 +69,7 @@ export class RegisterCustomerCompanyDataDto {
 
 export class RegisterCustomerCompanyAddressDto {
     @IsOptional()
+    @Transform(({ value }) => (value === '' || value === null || value === undefined ? undefined : value))
     @IsString({ message: 'Label alamat harus berupa string' })
     label?: string;
 
@@ -151,8 +153,9 @@ export class RegisterCustomerCompanyDto {
     @Type(() => RegisterCustomerCompanyAddressDto)
     address: RegisterCustomerCompanyAddressDto;
 
+    /** Minimal berisi satu entri dengan document_type npwp. Tipe dokumen lain opsional. */
+    @Transform(({ value }) => (Array.isArray(value) ? value : []))
     @IsArray({ message: 'documents harus berupa array' })
-    @ArrayMinSize(1, { message: 'documents minimal 1 item' })
     @ValidateNested({ each: true })
     @Type(() => RegisterCustomerCompanyDocumentDto)
     documents: RegisterCustomerCompanyDocumentDto[];

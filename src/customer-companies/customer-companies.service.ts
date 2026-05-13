@@ -47,7 +47,12 @@ export class CustomerCompaniesService {
                 throw new BadRequestException('Nomor telepon PIC sudah terdaftar');
             }
 
-            const documentFileIds = dto.documents.map((document) => document.file_log_id);
+            const documents = dto.documents || [];
+            if (!documents.some((d) => d.document_type === 'npwp')) {
+                throw new BadRequestException('Dokumen NPWP wajib');
+            }
+
+            const documentFileIds = documents.map((document) => document.file_log_id);
             const uniqueFileIds = new Set(documentFileIds);
             if (uniqueFileIds.size !== documentFileIds.length) {
                 throw new BadRequestException('file_log_id dokumen tidak boleh duplikat');
@@ -114,7 +119,7 @@ export class CustomerCompaniesService {
                 company_name: dto.company.company_name,
                 legal_name: dto.company.legal_name || undefined,
                 company_email: dto.company.company_email,
-                company_phone: dto.company.company_phone,
+                company_phone: dto.company.company_phone?.trim() || undefined,
                 company_type: 'b2b',
                 status: 'submitted',
                 payment_terms_days: Number(dto.company.payment_terms_days || 0),
@@ -141,7 +146,7 @@ export class CustomerCompaniesService {
 
             await this.customerCompanyAddressModel.create({
                 company_id: company.id,
-                label: dto.address.label || 'Kantor Pusat',
+                label: dto.address.label?.trim() || undefined,
                 contact_name: dto.address.contact_name || dto.account.pic_name,
                 contact_phone: dto.address.contact_phone || dto.account.phone,
                 contact_email: dto.address.contact_email || dto.account.email,
@@ -163,7 +168,7 @@ export class CustomerCompaniesService {
             } as any, { transaction });
 
             await this.customerCompanyDocumentModel.bulkCreate(
-                dto.documents.map((document) => ({
+                documents.map((document) => ({
                     company_id: company.id,
                     document_type: document.document_type,
                     document_number: document.document_number || undefined,
