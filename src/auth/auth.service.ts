@@ -5,8 +5,8 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import * as FormData from 'form-data';
 import axios from 'axios';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { createReadStream, existsSync } from 'fs';
+import { basename, join } from 'path';
 import { User } from '../models/user.model';
 import { DumpOtp } from '../models/dump-otp.model';
 import { PasswordReset } from '../models/password-reset.model';
@@ -35,8 +35,12 @@ import {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  /** Cache blok HTML logo OTP (base64 inline dari `public/logo-gg-2.png`). */
-  private otpEmailLogoBlockHtml: string | null = null;
+  /**
+   * Content-ID untuk logo OTP yang dikirim sebagai inline attachment Mailgun.
+   * Body HTML tetap kecil (tidak mem-base64 file 500KB ke dalam HTML, yang membuat Gmail
+   * meng-clip pesan) dan logo tetap tampil inline.
+   */
+  private static readonly OTP_EMAIL_LOGO_CID = 'logo-99-delivery';
 
   constructor(
     @InjectModel(User)
@@ -121,6 +125,7 @@ export class AuthService {
           to: [email],
           subject: 'OTP Verifikasi - 99 Delivery',
           html: this.generateOTPEmailHtml(user.getDataValue('name'), otp),
+          inline: this.getOtpEmailInlineAttachments(),
         });
         this.logger.log(`OTP sent via email to ${email}`);
       } catch (emailError) {
@@ -176,6 +181,7 @@ export class AuthService {
         to: [email],
         subject: 'OTP Verifikasi - 99 Delivery',
         html: this.generateOTPEmailHtml(user.getDataValue('name'), otp),
+        inline: this.getOtpEmailInlineAttachments(),
       });
       this.logger.log(`OTP registrasi dikirim via email ke ${email}`);
     } catch (emailError) {
@@ -393,6 +399,7 @@ export class AuthService {
           to: [user.getDataValue('email')],
           subject: 'OTP Baru - 99 Delivery',
           html: this.generateOTPEmailHtml(user.getDataValue('name'), otp),
+          inline: this.getOtpEmailInlineAttachments(),
         });
         this.logger.log(`OTP resent via email to ${user.getDataValue('email')}`);
       } catch (emailError) {
@@ -614,6 +621,11 @@ export class AuthService {
     subject: string;
     html: string;
     from?: string;
+    /**
+     * File yang dilampirkan sebagai inline (mis. untuk `<img src="cid:..." />`).
+     * `cid` akan dipakai sebagai filename (Mailgun memakai filename sebagai Content-ID).
+     */
+    inline?: { path: string; cid: string }[];
   }): Promise<{ id: string }> {
     const domain = this.configService.get('MAILGUN_DOMAIN');
     const apiKey = this.configService.get('MAILGUN_API_KEY');
@@ -634,6 +646,18 @@ export class AuthService {
 
     formData.append('subject', emailData.subject);
     formData.append('html', emailData.html);
+
+    if (emailData.inline && emailData.inline.length > 0) {
+      for (const item of emailData.inline) {
+        if (!existsSync(item.path)) {
+          this.logger.warn(`Lampiran inline tidak ditemukan, dilewati: ${item.path}`);
+          continue;
+        }
+        formData.append('inline', createReadStream(item.path), {
+          filename: item.cid || basename(item.path),
+        });
+      }
+    }
 
     try {
       const response = await axios.post(
@@ -661,29 +685,41 @@ export class AuthService {
   }
 
   /**
-   * Logo 99 (`public/logo-gg-2.png`) untuk email OTP, di-embed base64 agar tampil tanpa host URL.
+   * Path file logo email OTP. Dilampirkan sebagai `inline` ke Mailgun.
+   * Pakai logo lama yang ukurannya jauh lebih kecil untuk meminimalkan ukuran email.
+   */
+  private getOtpEmailLogoPath(): string | null {
+    const candidates = [
+      join(process.cwd(), 'public', 'logo-gg-2-old.png'),
+      join(process.cwd(), 'public', 'logo-gg.png'),
+      join(process.cwd(), 'public', 'logo-gg-2.png'),
+    ];
+    for (const p of candidates) {
+      if (existsSync(p)) return p;
+    }
+    this.logger.warn('File logo untuk email OTP tidak ditemukan');
+    return null;
+  }
+
+  /**
+   * Blok HTML logo OTP — merujuk ke inline attachment via Content-ID.
    */
   private getOtpEmailLogoBlockHtml(): string {
-    if (this.otpEmailLogoBlockHtml !== null) {
-      return this.otpEmailLogoBlockHtml;
-    }
-    try {
-      const logoPath = join(process.cwd(), 'public', 'logo-gg-2.png');
-      if (!existsSync(logoPath)) {
-        this.logger.warn(`File logo email OTP tidak ditemukan: ${logoPath}`);
-        this.otpEmailLogoBlockHtml = '';
-        return '';
-      }
-      const b64 = readFileSync(logoPath).toString('base64');
-      this.otpEmailLogoBlockHtml = `<div style="text-align:center;margin:0 0 20px 0;">
-            <img src="data:image/png;base64,${b64}" alt="99 Delivery" width="160" style="max-width:200px;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;" />
+    const logoPath = this.getOtpEmailLogoPath();
+    if (!logoPath) return '';
+    const cid = AuthService.OTP_EMAIL_LOGO_CID;
+    return `<div style="text-align:center;margin:0 0 20px 0;">
+            <img src="cid:${cid}" alt="99 Delivery" width="160" style="max-width:200px;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;" />
           </div>`;
-      return this.otpEmailLogoBlockHtml;
-    } catch (e) {
-      this.logger.warn(`Gagal memuat logo email OTP: ${(e as Error).message}`);
-      this.otpEmailLogoBlockHtml = '';
-      return '';
-    }
+  }
+
+  /**
+   * Inline attachment untuk email OTP (logo). Dipakai oleh `sendMailgunEmail`.
+   */
+  private getOtpEmailInlineAttachments(): { path: string; cid: string }[] {
+    const logoPath = this.getOtpEmailLogoPath();
+    if (!logoPath) return [];
+    return [{ path: logoPath, cid: AuthService.OTP_EMAIL_LOGO_CID }];
   }
 
   /**
