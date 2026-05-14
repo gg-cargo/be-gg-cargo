@@ -30,16 +30,10 @@ export class FileController {
             throw new HttpException('No file uploaded', HttpStatus.BAD_REQUEST);
         }
 
-        const isDuplicate = await this.fileService.isFileNameExists(file.originalname);
-        if (isDuplicate) {
-            await this.removePhysicalFile(file.path);
-            throw new HttpException('File dengan nama tersebut sudah pernah diupload', HttpStatus.CONFLICT);
-        }
-
         await this.compressImageIfNeeded(file);
 
         const userId = req.user?.id;
-        return this.fileService.createFileLog(file, userId, used_for);
+        return this.fileService.upsertFileLogFromUpload(file, userId, used_for);
     }
 
     @Patch('assign/:id')
