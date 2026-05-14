@@ -238,9 +238,14 @@ export class CustomerCompaniesService {
                 throw new NotFoundException('Tidak ada perusahaan yang terhubung dengan akun ini');
             }
 
+            const companyId = Number(member.getDataValue('company_id'));
+            if (!Number.isFinite(companyId) || companyId <= 0) {
+                throw new BadRequestException('Data keanggotaan perusahaan tidak valid');
+            }
+
             if (dto.document_type === 'npwp') {
                 const existingNpwp = await this.customerCompanyDocumentModel.findOne({
-                    where: { company_id: member.company_id, document_type: 'npwp' },
+                    where: { company_id: companyId, document_type: 'npwp' },
                     transaction,
                 });
                 if (existingNpwp) {
@@ -258,7 +263,7 @@ export class CustomerCompaniesService {
 
             const now = new Date();
             await this.customerCompanyDocumentModel.create({
-                company_id: member.company_id,
+                company_id: companyId,
                 document_type: dto.document_type,
                 document_number: dto.document_number?.trim() || undefined,
                 file_log_id: dto.file_log_id,
@@ -277,7 +282,7 @@ export class CustomerCompaniesService {
             return {
                 message: 'Dokumen perusahaan berhasil ditambahkan',
                 data: {
-                    company_id: member.company_id,
+                    company_id: companyId,
                     document_type: dto.document_type,
                 },
             };

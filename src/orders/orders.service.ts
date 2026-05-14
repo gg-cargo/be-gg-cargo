@@ -198,7 +198,7 @@ export class OrdersService {
             });
             if (!npwp) {
                 throw new BadRequestException(
-                    'Dokumen NPWP perusahaan belum diunggah. Silakan unggah NPWP (POST /customer-companies/me/documents setelah upload file) sebelum membuat pengiriman.',
+                    'Dokumen NPWP perusahaan belum diunggah. Silakan unggah NPWP sebelum membuat pengiriman.',
                 );
             }
         }
