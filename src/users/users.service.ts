@@ -1,10 +1,16 @@
-import { Injectable, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { User } from '../models/user.model';
 import { Level } from '../models/level.model';
 import { ServiceCenter } from '../models/service-center.model';
 import { Hub } from '../models/hub.model';
 import { Saldo } from '../models/saldo.model';
+import { DumpOtp } from '../models/dump-otp.model';
+import { PasswordReset } from '../models/password-reset.model';
+import { UsersAddress } from '../models/users-address.model';
+import { CustomerCompanyMember } from '../models/customer-company-member.model';
+import { UsersEmergencyContact } from '../models/users_emergency_contact.model';
+import { NotificationBadge } from '../models/notification-badge.model';
 import { ListUsersDto } from './dto/list-users.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -16,6 +22,7 @@ import { UserDetailResponseDto } from './dto/user-detail-response.dto';
 import { UpdateLocationDto, UpdateLocationResponseDto } from './dto/update-location.dto';
 import { Op, Sequelize } from 'sequelize';
 import { randomBytes } from 'crypto';
+import type { Transaction } from 'sequelize';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -31,6 +38,18 @@ export class UsersService {
         private readonly hubModel: typeof Hub,
         @InjectModel(Saldo)
         private readonly saldoModel: typeof Saldo,
+        @InjectModel(DumpOtp)
+        private readonly dumpOtpModel: typeof DumpOtp,
+        @InjectModel(PasswordReset)
+        private readonly passwordResetModel: typeof PasswordReset,
+        @InjectModel(UsersAddress)
+        private readonly usersAddressModel: typeof UsersAddress,
+        @InjectModel(CustomerCompanyMember)
+        private readonly customerCompanyMemberModel: typeof CustomerCompanyMember,
+        @InjectModel(UsersEmergencyContact)
+        private readonly usersEmergencyContactModel: typeof UsersEmergencyContact,
+        @InjectModel(NotificationBadge)
+        private readonly notificationBadgeModel: typeof NotificationBadge,
     ) { }
 
     async listUsers(query: ListUsersDto): Promise<ListUsersResponseDto> {
@@ -1101,5 +1120,71 @@ export class UsersService {
                 },
             },
         };
+    }
+
+    /**
+     * Penonaktifan akun mandiri (soft delete): tidak menghapus baris user agar FK historis
+     * (mis. order_by) tetap valid. Login dinonaktifkan dan email/telepon di-anonimkan.
+     */
+    async deleteMyAccount(userId: number): Promise<{ success: boolean; message: string }> {
+        if (!userId || !Number.isFinite(Number(userId))) {
+            throw new BadRequestException('User tidak valid');
+        }
+
+        const sequelize = this.userModel.sequelize;
+        if (!sequelize) {
+            throw new BadRequestException('Database tidak tersedia');
+        }
+
+        return sequelize.transaction(async (transaction: Transaction) => {
+            const user = await this.userModel.findByPk(userId, {
+                transaction,
+                lock: transaction.LOCK.UPDATE,
+            });
+            if (!user) {
+                throw new NotFoundException('Pengguna tidak ditemukan');
+            }
+
+            if (Number(user.getDataValue('aktif')) !== 1) {
+                throw new ForbiddenException('Akun ini sudah tidak aktif');
+            }
+
+            const oldEmail = String(user.getDataValue('email') || '');
+            const oldPhone = String(user.getDataValue('phone') || '');
+            const ts = Date.now();
+            const placeholderEmail = `deleted.user.${userId}.${ts}@invalid.local`;
+            const placeholderPhone = `X${userId}${ts}`.slice(0, 50);
+
+            await this.dumpOtpModel.destroy({ where: { phone: oldPhone }, transaction });
+            if (oldEmail) {
+                await this.passwordResetModel.destroy({ where: { email: oldEmail }, transaction });
+            }
+            await this.usersAddressModel.destroy({ where: { id_user: userId }, transaction });
+            await this.customerCompanyMemberModel.destroy({ where: { user_id: userId }, transaction });
+            await this.usersEmergencyContactModel.destroy({ where: { user_id: userId }, transaction });
+            await this.notificationBadgeModel.destroy({ where: { user_id: userId }, transaction });
+
+            const saltRounds = 10;
+            const randomPassword = await bcrypt.hash(randomBytes(32).toString('hex'), saltRounds);
+
+            await user.update(
+                {
+                    aktif: 0,
+                    email: placeholderEmail,
+                    phone: placeholderPhone,
+                    password: randomPassword,
+                    remember_token: null,
+                    fcm_token: null,
+                    phone_verify_at: null,
+                    updated_at: new Date(),
+                },
+                { transaction },
+            );
+
+            return {
+                success: true,
+                message: 'Akun Anda telah dinonaktifkan dan data login telah dihapus.',
+            };
+        });
     }
 } 

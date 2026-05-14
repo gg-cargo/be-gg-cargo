@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Query, Param, UseGuards, HttpCode, HttpStatus, ParseIntPipe, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Query, Param, UseGuards, HttpCode, HttpStatus, ParseIntPipe, Request, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { ListUsersDto } from './dto/list-users.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -137,6 +137,20 @@ export class UsersController {
     ): Promise<UpdateLocationResponseDto> {
         const userId = req.user.id;
         return this.usersService.updateMyLocation(userId, updateLocationDto);
+    }
+
+    /**
+     * Penonaktifan akun oleh pemilik akun (JWT). Harus didefinisikan sebelum @Get(':id')
+     * agar path `me` tidak tertangkap sebagai id.
+     */
+    @Delete('me')
+    @HttpCode(HttpStatus.OK)
+    async deleteMe(@Request() req): Promise<{ success: boolean; message: string }> {
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new BadRequestException('User tidak terautentikasi');
+        }
+        return this.usersService.deleteMyAccount(userId);
     }
 
     @Get(':id')
