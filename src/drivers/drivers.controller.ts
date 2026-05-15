@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Post, Body, Patch, Param, UseGuards, Request, UnauthorizedException, ParseIntPipe, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Query, Post, Body, Patch, Param, UseGuards, Request, UnauthorizedException, ParseIntPipe, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { DriversService } from './drivers.service';
 import { AvailableDriversDto, AvailableDriversForPickupDto, AvailableDriversForDeliverDto } from './dto/available-drivers.dto';
 import { DriverStatusSummaryQueryDto } from './dto/driver-status-summary.dto';
@@ -7,6 +7,7 @@ import { MyTasksQueryDto, MyTasksResponseDto } from './dto/my-tasks.dto';
 import { AcceptTaskResponseDto } from './dto/accept-task.dto';
 import { RejectTaskDto, RejectTaskResponseDto } from './dto/reject-task.dto';
 import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
+import { UpdateDriverStatusAppDto } from './dto/update-driver-status-app.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('drivers')
@@ -88,6 +89,23 @@ export class DriversController {
         }
 
         return this.driversService.getMyTasks(driverId, query);
+    }
+
+    /**
+     * Driver mengatur status_app (1 = buka, 0 = tutup). Hanya level 8.
+     */
+    @UseGuards(JwtAuthGuard)
+    @Patch('me/status-app')
+    @HttpCode(HttpStatus.OK)
+    async updateMyStatusApp(
+        @Body() dto: UpdateDriverStatusAppDto,
+        @Request() req: any,
+    ): Promise<{ success: boolean; message: string; data: { status_app: number } }> {
+        const driverId = req.user?.id;
+        if (!driverId) {
+            throw new UnauthorizedException('User tidak terautentikasi');
+        }
+        return this.driversService.setMyStatusApp(driverId, dto);
     }
 
     @UseGuards(JwtAuthGuard)

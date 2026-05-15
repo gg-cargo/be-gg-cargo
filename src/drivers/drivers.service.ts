@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, InternalServerErrorException, Logger, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op, fn, col, literal } from 'sequelize';
 import { User } from '../models/user.model';
@@ -16,6 +16,7 @@ import { AssignDriverDto, AssignDriverResponseDto } from './dto/assign-driver.dt
 import { MyTasksQueryDto, MyTasksResponseDto, DriverTaskDto, TaskStatisticsDto } from './dto/my-tasks.dto';
 import { AcceptTaskResponseDto } from './dto/accept-task.dto';
 import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
+import { UpdateDriverStatusAppDto } from './dto/update-driver-status-app.dto';
 import { getOrderHistoryDateTime } from '../common/utils/date.utils';
 import { ORDER_STATUS } from 'src/common/constants/order-status.constants';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
@@ -47,6 +48,46 @@ export class DriversService {
         private readonly notificationBadgesService: NotificationBadgesService,
         private readonly whatsappService: WhatsappService,
     ) { }
+
+    /**
+     * Driver mengatur status_app (1 = aplikasi terbuka, 0 = tutup).
+     */
+    async setMyStatusApp(userId: number, dto: UpdateDriverStatusAppDto): Promise<{
+        success: boolean;
+        message: string;
+        data: { status_app: number };
+    }> {
+        const user = await this.userModel.findByPk(userId);
+        if (!user) {
+            throw new NotFoundException('Pengguna tidak ditemukan');
+        }
+
+        const level = Number(user.getDataValue('level'));
+        if (![4, 8].includes(level)) {
+            throw new ForbiddenException(
+                'Hanya akun driver atau transporter yang dapat mengubah status aplikasi',
+            );
+        }
+
+        if (Number(user.getDataValue('aktif')) !== 1) {
+            throw new ForbiddenException('Akun tidak aktif');
+        }
+
+        const statusApp = dto.status_app;
+        await this.userModel.update(
+            {
+                status_app: statusApp,
+                updated_at: new Date(),
+            },
+            { where: { id: userId } },
+        );
+
+        return {
+            success: true,
+            message: statusApp === 1 ? 'Status aplikasi diatur ke terbuka (aktif).' : 'Status aplikasi diatur ke tertutup.',
+            data: { status_app: statusApp },
+        };
+    }
 
     async getAvailableDrivers(params: AvailableDriversDto) {
         const {
