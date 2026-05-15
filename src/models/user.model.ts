@@ -335,7 +335,7 @@ export class User extends Model {
   @Column({
     type: DataType.INTEGER,
     allowNull: false,
-    defaultValue: 1,
+    defaultValue: 0,
     comment: '1: Buka | 0: Tutup',
   })
   status_app: number;

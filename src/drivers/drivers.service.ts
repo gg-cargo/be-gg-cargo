@@ -825,6 +825,13 @@ export class DriversService {
                 throw new BadRequestException('User yang dipilih bukan driver/kurir');
             }
 
+            const driverStatusApp = Number(driver.getDataValue('status_app'));
+            if (driverStatusApp !== 1) {
+                throw new BadRequestException(
+                    'Driver tidak dapat ditugaskan: aplikasi kurir harus dalam status terbuka. Minta kurir membuka aplikasi terlebih dahulu.',
+                );
+            }
+
             // 3. Validasi user yang melakukan penugasan
             const assignedByUser = await this.userModel.findByPk(assignDriverDto.assigned_by_user_id, {
                 transaction
