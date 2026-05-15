@@ -89,6 +89,41 @@ export class DriversService {
         };
     }
 
+    /**
+     * Ambil status_app user yang login (driver level 8 atau transporter level 4).
+     */
+    async getMyStatusApp(userId: number): Promise<{
+        success: boolean;
+        message: string;
+        data: { status_app: number };
+    }> {
+        const user = await this.userModel.findByPk(userId, {
+            attributes: ['id', 'level', 'aktif', 'status_app'],
+        });
+        if (!user) {
+            throw new NotFoundException('Pengguna tidak ditemukan');
+        }
+
+        const level = Number(user.getDataValue('level'));
+        if (![4, 8].includes(level)) {
+            throw new ForbiddenException(
+                'Hanya akun driver/kurir (level 8) atau transporter (level 4) yang dapat melihat status aplikasi lewat endpoint ini',
+            );
+        }
+
+        if (Number(user.getDataValue('aktif')) !== 1) {
+            throw new ForbiddenException('Akun tidak aktif');
+        }
+
+        const statusApp = Number(user.getDataValue('status_app'));
+
+        return {
+            success: true,
+            message: 'Status aplikasi berhasil diambil',
+            data: { status_app: Number.isFinite(statusApp) ? statusApp : 0 },
+        };
+    }
+
     async getAvailableDrivers(params: AvailableDriversDto) {
         const {
             hub_id,

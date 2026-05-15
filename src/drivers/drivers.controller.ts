@@ -92,7 +92,24 @@ export class DriversController {
     }
 
     /**
-     * Driver mengatur status_app (1 = buka, 0 = tutup). Hanya level 8.
+     * Driver/transporter melihat status_app sendiri (0 = tutup, 1 = buka).
+     */
+    @UseGuards(JwtAuthGuard)
+    @Get('me/status-app')
+    async getMyStatusApp(@Request() req: any): Promise<{
+        success: boolean;
+        message: string;
+        data: { status_app: number };
+    }> {
+        const driverId = req.user?.id;
+        if (!driverId) {
+            throw new UnauthorizedException('User tidak terautentikasi');
+        }
+        return this.driversService.getMyStatusApp(driverId);
+    }
+
+    /**
+     * Driver/transporter mengatur status_app (1 = buka, 0 = tutup). Level 4 atau 8.
      */
     @UseGuards(JwtAuthGuard)
     @Patch('me/status-app')
