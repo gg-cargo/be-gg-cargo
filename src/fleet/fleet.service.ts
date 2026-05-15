@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { QueryTypes, Sequelize } from 'sequelize';
 import { Order } from '../models/order.model';
@@ -16,6 +16,9 @@ import {
   FleetDashboardHubSummaryDto,
   FleetDashboardTotalSummaryDto,
 } from './dto/fleet-dashboard-summary.dto';
+import { FleetEstimateDto } from './dto/fleet-estimate.dto';
+import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
+import { calculateFleetOperationalEstimate } from './fleet-estimate.calculator';
 
 @Injectable()
 export class FleetService {
@@ -468,6 +471,24 @@ export class FleetService {
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  }
+
+  /**
+   * Estimasi biaya operasional fleet: upah supir 1, supir 2 (jika jarak > 300 km), dan BBM.
+   */
+  estimateOperationalCost(dto: FleetEstimateDto, _userId?: number): FleetEstimateResponseDto {
+    try {
+      const data = calculateFleetOperationalEstimate(dto);
+      return {
+        success: true,
+        message: 'Estimasi biaya operasional berhasil dihitung',
+        data,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Gagal menghitung estimasi';
+      this.logger.warn(`Fleet estimate failed: ${msg}`);
+      throw new BadRequestException(msg);
+    }
   }
 }
 

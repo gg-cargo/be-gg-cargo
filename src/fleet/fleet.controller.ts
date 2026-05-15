@@ -1,8 +1,21 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+  Request,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FleetService } from './fleet.service';
 import { FleetShipmentsQueryDto, FleetShipmentsResponseDto } from './dto/fleet-shipments.dto';
 import { FleetDashboardSummaryResponseDto } from './dto/fleet-dashboard-summary.dto';
+import { FleetEstimateDto } from './dto/fleet-estimate.dto';
+import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
 
 @Controller('fleet')
 export class FleetController {
@@ -18,6 +31,20 @@ export class FleetController {
       message: 'Fleet shipments fetched successfully',
       data: result,
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('estimate')
+  @HttpCode(HttpStatus.OK)
+  async estimateOperationalCost(
+    @Body() dto: FleetEstimateDto,
+    @Request() req: { user?: { id?: number } },
+  ): Promise<FleetEstimateResponseDto> {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('User tidak terautentikasi');
+    }
+    return this.fleetService.estimateOperationalCost(dto, userId);
   }
 
   @UseGuards(JwtAuthGuard)
