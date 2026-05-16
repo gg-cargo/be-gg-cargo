@@ -15,11 +15,12 @@ import { FleetService } from './fleet.service';
 import { FleetShipmentsQueryDto, FleetShipmentsResponseDto } from './dto/fleet-shipments.dto';
 import { FleetDashboardSummaryResponseDto } from './dto/fleet-dashboard-summary.dto';
 import { FleetEstimateDto } from './dto/fleet-estimate.dto';
+import { CreateFleetEstimateDto } from './dto/create-fleet-estimate.dto';
 import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
 
 @Controller('fleet')
 export class FleetController {
-  constructor(private readonly fleetService: FleetService) {}
+  constructor(private readonly fleetService: FleetService) { }
 
   @UseGuards(JwtAuthGuard)
   @Get('shipments')
@@ -45,6 +46,23 @@ export class FleetController {
       throw new UnauthorizedException('User tidak terautentikasi');
     }
     return this.fleetService.estimateOperationalCost(dto, userId);
+  }
+
+  /**
+   * Simpan estimasi ke tabel fleet_estimates (status pending).
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('estimates')
+  @HttpCode(HttpStatus.CREATED)
+  async createFleetEstimate(
+    @Body() dto: CreateFleetEstimateDto,
+    @Request() req: { user?: { id?: number } },
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('User tidak terautentikasi');
+    }
+    return this.fleetService.createFleetEstimate(dto, userId);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -6,6 +6,9 @@ import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderHistory } from '../models/order-history.model';
 import { Vendor } from '../models/vendor.model';
 import { Hub } from '../models/hub.model';
+import { FleetEstimate } from '../models/fleet-estimate.model';
+import { User } from '../models/user.model';
+import { FileLog } from '../models/file-log.model';
 import {
   FleetShipmentsQueryDto,
   FleetShipmentsResponseDto,
@@ -17,6 +20,7 @@ import {
   FleetDashboardTotalSummaryDto,
 } from './dto/fleet-dashboard-summary.dto';
 import { FleetEstimateDto } from './dto/fleet-estimate.dto';
+import { CreateFleetEstimateDto } from './dto/create-fleet-estimate.dto';
 import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
 import { calculateFleetOperationalEstimate } from './fleet-estimate.calculator';
 
@@ -30,6 +34,9 @@ export class FleetService {
     @InjectModel(OrderHistory) private readonly orderHistoryModel: typeof OrderHistory,
     @InjectModel(Vendor) private readonly vendorModel: typeof Vendor,
     @InjectModel(Hub) private readonly hubModel: typeof Hub,
+    @InjectModel(FleetEstimate) private readonly fleetEstimateModel: typeof FleetEstimate,
+    @InjectModel(User) private readonly userModel: typeof User,
+    @InjectModel(FileLog) private readonly fileLogModel: typeof FileLog,
   ) { }
 
   /**
@@ -489,6 +496,80 @@ export class FleetService {
       this.logger.warn(`Fleet estimate failed: ${msg}`);
       throw new BadRequestException(msg);
     }
+  }
+
+  /**
+   * Simpan fleet estimate ke DB (status pending). Upah & BBM dari kalkulator yang sama dengan POST /fleet/estimate.
+   */
+  async createFleetEstimate(dto: CreateFleetEstimateDto, createdByUserId: number) {
+    let calc;
+    try {
+      calc = calculateFleetOperationalEstimate(dto);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Gagal menghitung estimasi';
+      this.logger.warn(`Fleet estimate create calc failed: ${msg}`);
+      throw new BadRequestException(msg);
+    }
+
+    if (dto.driver_1_user_id != null) {
+      const u = await this.userModel.findByPk(dto.driver_1_user_id);
+      if (!u) {
+        throw new BadRequestException('driver_1_user_id tidak ditemukan');
+      }
+    }
+
+    if (dto.driver_2_user_id != null) {
+      const u = await this.userModel.findByPk(dto.driver_2_user_id);
+      if (!u) {
+        throw new BadRequestException('driver_2_user_id tidak ditemukan');
+      }
+    }
+
+    if (dto.loading_photo_file_log_id != null) {
+      const file = await this.fileLogModel.findByPk(dto.loading_photo_file_log_id);
+      if (!file) {
+        throw new BadRequestException('loading_photo_file_log_id tidak ditemukan');
+      }
+    }
+
+    const now = new Date();
+    const driver2Wage = calc.supir_2.eligible ? calc.supir_2.total : null;
+
+    const row = await this.fleetEstimateModel.create({
+      kota_asal: dto.kota_asal.trim(),
+      kota_tujuan: dto.kota_tujuan.trim(),
+      trip_type: dto.trip_type,
+      road_type: dto.road_type,
+      distance_km: dto.distance_km,
+      distance_km_effective: calc.distance_km_effective,
+      vehicle_type: calc.vehicle_type,
+      driver_1_user_id: dto.driver_1_user_id ?? null,
+      driver_2_user_id: dto.driver_2_user_id ?? null,
+      driver_1_wage: calc.supir_1.total,
+      driver_2_wage: driver2Wage,
+      fuel_estimate: calc.bbm.total,
+      grand_total_operational: calc.grand_total_operational,
+      driver_1_account_no: dto.driver_1_account_no?.trim() || null,
+      driver_2_account_no: dto.driver_2_account_no?.trim() || null,
+      loading_photo_file_log_id: dto.loading_photo_file_log_id ?? null,
+      approval_status: 'pending',
+      approved_by_user_id: null,
+      approved_at: null,
+      departure_id: null,
+      created_by_user_id: createdByUserId,
+      created_at: now,
+      updated_at: now,
+    } as any);
+
+    return {
+      success: true,
+      message: 'Fleet estimate berhasil dibuat',
+      data: {
+        id: row.id,
+        approval_status: 'pending',
+        breakdown: calc,
+      },
+    };
   }
 }
 

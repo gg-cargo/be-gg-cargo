@@ -9,5 +9,6 @@ import { Hub } from '../models/hub.model';
     imports: [SequelizeModule.forFeature([City, Hub])],
     controllers: [CityController],
     providers: [CityService],
+    exports: [CityService],
 })
 export class CityModule { }

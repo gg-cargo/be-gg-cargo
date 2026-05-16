@@ -41,3 +41,4 @@ export * from './job-assign.model';
 export * from './order-manifest-inbound.model';
 export * from './order-kendala.model';
 export * from './vendor.model';
+export * from './fleet-estimate.model';

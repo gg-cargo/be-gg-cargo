@@ -7,10 +7,22 @@ import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderHistory } from '../models/order-history.model';
 import { Vendor } from '../models/vendor.model';
 import { Hub } from '../models/hub.model';
+import { FleetEstimate } from '../models/fleet-estimate.model';
+import { User } from '../models/user.model';
+import { FileLog } from '../models/file-log.model';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([Order, OrderPickupDriver, OrderHistory, Vendor, Hub]),
+    SequelizeModule.forFeature([
+      Order,
+      OrderPickupDriver,
+      OrderHistory,
+      Vendor,
+      Hub,
+      FleetEstimate,
+      User,
+      FileLog,
+    ]),
   ],
   controllers: [FleetController],
   providers: [FleetService],
