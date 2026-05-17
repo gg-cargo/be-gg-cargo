@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   Request,
@@ -19,6 +20,7 @@ import { FleetShipmentsQueryDto, FleetShipmentsResponseDto } from './dto/fleet-s
 import { FleetDashboardSummaryResponseDto } from './dto/fleet-dashboard-summary.dto';
 import { FleetEstimateDto } from './dto/fleet-estimate.dto';
 import { CreateFleetEstimateDto } from './dto/create-fleet-estimate.dto';
+import { UpdateFleetEstimateApprovalDto } from './dto/update-fleet-estimate-approval.dto';
 import { ListFleetEstimatesQueryDto } from './dto/list-fleet-estimates-query.dto';
 import { ListFleetEstimatesResponseDto } from './dto/fleet-estimate-item.dto';
 import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
@@ -81,6 +83,21 @@ export class FleetController {
       throw new UnauthorizedException('User tidak terautentikasi');
     }
     return this.fleetService.createFleetEstimate(dto, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('estimates/:id/approval-status')
+  @HttpCode(HttpStatus.OK)
+  async updateFleetEstimateApprovalStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateFleetEstimateApprovalDto,
+    @Request() req: { user?: { id?: number } },
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('User tidak terautentikasi');
+    }
+    return this.fleetService.updateFleetEstimateApprovalStatus(id, dto, userId);
   }
 
   @UseGuards(JwtAuthGuard)

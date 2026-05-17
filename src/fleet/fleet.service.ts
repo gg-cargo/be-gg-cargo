@@ -27,6 +27,7 @@ import {
 } from './dto/fleet-dashboard-summary.dto';
 import { FleetEstimateDto } from './dto/fleet-estimate.dto';
 import { CreateFleetEstimateDto } from './dto/create-fleet-estimate.dto';
+import { UpdateFleetEstimateApprovalDto } from './dto/update-fleet-estimate-approval.dto';
 import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
 import { calculateFleetOperationalEstimate } from './fleet-estimate.calculator';
 import { ListFleetEstimatesQueryDto } from './dto/list-fleet-estimates-query.dto';
@@ -620,6 +621,63 @@ export class FleetService {
       created_by_user_id: row.getDataValue('created_by_user_id') ?? null,
       created_at: row.getDataValue('created_at'),
       updated_at: row.getDataValue('updated_at') ?? null,
+    };
+  }
+
+  /**
+   * Ubah approval_status fleet estimate (pending → approved / rejected).
+   */
+  async updateFleetEstimateApprovalStatus(
+    id: number,
+    dto: UpdateFleetEstimateApprovalDto,
+    approvedByUserId: number,
+  ) {
+    const row = await this.fleetEstimateModel.findByPk(id, {
+      include: [
+        { association: 'driver1', attributes: ['id', 'name', 'phone'], required: false },
+        { association: 'driver2', attributes: ['id', 'name', 'phone'], required: false },
+        {
+          association: 'loadingPhoto',
+          attributes: ['id', 'file_path', 'file_name'],
+          required: false,
+        },
+      ],
+    });
+
+    if (!row) {
+      throw new NotFoundException('Fleet estimate tidak ditemukan');
+    }
+
+    const currentStatus = row.getDataValue('approval_status');
+    if (currentStatus !== 'pending') {
+      throw new BadRequestException(
+        `Fleet estimate sudah berstatus ${currentStatus} dan tidak dapat diubah lagi`,
+      );
+    }
+
+    const approver = await this.userModel.findByPk(approvedByUserId);
+    if (!approver) {
+      throw new BadRequestException('User approver tidak ditemukan');
+    }
+
+    const now = new Date();
+    await row.update({
+      approval_status: dto.approval_status,
+      approved_by_user_id: approvedByUserId,
+      approved_at: now,
+      updated_at: now,
+    });
+
+    this.logger.log(
+      `Fleet estimate approval diupdate: id=${id}, status=${dto.approval_status}, by=${approvedByUserId}`,
+    );
+
+    const statusLabel = dto.approval_status === 'approved' ? 'disetujui' : 'ditolak';
+
+    return {
+      success: true,
+      message: `Fleet estimate berhasil ${statusLabel}`,
+      data: this.mapFleetEstimateRow(row),
     };
   }
 
