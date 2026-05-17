@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { QueryTypes, Sequelize } from 'sequelize';
+import { Op, QueryTypes, Sequelize } from 'sequelize';
 import { Order } from '../models/order.model';
 import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderHistory } from '../models/order-history.model';
@@ -23,6 +23,11 @@ import { FleetEstimateDto } from './dto/fleet-estimate.dto';
 import { CreateFleetEstimateDto } from './dto/create-fleet-estimate.dto';
 import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
 import { calculateFleetOperationalEstimate } from './fleet-estimate.calculator';
+import { ListFleetEstimatesQueryDto } from './dto/list-fleet-estimates-query.dto';
+import {
+  FleetEstimateItemDto,
+  ListFleetEstimatesResponseDto,
+} from './dto/fleet-estimate-item.dto';
 
 @Injectable()
 export class FleetService {
@@ -496,6 +501,114 @@ export class FleetService {
       this.logger.warn(`Fleet estimate failed: ${msg}`);
       throw new BadRequestException(msg);
     }
+  }
+
+  /**
+   * Daftar fleet estimates dengan pagination dan filter opsional.
+   */
+  async listFleetEstimates(query: ListFleetEstimatesQueryDto): Promise<ListFleetEstimatesResponseDto> {
+    const page = query.page && query.page > 0 ? query.page : 1;
+    const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 20;
+    const offset = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (query.approval_status) {
+      where.approval_status = query.approval_status;
+    }
+
+    if (query.created_by_user_id != null) {
+      where.created_by_user_id = query.created_by_user_id;
+    }
+
+    if (query.search) {
+      const term = `%${query.search}%`;
+      where[Op.or] = [
+        { kota_asal: { [Op.like]: term } },
+        { kota_tujuan: { [Op.like]: term } },
+        { vehicle_type: { [Op.like]: term } },
+      ];
+    }
+
+    const { count, rows } = await this.fleetEstimateModel.findAndCountAll({
+      where,
+      include: [
+        { association: 'driver1', attributes: ['id', 'name', 'phone'], required: false },
+        { association: 'driver2', attributes: ['id', 'name', 'phone'], required: false },
+        {
+          association: 'loadingPhoto',
+          attributes: ['id', 'file_path', 'file_name'],
+          required: false,
+        },
+      ],
+      order: [['created_at', 'DESC']],
+      limit,
+      offset,
+    });
+
+    return {
+      page,
+      limit,
+      total: count,
+      data: rows.map((row) => this.mapFleetEstimateRow(row)),
+    };
+  }
+
+  private mapFleetEstimateRow(row: FleetEstimate): FleetEstimateItemDto {
+    const driver1 = row.getDataValue('driver1') as User | undefined;
+    const driver2 = row.getDataValue('driver2') as User | undefined;
+    const loadingPhoto = row.getDataValue('loadingPhoto') as FileLog | undefined;
+
+    return {
+      id: Number(row.getDataValue('id')),
+      kota_asal: row.getDataValue('kota_asal'),
+      kota_tujuan: row.getDataValue('kota_tujuan'),
+      trip_type: row.getDataValue('trip_type'),
+      road_type: row.getDataValue('road_type'),
+      distance_km: Number(row.getDataValue('distance_km')),
+      distance_km_effective: Number(row.getDataValue('distance_km_effective')),
+      vehicle_type: row.getDataValue('vehicle_type'),
+      driver_1_user_id: row.getDataValue('driver_1_user_id') ?? null,
+      driver_2_user_id: row.getDataValue('driver_2_user_id') ?? null,
+      driver_1: driver1
+        ? {
+            id: Number(driver1.getDataValue('id')),
+            name: driver1.getDataValue('name'),
+            phone: driver1.getDataValue('phone'),
+          }
+        : null,
+      driver_2: driver2
+        ? {
+            id: Number(driver2.getDataValue('id')),
+            name: driver2.getDataValue('name'),
+            phone: driver2.getDataValue('phone'),
+          }
+        : null,
+      driver_1_wage: Number(row.getDataValue('driver_1_wage')),
+      driver_2_wage:
+        row.getDataValue('driver_2_wage') != null
+          ? Number(row.getDataValue('driver_2_wage'))
+          : null,
+      fuel_estimate: Number(row.getDataValue('fuel_estimate')),
+      grand_total_operational: Number(row.getDataValue('grand_total_operational')),
+      driver_1_account_no: row.getDataValue('driver_1_account_no') ?? null,
+      driver_2_account_no: row.getDataValue('driver_2_account_no') ?? null,
+      loading_photo_file_log_id: row.getDataValue('loading_photo_file_log_id') ?? null,
+      loading_photo: loadingPhoto
+        ? {
+            id: Number(loadingPhoto.getDataValue('id')),
+            file_path: loadingPhoto.getDataValue('file_path'),
+            file_name: loadingPhoto.getDataValue('file_name'),
+          }
+        : null,
+      approval_status: row.getDataValue('approval_status'),
+      approved_by_user_id: row.getDataValue('approved_by_user_id') ?? null,
+      approved_at: row.getDataValue('approved_at') ?? null,
+      departure_id: row.getDataValue('departure_id') ?? null,
+      created_by_user_id: row.getDataValue('created_by_user_id') ?? null,
+      created_at: row.getDataValue('created_at'),
+      updated_at: row.getDataValue('updated_at') ?? null,
+    };
   }
 
   /**

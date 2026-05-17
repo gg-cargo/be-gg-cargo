@@ -16,6 +16,8 @@ import { FleetShipmentsQueryDto, FleetShipmentsResponseDto } from './dto/fleet-s
 import { FleetDashboardSummaryResponseDto } from './dto/fleet-dashboard-summary.dto';
 import { FleetEstimateDto } from './dto/fleet-estimate.dto';
 import { CreateFleetEstimateDto } from './dto/create-fleet-estimate.dto';
+import { ListFleetEstimatesQueryDto } from './dto/list-fleet-estimates-query.dto';
+import { ListFleetEstimatesResponseDto } from './dto/fleet-estimate-item.dto';
 import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
 
 @Controller('fleet')
@@ -46,6 +48,19 @@ export class FleetController {
       throw new UnauthorizedException('User tidak terautentikasi');
     }
     return this.fleetService.estimateOperationalCost(dto, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('estimates')
+  async listFleetEstimates(
+    @Query() query: ListFleetEstimatesQueryDto,
+  ): Promise<{ success: boolean; message: string; data: ListFleetEstimatesResponseDto }> {
+    const data = await this.fleetService.listFleetEstimates(query);
+    return {
+      success: true,
+      message: 'Daftar fleet estimate berhasil diambil',
+      data,
+    };
   }
 
   /**
