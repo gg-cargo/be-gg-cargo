@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { col, fn, Op, QueryTypes, Sequelize, Transaction } from 'sequelize';
 import { Order } from '../models/order.model';
@@ -614,6 +620,36 @@ export class FleetService {
       created_by_user_id: row.getDataValue('created_by_user_id') ?? null,
       created_at: row.getDataValue('created_at'),
       updated_at: row.getDataValue('updated_at') ?? null,
+    };
+  }
+
+  /**
+   * Hapus fleet estimate (hanya status pending).
+   */
+  async deleteFleetEstimate(id: number) {
+    const row = await this.fleetEstimateModel.findByPk(id);
+    if (!row) {
+      throw new NotFoundException('Fleet estimate tidak ditemukan');
+    }
+
+    if (row.getDataValue('approval_status') !== 'pending') {
+      throw new BadRequestException(
+        'Fleet estimate hanya dapat dihapus saat status masih pending',
+      );
+    }
+
+    const nomorKeberangkatan = row.getDataValue('nomor_keberangkatan');
+    await row.destroy();
+
+    this.logger.log(`Fleet estimate dihapus: id=${id}, nomor=${nomorKeberangkatan}`);
+
+    return {
+      success: true,
+      message: 'Fleet estimate berhasil dihapus',
+      data: {
+        id,
+        nomor_keberangkatan: nomorKeberangkatan,
+      },
     };
   }
 

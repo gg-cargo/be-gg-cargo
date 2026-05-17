@@ -1,9 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseIntPipe,
   Post,
   Query,
   Request,
@@ -78,6 +81,13 @@ export class FleetController {
       throw new UnauthorizedException('User tidak terautentikasi');
     }
     return this.fleetService.createFleetEstimate(dto, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('estimates/:id')
+  @HttpCode(HttpStatus.OK)
+  async deleteFleetEstimate(@Param('id', ParseIntPipe) id: number) {
+    return this.fleetService.deleteFleetEstimate(id);
   }
 
   @UseGuards(JwtAuthGuard)
