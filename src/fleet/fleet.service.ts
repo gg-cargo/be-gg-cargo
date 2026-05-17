@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { Op, QueryTypes, Sequelize } from 'sequelize';
+import { col, fn, Op, QueryTypes, Sequelize, Transaction } from 'sequelize';
 import { Order } from '../models/order.model';
 import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderHistory } from '../models/order-history.model';
@@ -28,6 +28,10 @@ import {
   FleetEstimateItemDto,
   ListFleetEstimatesResponseDto,
 } from './dto/fleet-estimate-item.dto';
+import {
+  buildNomorKeberangkatan,
+  nomorKeberangkatanPrefixForDate,
+} from './helpers/generate-nomor-keberangkatan.helper';
 
 @Injectable()
 export class FleetService {
@@ -524,6 +528,7 @@ export class FleetService {
     if (query.search) {
       const term = `%${query.search}%`;
       where[Op.or] = [
+        { nomor_keberangkatan: { [Op.like]: term } },
         { kota_asal: { [Op.like]: term } },
         { kota_tujuan: { [Op.like]: term } },
         { vehicle_type: { [Op.like]: term } },
@@ -561,6 +566,7 @@ export class FleetService {
 
     return {
       id: Number(row.getDataValue('id')),
+      nomor_keberangkatan: row.getDataValue('nomor_keberangkatan'),
       kota_asal: row.getDataValue('kota_asal'),
       kota_tujuan: row.getDataValue('kota_tujuan'),
       trip_type: row.getDataValue('trip_type'),
@@ -612,6 +618,39 @@ export class FleetService {
   }
 
   /**
+   * Generate nomor keberangkatan unik (format KBR{YYMMDD}{seq}) dalam transaksi DB.
+   */
+  private async generateUniqueNomorKeberangkatan(
+    transaction: Transaction,
+    date: Date = new Date(),
+  ): Promise<string> {
+    const prefix = nomorKeberangkatanPrefixForDate(date);
+
+    const result = (await this.fleetEstimateModel.findOne({
+      attributes: [[fn('MAX', col('nomor_keberangkatan')), 'max_nomor']],
+      where: {
+        nomor_keberangkatan: { [Op.like]: `${prefix}%` },
+      },
+      lock: transaction.LOCK.UPDATE,
+      transaction,
+      raw: true,
+    })) as { max_nomor?: string | null } | null;
+
+    let nextSeq = 1;
+    if (result?.max_nomor) {
+      nextSeq = parseInt(String(result.max_nomor).slice(-3), 10) + 1;
+    }
+
+    if (nextSeq > 999) {
+      throw new InternalServerErrorException(
+        'Kuota nomor keberangkatan harian telah habis (maks 999 per hari)',
+      );
+    }
+
+    return buildNomorKeberangkatan(date, nextSeq);
+  }
+
+  /**
    * Simpan fleet estimate ke DB (status pending). Upah & BBM dari kalkulator yang sama dengan POST /fleet/estimate.
    */
   async createFleetEstimate(dto: CreateFleetEstimateDto, createdByUserId: number) {
@@ -648,37 +687,51 @@ export class FleetService {
     const now = new Date();
     const driver2Wage = calc.supir_2.eligible ? calc.supir_2.total : null;
 
-    const row = await this.fleetEstimateModel.create({
-      kota_asal: dto.kota_asal.trim(),
-      kota_tujuan: dto.kota_tujuan.trim(),
-      trip_type: dto.trip_type,
-      road_type: dto.road_type,
-      distance_km: dto.distance_km,
-      distance_km_effective: calc.distance_km_effective,
-      vehicle_type: calc.vehicle_type,
-      driver_1_user_id: dto.driver_1_user_id ?? null,
-      driver_2_user_id: dto.driver_2_user_id ?? null,
-      driver_1_wage: calc.supir_1.total,
-      driver_2_wage: driver2Wage,
-      fuel_estimate: calc.bbm.total,
-      grand_total_operational: calc.grand_total_operational,
-      driver_1_account_no: dto.driver_1_account_no?.trim() || null,
-      driver_2_account_no: dto.driver_2_account_no?.trim() || null,
-      loading_photo_file_log_id: dto.loading_photo_file_log_id ?? null,
-      approval_status: 'pending',
-      approved_by_user_id: null,
-      approved_at: null,
-      departure_id: null,
-      created_by_user_id: createdByUserId,
-      created_at: now,
-      updated_at: now,
-    } as any);
+    const sequelize = this.fleetEstimateModel.sequelize;
+    if (!sequelize) {
+      throw new InternalServerErrorException('Database connection tidak tersedia');
+    }
+
+    const row = await sequelize.transaction(async (transaction) => {
+      const nomor_keberangkatan = await this.generateUniqueNomorKeberangkatan(transaction, now);
+
+      return this.fleetEstimateModel.create(
+        {
+          nomor_keberangkatan,
+          kota_asal: dto.kota_asal.trim(),
+          kota_tujuan: dto.kota_tujuan.trim(),
+          trip_type: dto.trip_type,
+          road_type: dto.road_type,
+          distance_km: dto.distance_km,
+          distance_km_effective: calc.distance_km_effective,
+          vehicle_type: calc.vehicle_type,
+          driver_1_user_id: dto.driver_1_user_id ?? null,
+          driver_2_user_id: dto.driver_2_user_id ?? null,
+          driver_1_wage: calc.supir_1.total,
+          driver_2_wage: driver2Wage,
+          fuel_estimate: calc.bbm.total,
+          grand_total_operational: calc.grand_total_operational,
+          driver_1_account_no: dto.driver_1_account_no?.trim() || null,
+          driver_2_account_no: dto.driver_2_account_no?.trim() || null,
+          loading_photo_file_log_id: dto.loading_photo_file_log_id ?? null,
+          approval_status: 'pending',
+          approved_by_user_id: null,
+          approved_at: null,
+          departure_id: null,
+          created_by_user_id: createdByUserId,
+          created_at: now,
+          updated_at: now,
+        } as any,
+        { transaction },
+      );
+    });
 
     return {
       success: true,
       message: 'Fleet estimate berhasil dibuat',
       data: {
         id: row.id,
+        nomor_keberangkatan: row.getDataValue('nomor_keberangkatan'),
         approval_status: 'pending',
         breakdown: calc,
       },

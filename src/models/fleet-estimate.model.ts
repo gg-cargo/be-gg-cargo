@@ -21,6 +21,13 @@ export class FleetEstimate extends Model<FleetEstimate> {
   declare id: number;
 
   @Column({
+    type: DataType.STRING(30),
+    allowNull: false,
+    unique: true,
+  })
+  nomor_keberangkatan: string;
+
+  @Column({
     type: DataType.STRING(100),
     allowNull: false,
   })

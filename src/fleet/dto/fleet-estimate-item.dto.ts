@@ -14,6 +14,7 @@ export class FleetEstimateLoadingPhotoDto {
 
 export class FleetEstimateItemDto {
   id: number;
+  nomor_keberangkatan: string;
   kota_asal: string;
   kota_tujuan: string;
   trip_type: FleetEstimateTripType;
