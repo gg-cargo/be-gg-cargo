@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Req,
   UnauthorizedException,
@@ -14,6 +15,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UsersBankService } from './users-bank.service';
 import { CreateUsersBankDto } from './dto/create-users-bank.dto';
+import { UpdateUsersBankDto } from './dto/update-users-bank.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users-bank')
@@ -48,5 +50,14 @@ export class UsersBankController {
       throw new UnauthorizedException('User tidak terautentikasi');
     }
     return this.usersBankService.findAllByUser(userId);
+  }
+
+  @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUsersBankDto,
+  ) {
+    return this.usersBankService.update(id, dto);
   }
 }
