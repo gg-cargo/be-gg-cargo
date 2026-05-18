@@ -61,4 +61,20 @@ export class UsersBankService {
       data: rows.map((row) => this.mapRow(row)),
     };
   }
+
+  async findOneById(id: number, userId: number) {
+    const row = await this.usersBankModel.findOne({
+      where: { id, id_user: String(userId) },
+    });
+
+    if (!row) {
+      throw new NotFoundException('Data rekening bank tidak ditemukan');
+    }
+
+    return {
+      success: true,
+      message: 'Detail rekening bank berhasil diambil',
+      data: this.mapRow(row),
+    };
+  }
 }

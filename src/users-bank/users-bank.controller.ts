@@ -4,6 +4,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseIntPipe,
   Post,
   Req,
   UnauthorizedException,
@@ -35,5 +37,17 @@ export class UsersBankController {
       throw new UnauthorizedException('User tidak terautentikasi');
     }
     return this.usersBankService.findAllByUser(userId);
+  }
+
+  @Get(':id')
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: { user?: { id?: number } },
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('User tidak terautentikasi');
+    }
+    return this.usersBankService.findOneById(id, userId);
   }
 }
