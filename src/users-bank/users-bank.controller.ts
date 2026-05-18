@@ -39,15 +39,14 @@ export class UsersBankController {
     return this.usersBankService.findAllByUser(userId);
   }
 
-  @Get(':id')
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
+  @Get('user/:userId')
+  async findByUserId(
+    @Param('userId', ParseIntPipe) userId: number,
     @Req() req: { user?: { id?: number } },
   ) {
-    const userId = req.user?.id;
-    if (!userId) {
+    if (!req.user?.id) {
       throw new UnauthorizedException('User tidak terautentikasi');
     }
-    return this.usersBankService.findOneById(id, userId);
+    return this.usersBankService.findAllByUser(userId);
   }
 }

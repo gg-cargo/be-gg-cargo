@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { UsersBank } from '../models/users-bank.model';
 import { User } from '../models/user.model';
@@ -32,6 +32,15 @@ export class UsersBankService {
       throw new NotFoundException('User tidak ditemukan');
     }
 
+    const existing = await this.usersBankModel.findOne({
+      where: { id_user: String(userId) },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        'User ini sudah memiliki data rekening bank. Satu user hanya boleh satu rekening.',
+      );
+    }
+
     const row = await this.usersBankModel.create({
       id_user: String(userId),
       code_bank: dto.code_bank?.trim() || null,
@@ -62,19 +71,4 @@ export class UsersBankService {
     };
   }
 
-  async findOneById(id: number, userId: number) {
-    const row = await this.usersBankModel.findOne({
-      where: { id, id_user: String(userId) },
-    });
-
-    if (!row) {
-      throw new NotFoundException('Data rekening bank tidak ditemukan');
-    }
-
-    return {
-      success: true,
-      message: 'Detail rekening bank berhasil diambil',
-      data: this.mapRow(row),
-    };
-  }
 }
