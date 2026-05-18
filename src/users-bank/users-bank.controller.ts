@@ -24,12 +24,8 @@ export class UsersBankController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreateUsersBankDto, @Req() req: { user?: { id?: number } }) {
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new UnauthorizedException('User tidak terautentikasi');
-    }
-    return this.usersBankService.create(dto, userId);
+  async create(@Body() dto: CreateUsersBankDto) {
+    return this.usersBankService.create(dto);
   }
 
   @Get()

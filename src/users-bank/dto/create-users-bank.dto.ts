@@ -2,6 +2,11 @@ import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateUsersBankDto {
   @IsString()
+  @IsNotEmpty({ message: 'id_user wajib diisi' })
+  @MaxLength(50, { message: 'id_user maksimal 50 karakter' })
+  id_user: string;
+
+  @IsString()
   @IsOptional()
   @MaxLength(50, { message: 'code_bank maksimal 50 karakter' })
   code_bank?: string;

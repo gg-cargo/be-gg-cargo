@@ -27,14 +27,20 @@ export class UsersBankService {
     };
   }
 
-  async create(dto: CreateUsersBankDto, userId: number) {
-    const user = await this.userModel.findByPk(userId);
+  async create(dto: CreateUsersBankDto) {
+    const idUser = dto.id_user.trim();
+    const userPk = Number(idUser);
+    if (!idUser || Number.isNaN(userPk) || userPk <= 0) {
+      throw new BadRequestException('id_user tidak valid');
+    }
+
+    const user = await this.userModel.findByPk(userPk);
     if (!user) {
       throw new NotFoundException('User tidak ditemukan');
     }
 
     const existing = await this.usersBankModel.findOne({
-      where: { id_user: String(userId) },
+      where: { id_user: idUser },
     });
     if (existing) {
       throw new BadRequestException(
@@ -43,7 +49,7 @@ export class UsersBankService {
     }
 
     const row = await this.usersBankModel.create({
-      id_user: String(userId),
+      id_user: idUser,
       code_bank: dto.code_bank?.trim() || null,
       nama_bank: dto.nama_bank.trim(),
       nama_pemilik_rekening: dto.nama_pemilik_rekening.trim(),
