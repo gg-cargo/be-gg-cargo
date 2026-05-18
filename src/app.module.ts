@@ -16,6 +16,7 @@ import { FileModule } from './file/file.module';
 import { HealthModule } from './health/health.module';
 import { HubsModule } from './hubs/hubs.module';
 import { UsersAddressModule } from './users-address/users-address.module';
+import { UsersBankModule } from './users-bank/users-bank.module';
 import { PaymentsModule } from './payments/payments.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { databaseConfig } from './config/database';
@@ -58,6 +59,7 @@ import { CustomerCompaniesModule } from './customer-companies/customer-companies
     HealthModule,
     HubsModule,
     UsersAddressModule,
+    UsersBankModule,
     PaymentsModule,
     InvoicesModule,
     WhatsappModule,
