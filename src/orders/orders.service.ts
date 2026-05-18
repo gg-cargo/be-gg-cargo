@@ -908,6 +908,7 @@ export class OrdersService {
             if (q.search) {
                 where[Op.or] = [
                     { no_tracking: { [Op.like]: `%${q.search}%` } },
+                    { no_referensi: { [Op.like]: `%${q.search}%` } },
                     { nama_pengirim: { [Op.like]: `%${q.search}%` } },
                     { nama_penerima: { [Op.like]: `%${q.search}%` } },
                 ];
@@ -942,6 +943,7 @@ export class OrdersService {
                 attributes: [
                     'id',
                     'no_tracking',
+                    'no_referensi',
                     'nama_pengirim',
                     'nama_penerima',
                     'status',
@@ -1001,6 +1003,7 @@ export class OrdersService {
             const data = rows.map((r: any) => ({
                 id: r.id,
                 tracking: r.no_tracking,
+                no_referensi: r.no_referensi ?? null,
                 pengirim: r.nama_pengirim,
                 penerima: r.nama_penerima,
                 transporter: r.transporter_name || null,
@@ -3884,6 +3887,7 @@ export class OrdersService {
             truck_type: order.getDataValue('truck_type'),
             pickup_time: order.getDataValue('pickup_time') ? new Date(order.getDataValue('pickup_time')).toISOString() : null,
             keterangan_barang: order.getDataValue('nama_barang'),
+            no_referensi: order.getDataValue('no_referensi') ?? null,
             asuransi: order.getDataValue('asuransi') === 1,
         };
 
@@ -9550,6 +9554,7 @@ export class OrdersService {
                 kodepos_penerima: kodeposPenerima,
                 no_telepon_penerima: createTruckRentalDto.no_telepon_penerima,
                 nama_barang: createTruckRentalDto.keterangan_barang || "Muatan sewa truck",
+                no_referensi: createTruckRentalDto.no_referensi?.trim() || null,
                 harga_barang: 0, // Default untuk sewa truk
                 asuransi: asuransiValue,
                 total_harga: totalHargaFinal,
@@ -9726,6 +9731,7 @@ export class OrdersService {
                     total_harga: this.formatRupiah(totalHargaFinal),
                     estimasi_waktu: this.calculateEstimatedTime(selectedRoute.jarak_km),
                     keterangan_barang: createTruckRentalDto.keterangan_barang,
+                    no_referensi: newOrder.getDataValue('no_referensi') ?? null,
                     status: ORDER_STATUS.READY_FOR_PICKUP,
                     created_at: newOrder.created_at ? newOrder.created_at.toISOString() : new Date().toISOString()
                 }

@@ -14,6 +14,7 @@ export class CreateTruckRentalOrderResponseDto {
         total_harga: string;
         estimasi_waktu: string;
         keterangan_barang?: string;
+        no_referensi?: string | null;
         status: string;
         created_at: string;
     };

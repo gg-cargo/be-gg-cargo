@@ -123,6 +123,11 @@ export class CreateTruckRentalOrderDto {
     @MaxLength(200, { message: 'keterangan_barang maksimal 200 karakter' })
     keterangan_barang?: string;
 
+    @IsString()
+    @IsOptional()
+    @MaxLength(100, { message: 'no_referensi maksimal 100 karakter' })
+    no_referensi?: string;
+
     @IsNumber()
     @IsOptional()
     asuransi?: number;
