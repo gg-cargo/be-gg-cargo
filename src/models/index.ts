@@ -7,6 +7,7 @@ export * from './quotation.model';
 export * from './saldo.model';
 export * from './users-address.model';
 export * from './users-bank.model';
+export * from './api-usage-log.model';
 export * from './bank-list.model';
 export * from './city.model';
 export * from './service-center.model';

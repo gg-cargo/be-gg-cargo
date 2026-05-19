@@ -39,6 +39,7 @@ import { MasterServicesModule } from './services-master/services-master.module';
 import { BarangModule } from './barang/barang.module';
 import { FleetModule } from './fleet/fleet.module';
 import { CustomerCompaniesModule } from './customer-companies/customer-companies.module';
+import { RoutesCacheModule } from './routes-cache/routes-cache.module';
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { CustomerCompaniesModule } from './customer-companies/customer-companies
     // Fleet dashboard APIs
     FleetModule,
     CustomerCompaniesModule,
+    RoutesCacheModule,
   ],
   controllers: [AppController],
   providers: [AppService],

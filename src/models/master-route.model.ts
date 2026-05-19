@@ -47,6 +47,31 @@ export class MasterRoute extends Model<MasterRoute> {
   @Column({ type: DataType.INTEGER, allowNull: false, defaultValue: 0 })
   default_duration_min: number;
 
+  @Column({ type: DataType.DOUBLE, allowNull: true })
+  distance_km_toll: number | null;
+
+  @Column({ type: DataType.DOUBLE, allowNull: true })
+  distance_km_non_toll: number | null;
+
+  @Column({ type: DataType.DOUBLE, allowNull: true })
+  duration_min_toll: number | null;
+
+  @Column({ type: DataType.DOUBLE, allowNull: true })
+  duration_min_non_toll: number | null;
+
+  @Column({ type: DataType.BIGINT.UNSIGNED, allowNull: true })
+  toll_cost_estimate_idr: number | null;
+
+  @Column({
+    type: DataType.ENUM('google', 'mapbox', 'fallback', 'manual'),
+    allowNull: false,
+    defaultValue: 'fallback',
+  })
+  google_routes_source: 'google' | 'mapbox' | 'fallback' | 'manual';
+
+  @Column({ type: DataType.DATE, allowNull: true })
+  google_routes_refreshed_at: Date | null;
+
   @ForeignKey(() => User)
   @Column({ type: DataType.BIGINT.UNSIGNED, allowNull: true })
   created_by: number;

@@ -23,23 +23,21 @@ export class RatesService {
             // Coba gunakan Mapbox API jika token tersedia
             if (this.mapboxAccessToken) {
                 try {
-                    // Ambil jarak dan durasi untuk rute non-tol (jika diperlukan)
                     if (needNonToll) {
                         const nonTollData = await this.getDistanceFromMapbox(
                             originLatLng,
                             destinationLatLng,
-                            true // exclude toll
+                            true,
                         );
                         nonTollDistance = nonTollData.distance;
                         nonTollDuration = nonTollData.duration;
                     }
 
-                    // Ambil jarak dan durasi untuk rute tol (jika diperlukan)
                     if (needToll) {
                         const tollData = await this.getDistanceFromMapbox(
                             originLatLng,
                             destinationLatLng,
-                            false // include toll
+                            false,
                         );
                         tollDistance = tollData.distance;
                         tollDuration = tollData.duration;
@@ -48,21 +46,17 @@ export class RatesService {
                     this.logger.log('Successfully retrieved distances and durations from Mapbox API');
                 } catch (mapboxError) {
                     this.logger.warn('Mapbox API failed, using fallback calculation:', mapboxError.message);
-                    // Fallback ke perhitungan jarak manual
                     const fallbackDistances = this.calculateFallbackDistance(originLatLng, destinationLatLng);
                     nonTollDistance = fallbackDistances.nonToll;
                     tollDistance = fallbackDistances.toll;
-                    // Gunakan estimasi waktu berdasarkan jarak untuk fallback
                     nonTollDuration = this.estimateDurationFromDistance(nonTollDistance);
                     tollDuration = this.estimateDurationFromDistance(tollDistance);
                 }
             } else {
                 this.logger.warn('MAPBOX_ACCESS_TOKEN not configured, using fallback calculation');
-                // Fallback ke perhitungan jarak manual
                 const fallbackDistances = this.calculateFallbackDistance(originLatLng, destinationLatLng);
                 nonTollDistance = fallbackDistances.nonToll;
                 tollDistance = fallbackDistances.toll;
-                // Gunakan estimasi waktu berdasarkan jarak untuk fallback
                 nonTollDuration = this.estimateDurationFromDistance(nonTollDistance);
                 tollDuration = this.estimateDurationFromDistance(tollDistance);
             }
