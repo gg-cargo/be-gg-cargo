@@ -153,18 +153,22 @@ export class FileService {
     }
 
     async assignFile(id: number) {
-        const [affectedCount] = await this.fileLogModel.update(
-            { is_assigned: 1 },
-            { where: { id } }
-        );
-
-        if (affectedCount === 0) {
+        const row = await this.fileLogModel.findByPk(id);
+        if (!row) {
             throw new HttpException('File log tidak ditemukan', HttpStatus.NOT_FOUND);
         }
 
+        const alreadyAssigned = Number(row.getDataValue('is_assigned')) === 1;
+        if (!alreadyAssigned) {
+            await row.update({ is_assigned: 1 });
+        }
+
         return {
-            message: 'File berhasil diassign',
+            message: alreadyAssigned
+                ? 'File sudah diassign sebelumnya'
+                : 'File berhasil diassign',
             data: {
+                id: row.getDataValue('id'),
                 is_assigned: 1,
             },
         };
