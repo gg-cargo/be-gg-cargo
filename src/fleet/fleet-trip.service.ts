@@ -28,6 +28,7 @@ import {
   FleetTripListResponseDto,
   FleetTripLoadingPhotosResponseDto,
   FleetTripResponseDto,
+  FleetTripNotaKirimDto,
 } from './dto/fleet-trip-response.dto';
 import { ListFleetTripsQueryDto } from './dto/list-fleet-trips-query.dto';
 import {
@@ -611,7 +612,99 @@ export class FleetTripService {
     }
 
     const bankByUserId = await this.loadDriverBankAccountsByTrip(trip);
-    return mapFleetTripToDetail(trip, bankByUserId);
+    const assignment = trip.getDataValue('assignment') as
+      | FleetTripAssignment
+      | undefined;
+    const platKendaraan = resolvePlatKendaraanForAssignment(
+      assignment,
+      bankByUserId,
+    );
+    const notaKirim = await this.loadNotaKirimForTrip(trip, platKendaraan);
+    return mapFleetTripToDetail(trip, bankByUserId, notaKirim);
+  }
+
+  /**
+   * Nota kirim terkait trip: mitra via transporter (driver), vendor via orders.vendor_id.
+   */
+  private async loadNotaKirimForTrip(
+    trip: FleetTrip,
+    platKendaraan?: string | null,
+  ): Promise<FleetTripNotaKirimDto[]> {
+    const assignment = trip.getDataValue('assignment') as
+      | FleetTripAssignment
+      | undefined;
+    if (!assignment) {
+      return [];
+    }
+
+    const assigneeType = assignment.getDataValue('assignee_type');
+    const platFilter = platKendaraan?.trim() || null;
+
+    if (assigneeType === 'vendor') {
+      const vendorId = assignment.getDataValue('vendor_id');
+      if (vendorId == null) {
+        return [];
+      }
+      return this.queryNotaKirimRows(
+        `SELECT DISTINCT
+           dn.no_delivery_note,
+           dn.tanggal,
+           dn.no_polisi,
+           dn.nama_transporter
+         FROM order_delivery_notes dn
+         INNER JOIN orders o ON TRIM(o.assign_sj) = dn.no_delivery_note
+         WHERE o.vendor_id = :vendorId
+           ${platFilter ? 'AND TRIM(dn.no_polisi) = :plat' : ''}
+         ORDER BY dn.id DESC
+         LIMIT 10`,
+        platFilter ? { vendorId, plat: platFilter } : { vendorId },
+      );
+    }
+
+    const driverIds = [
+      assignment.getDataValue('driver_1_user_id'),
+      assignment.getDataValue('driver_2_user_id'),
+    ].filter((id): id is number => id != null);
+
+    if (driverIds.length === 0) {
+      return [];
+    }
+
+    return this.queryNotaKirimRows(
+      `SELECT
+         no_delivery_note,
+         tanggal,
+         no_polisi,
+         nama_transporter
+       FROM order_delivery_notes
+       WHERE transporter_id IN (:driverIds)
+         ${platFilter ? 'AND TRIM(no_polisi) = :plat' : ''}
+       ORDER BY id DESC
+       LIMIT 10`,
+      platFilter ? { driverIds, plat: platFilter } : { driverIds },
+    );
+  }
+
+  private async queryNotaKirimRows(
+    sql: string,
+    replacements: Record<string, unknown>,
+  ): Promise<FleetTripNotaKirimDto[]> {
+    const rows = (await this.sequelize.query(sql, {
+      replacements,
+      type: QueryTypes.SELECT,
+    })) as {
+      no_delivery_note: string;
+      tanggal: Date | null;
+      no_polisi: string | null;
+      nama_transporter: string | null;
+    }[];
+
+    return rows.map((row) => ({
+      no_delivery_note: String(row.no_delivery_note),
+      tanggal: row.tanggal ?? null,
+      no_polisi: row.no_polisi?.trim() || null,
+      nama_transporter: row.nama_transporter?.trim() || null,
+    }));
   }
 
   private async loadDriverBankAccountsByTrip(

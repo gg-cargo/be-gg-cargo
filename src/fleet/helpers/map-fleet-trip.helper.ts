@@ -10,6 +10,7 @@ import {
   FleetTripDetailDto,
   FleetTripListItemDto,
   FleetTripLoadingPhotoDto,
+  FleetTripNotaKirimDto,
 } from '../dto/fleet-trip-response.dto';
 
 function val<T>(row: { getDataValue(key: string): unknown }, key: string): T {
@@ -144,6 +145,7 @@ function mapLoadingPhotos(photoRows: FleetTripLoadingPhoto[]) {
 export function mapFleetTripToDetail(
   trip: FleetTrip,
   bankByUserId: Record<string, string> = {},
+  notaKirim: FleetTripNotaKirimDto[] = [],
 ): FleetTripDetailDto {
   const waypointRows =
     (trip.getDataValue('waypoints') as FleetTripWaypoint[] | undefined) ?? [];
@@ -184,6 +186,7 @@ export function mapFleetTripToDetail(
     assignment: mapFleetTripAssignment(assignmentRow, bankByUserId),
     file_log_ids,
     loading_photos,
+    nota_kirim: notaKirim,
     approve_status: val<string>(trip, 'approve_status') ?? 'pending',
     approve_by_user_id: val<number | null>(trip, 'approve_by_user_id'),
     approve_at: val<Date | null>(trip, 'approve_at'),

@@ -74,6 +74,13 @@ export class FleetTripLoadingPhotoDto {
   file_name: string;
 }
 
+export class FleetTripNotaKirimDto {
+  no_delivery_note: string;
+  tanggal: Date | null;
+  no_polisi: string | null;
+  nama_transporter: string | null;
+}
+
 export class FleetTripLoadingPhotosDataDto {
   loading_photos: FleetTripLoadingPhotoDto[];
 }
@@ -94,6 +101,7 @@ export class FleetTripDetailDto {
   assignment: FleetTripAssignmentResponseDto;
   file_log_ids: number[];
   loading_photos: FleetTripLoadingPhotoDto[];
+  nota_kirim: FleetTripNotaKirimDto[];
   approve_status: string;
   approve_by_user_id: number | null;
   approve_at: Date | null;
