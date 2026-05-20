@@ -5,7 +5,6 @@ import { FleetTripAssignment } from '../../models/fleet-trip-assignment.model';
 import { FleetTripLoadingPhoto } from '../../models/fleet-trip-loading-photo.model';
 import { FileLog } from '../../models/file-log.model';
 import { User } from '../../models/user.model';
-import { Vendor } from '../../models/vendor.model';
 import {
   FleetTripDetailDto,
   FleetTripListItemDto,
@@ -80,7 +79,7 @@ export function mapFleetTripAssignment(
 
   const driver1 = a.getDataValue('driver1') as User | undefined;
   const driver2 = a.getDataValue('driver2') as User | undefined;
-  const vendor = a.getDataValue('vendor') as Vendor | undefined;
+  const vendorUser = a.getDataValue('vendorUser') as User | undefined;
   const driver1UserId = val<number | null>(a, 'driver_1_user_id');
   const driver2UserId = val<number | null>(a, 'driver_2_user_id');
   const assigneeType = val<string>(a, 'assignee_type');
@@ -100,11 +99,11 @@ export function mapFleetTripAssignment(
       ? bankByUserId[String(driver2UserId)] ?? null
       : null,
     vendor_id: val<number | null>(a, 'vendor_id'),
-    vendor_name: isVendor && vendor ? val<string>(vendor, 'nama_vendor') : null,
-    vendor_pic_nama: isVendor && vendor ? val<string>(vendor, 'pic_nama') : null,
+    vendor_name: isVendor && vendorUser ? val<string>(vendorUser, 'name') : null,
+    vendor_pic_nama: isVendor && vendorUser ? val<string>(vendorUser, 'name') : null,
     vendor_pic_telepon:
-      isVendor && vendor ? val<string>(vendor, 'pic_telepon') : null,
-    vendor_pic_email: isVendor && vendor ? val<string>(vendor, 'pic_email') : null,
+      isVendor && vendorUser ? val<string>(vendorUser, 'phone') : null,
+    vendor_pic_email: isVendor && vendorUser ? val<string>(vendorUser, 'email') : null,
   };
 }
 

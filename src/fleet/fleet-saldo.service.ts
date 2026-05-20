@@ -11,7 +11,6 @@ import { FleetTrip } from '../models/fleet-trip.model';
 import { FleetTripAssignment } from '../models/fleet-trip-assignment.model';
 import { Saldo } from '../models/saldo.model';
 import { User } from '../models/user.model';
-import { Vendor } from '../models/vendor.model';
 import {
   FleetEstimateRoadType,
   FleetEstimateTripType,
@@ -34,7 +33,6 @@ export class FleetSaldoService {
     private readonly assignmentModel: typeof FleetTripAssignment,
     @InjectModel(Saldo) private readonly saldoModel: typeof Saldo,
     @InjectModel(User) private readonly userModel: typeof User,
-    @InjectModel(Vendor) private readonly vendorModel: typeof Vendor,
   ) {}
 
   /**
@@ -70,8 +68,8 @@ export class FleetSaldoService {
               required: false,
             },
             {
-              association: 'vendor',
-              attributes: ['id', 'nama_vendor'],
+              association: 'vendorUser',
+              attributes: ['id', 'name', 'phone', 'email', 'type_transporter'],
               required: false,
             },
           ],
@@ -106,9 +104,17 @@ export class FleetSaldoService {
           'vendor_id wajib pada assignment trip vendor',
         );
       }
-      const vendor = await this.vendorModel.findByPk(vendorId);
-      if (!vendor) {
+      const vendorUser = await this.userModel.findByPk(vendorId);
+      if (!vendorUser) {
         throw new BadRequestException('vendor_id tidak ditemukan');
+      }
+      const typeTransporter = String(vendorUser.getDataValue('type_transporter') ?? '')
+        .trim()
+        .toLowerCase();
+      if (typeTransporter !== 'vendor') {
+        throw new BadRequestException(
+          'vendor_id harus merujuk ke user dengan type_transporter vendor',
+        );
       }
     }
 

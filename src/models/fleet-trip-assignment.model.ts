@@ -8,7 +8,6 @@ import {
 } from 'sequelize-typescript';
 import { FleetTrip } from './fleet-trip.model';
 import { User } from './user.model';
-import { Vendor } from './vendor.model';
 
 export type FleetTripAssigneeType = 'mitra' | 'vendor';
 
@@ -47,7 +46,8 @@ export class FleetTripAssignment extends Model<FleetTripAssignment> {
   @Column({ type: DataType.BIGINT.UNSIGNED, allowNull: true })
   declare driver_2_user_id: number | null;
 
-  @ForeignKey(() => Vendor)
+  /** User transporter dengan type_transporter = vendor */
+  @ForeignKey(() => User)
   @Column({ type: DataType.BIGINT.UNSIGNED, allowNull: true })
   declare vendor_id: number | null;
 
@@ -63,6 +63,6 @@ export class FleetTripAssignment extends Model<FleetTripAssignment> {
   @BelongsTo(() => User, { foreignKey: 'driver_2_user_id', as: 'driver2' })
   driver2: User;
 
-  @BelongsTo(() => Vendor, { foreignKey: 'vendor_id', as: 'vendor' })
-  vendor: Vendor;
+  @BelongsTo(() => User, { foreignKey: 'vendor_id', as: 'vendorUser' })
+  vendorUser: User;
 }

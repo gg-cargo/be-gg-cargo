@@ -226,7 +226,7 @@ export class FleetTripAssignmentDto {
 
   @ValidateIf((o) => o.assignee_type === FleetTripAssigneeTypeDto.VENDOR)
   @Type(() => Number)
-  @IsNumber({}, { message: 'vendor_id harus angka' })
+  @IsNumber({}, { message: 'vendor_id harus angka (users.id transporter vendor)' })
   vendor_id?: number;
 }
 

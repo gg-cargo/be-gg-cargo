@@ -16,7 +16,7 @@ import { FleetTripLoadingPhoto } from '../models/fleet-trip-loading-photo.model'
 import { FileLog } from '../models/file-log.model';
 import { UsersBank } from '../models/users-bank.model';
 import { User } from '../models/user.model';
-import { Vendor } from '../models/vendor.model';
+import { TRANSPORTER_TYPES } from '../transporters/constants/transporter-type.constants';
 import { UpdateFleetTripLoadingPhotosDto } from './dto/update-fleet-trip-loading-photos.dto';
 import { UpdateFleetTripApproveStatusDto } from './dto/update-fleet-trip-approve-status.dto';
 import {
@@ -61,8 +61,6 @@ export class FleetTripService {
     private readonly assignmentModel: typeof FleetTripAssignment,
     @InjectModel(User)
     private readonly userModel: typeof User,
-    @InjectModel(Vendor)
-    private readonly vendorModel: typeof Vendor,
     @InjectModel(FleetTripLoadingPhoto)
     private readonly loadingPhotoModel: typeof FleetTripLoadingPhoto,
     @InjectModel(FileLog)
@@ -70,7 +68,7 @@ export class FleetTripService {
     @InjectModel(UsersBank)
     private readonly usersBankModel: typeof UsersBank,
     private readonly sequelize: Sequelize,
-  ) {}
+  ) { }
 
   async create(
     dto: CreateFleetTripDto,
@@ -571,15 +569,9 @@ export class FleetTripService {
               required: false,
             },
             {
-              model: Vendor,
-              as: 'vendor',
-              attributes: [
-                'id',
-                'nama_vendor',
-                'pic_nama',
-                'pic_telepon',
-                'pic_email',
-              ],
+              model: User,
+              as: 'vendorUser',
+              attributes: ['id', 'name', 'phone', 'email', 'type_transporter'],
               required: false,
             },
           ],
@@ -618,7 +610,7 @@ export class FleetTripService {
   }
 
   /**
-   * Nota kirim terkait trip: mitra via transporter (driver), vendor via orders.vendor_id.
+   * Nota kirim terkait trip: mitra & vendor via transporter_id (users).
    */
   private async loadNotaKirimForTrip(
     trip: FleetTrip,
@@ -634,33 +626,10 @@ export class FleetTripService {
     const assigneeType = assignment.getDataValue('assignee_type');
     const platFilter = platKendaraan?.trim() || null;
 
-    if (assigneeType === 'vendor') {
-      const vendorId = assignment.getDataValue('vendor_id');
-      if (vendorId == null) {
-        return [];
-      }
-      return this.queryNotaKirimRows(
-        `SELECT
-           dn.no_delivery_note,
-           dn.tanggal,
-           dn.no_polisi,
-           dn.nama_transporter
-         FROM order_delivery_notes dn
-         INNER JOIN (
-           SELECT MAX(dn2.id) AS max_id
-           FROM order_delivery_notes dn2
-           INNER JOIN orders o ON TRIM(o.assign_sj) = dn2.no_delivery_note
-           WHERE o.vendor_id = :vendorId
-             ${platFilter ? 'AND TRIM(dn2.no_polisi) = :plat' : ''}
-           GROUP BY dn2.no_delivery_note
-         ) latest ON latest.max_id = dn.id
-         ORDER BY dn.id DESC
-         LIMIT 10`,
-        platFilter ? { vendorId, plat: platFilter } : { vendorId },
-      );
-    }
-
     const driverIds = [
+      assigneeType === 'vendor'
+        ? assignment.getDataValue('vendor_id')
+        : null,
       assignment.getDataValue('driver_1_user_id'),
       assignment.getDataValue('driver_2_user_id'),
     ].filter((id): id is number => id != null);
@@ -813,10 +782,7 @@ export class FleetTripService {
           'driver_1_user_id wajib untuk assignee_type vendor',
         );
       }
-      const vendor = await this.vendorModel.findByPk(a.vendor_id);
-      if (!vendor) {
-        throw new BadRequestException('vendor_id tidak ditemukan');
-      }
+      await this.assertVendorUser(a.vendor_id);
       const d1 = await this.userModel.findByPk(a.driver_1_user_id);
       if (!d1) {
         throw new BadRequestException('driver_1_user_id tidak ditemukan');
@@ -828,6 +794,23 @@ export class FleetTripService {
         }
       }
     }
+  }
+
+  /** vendor_id = users.id dengan type_transporter vendor */
+  private async assertVendorUser(vendorUserId: number): Promise<User> {
+    const user = await this.userModel.findByPk(vendorUserId);
+    if (!user) {
+      throw new BadRequestException('vendor_id tidak ditemukan');
+    }
+    const typeTransporter = String(user.getDataValue('type_transporter') ?? '')
+      .trim()
+      .toLowerCase();
+    if (!(TRANSPORTER_TYPES as readonly string[]).includes(typeTransporter) || typeTransporter !== 'vendor') {
+      throw new BadRequestException(
+        'vendor_id harus merujuk ke user dengan type_transporter vendor',
+      );
+    }
+    return user;
   }
 
   private async generateUniqueTrackingNo(
