@@ -250,7 +250,7 @@ export class User extends Model {
   @Column({
     type: DataType.STRING(20),
     allowNull: true,
-    comment: '1: inhouse, 2:vendor/mitra',
+    comment: 'mitra | vendor (jenis transporter eksternal)',
   })
   type_transporter: string;
 

@@ -10,6 +10,11 @@ import { OrderDeliverDriver } from '../models/order-deliver-driver.model';
 import { AvailableTransportersQueryDto, AvailableTransportersResponseDto } from './dto/available-transporters.dto';
 import { Sequelize } from 'sequelize-typescript';
 import { UsersEmergencyContact } from '../models/users_emergency_contact.model';
+import {
+  TRANSPORTER_TYPES,
+  TransporterType,
+} from './constants/transporter-type.constants';
+import { RegisterTransporterDto } from './dto/register-transporter.dto';
 
 @Injectable()
 export class TransportersService {
@@ -105,6 +110,29 @@ export class TransportersService {
         return normalizedMode as 'darat' | 'laut' | 'udara';
     }
 
+    private normalizeTypeTransporter(
+        raw: unknown,
+        required: boolean,
+    ): TransporterType | null {
+        const value = String(raw ?? '')
+            .trim()
+            .toLowerCase();
+        if (!value) {
+            if (required) {
+                throw new BadRequestException(
+                    'type_transporter wajib diisi (mitra atau vendor)',
+                );
+            }
+            return null;
+        }
+        if ((TRANSPORTER_TYPES as readonly string[]).includes(value)) {
+            return value as TransporterType;
+        }
+        throw new BadRequestException(
+            'type_transporter harus mitra atau vendor',
+        );
+    }
+
     private validateAgentFields(mode: 'darat' | 'laut' | 'udara', agent: any) {
         if (mode === 'darat') return;
         if (!agent?.name || !agent?.address || !agent?.city || !agent?.phone) {
@@ -117,8 +145,8 @@ export class TransportersService {
         }
     }
 
-    async registerTransporter(body: any) {
-        const { email, phone, ktp, sim, foto_kurir_sim, foto_ktp, foto_sim, foto_kendaraan, kontak_emergency, alamat, kir, stnk, first_name, last_name, password, role, hub_id, transport_mode, agent_name, agent_address, agent_city, agent_phone, agent_email } = body;
+    async registerTransporter(body: RegisterTransporterDto) {
+        const { email, phone, ktp, sim, foto_kurir_sim, foto_ktp, foto_sim, foto_kendaraan, kontak_emergency, alamat, kir, stnk, first_name, last_name, password, role, hub_id, transport_mode, agent_name, agent_address, agent_city, agent_phone, agent_email, type_transporter } = body;
         if (!phone) throw new BadRequestException('Nomor telepon wajib diisi');
         if (!password) throw new BadRequestException('Password wajib diisi');
         let userLevel = 4;
@@ -126,11 +154,16 @@ export class TransportersService {
             if (![4, 8].includes(Number(role))) throw new BadRequestException('Role harus 4 (transporter) atau 8 (kurir)');
             userLevel = Number(role);
         }
+        const typeTransporter = this.normalizeTypeTransporter(
+            type_transporter,
+            userLevel === 4,
+        );
+        const nik = ktp?.nik != null ? String(ktp.nik) : '';
         const transportMode = this.normalizeTransportMode(transport_mode);
         if (transportMode !== 'darat' && userLevel !== 4) {
             throw new BadRequestException('Moda laut/udara hanya berlaku untuk role transporter');
         }
-        if (transportMode === 'darat' && !ktp?.nik) {
+        if (transportMode === 'darat' && !nik) {
             throw new BadRequestException('NIK wajib diisi untuk moda darat');
         }
         this.validateAgentFields(transportMode, {
@@ -143,12 +176,12 @@ export class TransportersService {
 
         const orConditions: any[] = [{ phone }];
         if (email) orConditions.push({ email });
-        if (ktp?.nik) orConditions.push({ nik: ktp.nik });
+        if (nik) orConditions.push({ nik });
         const existing = await this.userModel.findOne({
             where: { [Op.or]: orConditions },
         });
         if (existing) throw new BadRequestException('Email, phone, atau NIK sudah terdaftar');
-        if (ktp?.nik && !/^[0-9]{16}$/.test(ktp.nik)) throw new BadRequestException('Format NIK tidak valid');
+        if (nik && !/^[0-9]{16}$/.test(nik)) throw new BadRequestException('Format NIK tidak valid');
         const name = [first_name, last_name].filter(Boolean).join(' ') || agent_name;
         // Hash password before storing
         const bcrypt = require('bcryptjs');
@@ -163,6 +196,7 @@ export class TransportersService {
                 isApprove: 1,
                 aktif: 1,
                 level: userLevel,
+                type_transporter: typeTransporter,
                 hub_id: hub_id != null && hub_id !== '' ? Number(hub_id) : 0,
                 transport_mode: transportMode,
                 agent_name: transportMode === 'darat' ? null : agent_name,
@@ -171,7 +205,7 @@ export class TransportersService {
                 agent_phone: transportMode === 'darat' ? null : agent_phone,
                 agent_email: transportMode === 'darat' ? null : (agent_email ?? null),
                 // Field KTP sesuai body
-                nik: ktp?.nik,
+                nik: nik || undefined,
                 ktp_tempat_tanggal_lahir: ktp?.tempat_tanggal_lahir,
                 ktp_jenis_kelamin: ktp?.jenis_kelamin,
                 ktp_alamat: ktp?.alamat,
@@ -215,6 +249,7 @@ export class TransportersService {
                 aktif: user.aktif,
                 truck_id: truck ? truck.id : null,
                 role: user.level,
+                type_transporter: user.getDataValue('type_transporter'),
                 transport_mode: user.transport_mode,
                 agent_name: user.agent_name,
                 agent_address: user.agent_address,
@@ -242,7 +277,7 @@ export class TransportersService {
         const offset = (page - 1) * limit;
         const { count, rows } = await this.userModel.findAndCountAll({
             where,
-            attributes: ['id', 'name', 'phone', 'isApprove', 'level', 'hub_id', 'status_app', 'transport_mode', 'agent_name', 'agent_city', 'agent_phone', 'agent_email'],
+            attributes: ['id', 'name', 'phone', 'isApprove', 'level', 'hub_id', 'status_app', 'type_transporter', 'transport_mode', 'agent_name', 'agent_city', 'agent_phone', 'agent_email'],
             include: [
                 {
                     model: this.hubModel,
@@ -265,6 +300,7 @@ export class TransportersService {
                 hub_id: u.getDataValue('hub_id'),
                 hub_name: hub?.getDataValue?.('nama') ?? null,
                 role: u.getDataValue('level'),
+                type_transporter: u.getDataValue('type_transporter') ?? null,
                 transport_mode: u.getDataValue('transport_mode') ?? 'darat',
                 agent_name: u.getDataValue('agent_name'),
                 agent_city: u.getDataValue('agent_city'),
@@ -284,6 +320,7 @@ export class TransportersService {
                 'id', 'name', 'phone', 'email', 'level', 'nik', 'address', 'aktif', 'isApprove',
                 'ktp_tempat_tanggal_lahir', 'ktp_jenis_kelamin', 'ktp_alamat', 'ktp_agama', 'ktp_status_perkawinan',
                 'sim', 'sim_jenis', 'sim_nama_pemegang', 'url_foto_kurir_sim', 'url_foto_ktp', 'url_foto_sim',
+                'type_transporter',
                 'transport_mode', 'agent_name', 'agent_address', 'agent_city', 'agent_phone', 'agent_email',
             ],
             include: [
@@ -305,6 +342,7 @@ export class TransportersService {
             phone: user.getDataValue('phone'),
             email: user.getDataValue('email'),
             role: user.getDataValue('level'),
+            type_transporter: user.getDataValue('type_transporter') ?? null,
             transport_mode: user.getDataValue('transport_mode') ?? 'darat',
             agent_name: user.getDataValue('agent_name'),
             agent_address: user.getDataValue('agent_address'),
@@ -349,6 +387,7 @@ export class TransportersService {
             first_name, last_name, email, phone, password,
             ktp, sim, foto_kurir_sim, foto_ktp, foto_sim, foto_kendaraan, alamat, kir, stnk, role, kontak_emergency,
             transport_mode, agent_name, agent_address, agent_city, agent_phone, agent_email,
+            type_transporter,
         } = body;
         const targetLevel = role !== undefined && [4, 8].includes(Number(role))
             ? Number(role)
@@ -376,6 +415,13 @@ export class TransportersService {
         }
 
         const name = [first_name, last_name].filter(Boolean).join(' ') || user.getDataValue('name') || effectiveAgent.name;
+        let resolvedTypeTransporter: string | null | undefined;
+        if (type_transporter !== undefined) {
+            resolvedTypeTransporter = this.normalizeTypeTransporter(
+                type_transporter,
+                targetLevel === 4,
+            );
+        }
         // Normalisasi update fields
         const updateFields: any = {
             email, phone, address: alamat, nik: ktp?.nik, name,
@@ -398,6 +444,9 @@ export class TransportersService {
             agent_email: transportMode === 'darat' ? null : effectiveAgent.email,
         };
         if (role !== undefined && [4, 8].includes(Number(role))) updateFields.level = Number(role);
+        if (resolvedTypeTransporter !== undefined) {
+            updateFields.type_transporter = resolvedTypeTransporter;
+        }
         // Password
         if (password) {
             const bcrypt = require('bcryptjs');

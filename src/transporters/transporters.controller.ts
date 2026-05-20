@@ -1,12 +1,13 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpException, HttpStatus, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { TransportersService } from './transporters.service';
+import { RegisterTransporterDto } from './dto/register-transporter.dto';
 
 @Controller('transporters')
 export class TransportersController {
     constructor(private readonly transportersService: TransportersService) { }
 
     @Post('register')
-    async registerTransporter(@Body() body: any) {
+    async registerTransporter(@Body() body: RegisterTransporterDto) {
         try {
             const data = await this.transportersService.registerTransporter(body);
             return {
