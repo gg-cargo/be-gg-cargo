@@ -12,6 +12,7 @@ import { CustomerSalesAssignmentsQueryDto } from './dto/customer-sales-assignmen
 import { ListUsersResponseDto, CreateUserResponseDto, UpdateUserResponseDto, ChangePasswordResponseDto } from './dto/user-response.dto';
 import { ChangeMyPasswordResponseDto } from './dto/change-my-password-response.dto';
 import { UserDetailResponseDto } from './dto/user-detail-response.dto';
+import { UserSaldoResponseDto } from './dto/user-saldo-response.dto';
 import { UpdateLocationDto, UpdateLocationResponseDto } from './dto/update-location.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -151,6 +152,14 @@ export class UsersController {
             throw new BadRequestException('User tidak terautentikasi');
         }
         return this.usersService.deleteMyAccount(userId);
+    }
+
+    @Get(':id/saldo')
+    @HttpCode(HttpStatus.OK)
+    async getSaldoByUserId(
+        @Param('id', ParseIntPipe) id: number,
+    ): Promise<UserSaldoResponseDto> {
+        return this.usersService.getSaldoByUserId(id);
     }
 
     @Get(':id')

@@ -19,6 +19,7 @@ import { ChangeMyPasswordDto } from './dto/change-my-password.dto';
 import { ListUsersResponseDto, UserResponseDto, PaginationDto, CreateUserResponseDto, UpdateUserResponseDto, ChangePasswordResponseDto } from './dto/user-response.dto';
 import { ChangeMyPasswordResponseDto } from './dto/change-my-password-response.dto';
 import { UserDetailResponseDto } from './dto/user-detail-response.dto';
+import { UserSaldoResponseDto } from './dto/user-saldo-response.dto';
 import { UpdateLocationDto, UpdateLocationResponseDto } from './dto/update-location.dto';
 import { Op, Sequelize } from 'sequelize';
 import { randomBytes } from 'crypto';
@@ -350,6 +351,50 @@ export class UsersService {
                 kode_referral: user.getDataValue('kode_referral'),
                 saldo: saldoAktif,
             }
+        };
+    }
+
+    async getSaldoByUserId(userId: number): Promise<UserSaldoResponseDto> {
+        const user = await this.userModel.findByPk(userId, {
+            attributes: ['id', 'name', 'freeze_saldo', 'kode_referral'],
+        });
+
+        if (!user) {
+            throw new NotFoundException('Pengguna tidak ditemukan');
+        }
+
+        const saldoRow = await this.saldoModel.findOne({
+            where: { user_id: userId },
+            attributes: [
+                'id',
+                'saldo',
+                'saldo_dibekukan',
+                'kode_referral',
+                'updated_at',
+            ],
+        });
+
+        const saldo = saldoRow ? Number(saldoRow.getDataValue('saldo') ?? 0) : 0;
+        const saldoDibekukan = saldoRow
+            ? Number(saldoRow.getDataValue('saldo_dibekukan') ?? 0)
+            : 0;
+
+        return {
+            success: true,
+            message: 'Saldo pengguna berhasil diambil',
+            data: {
+                user_id: Number(user.getDataValue('id')),
+                user_name: user.getDataValue('name'),
+                freeze_saldo: String(user.getDataValue('freeze_saldo') ?? '0'),
+                saldo_id: saldoRow ? Number(saldoRow.getDataValue('id')) : null,
+                saldo,
+                saldo_dibekukan: saldoDibekukan,
+                saldo_aktif: saldo - saldoDibekukan,
+                kode_referral: saldoRow
+                    ? saldoRow.getDataValue('kode_referral')
+                    : user.getDataValue('kode_referral'),
+                updated_at: saldoRow?.getDataValue('updated_at') ?? null,
+            },
         };
     }
 
