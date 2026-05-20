@@ -25,6 +25,8 @@ import { ListFleetEstimatesQueryDto } from './dto/list-fleet-estimates-query.dto
 import { ListFleetEstimatesResponseDto } from './dto/fleet-estimate-item.dto';
 import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
 import { FleetTripService } from './fleet-trip.service';
+import { FleetSaldoService } from './fleet-saldo.service';
+import { CreditFleetDepositSaldoResponseDto } from './dto/credit-fleet-deposit-saldo-response.dto';
 import { CreateFleetTripDto } from './dto/create-fleet-trip.dto';
 import {
   FleetTripResponseDto,
@@ -40,6 +42,7 @@ export class FleetController {
   constructor(
     private readonly fleetService: FleetService,
     private readonly fleetTripService: FleetTripService,
+    private readonly fleetSaldoService: FleetSaldoService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
@@ -173,6 +176,23 @@ export class FleetController {
       throw new UnauthorizedException('User tidak terautentikasi');
     }
     return this.fleetTripService.updateApproveStatus(trackingNo, dto, userId);
+  }
+
+  /**
+   * Kredit deposit supir 1 & 2 ke saldo driver (tabel saldo) berdasarkan fleet trip.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('trips/:trackingNo/credit-deposit-saldo')
+  @HttpCode(HttpStatus.OK)
+  async creditFleetTripDepositSaldo(
+    @Param('trackingNo') trackingNo: string,
+    @Request() req: { user?: { id?: number } },
+  ): Promise<CreditFleetDepositSaldoResponseDto> {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('User tidak terautentikasi');
+    }
+    return this.fleetSaldoService.creditFleetTripDepositSaldo(trackingNo, userId);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -123,6 +123,13 @@ export class FleetTrip extends Model<FleetTrip> {
   @Column({ type: DataType.DATE, allowNull: true })
   declare updated_at: Date | null;
 
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+    comment: 'Waktu deposit supir dikredit ke tabel saldo',
+  })
+  declare deposit_saldo_credited_at: Date | null;
+
   @HasMany(() => FleetTripWaypoint, {
     foreignKey: 'fleet_trip_id',
     as: 'waypoints',

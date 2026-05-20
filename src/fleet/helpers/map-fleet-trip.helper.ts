@@ -190,6 +190,7 @@ export function mapFleetTripToDetail(
     approve_status: val<string>(trip, 'approve_status') ?? 'pending',
     approve_by_user_id: val<number | null>(trip, 'approve_by_user_id'),
     approve_at: val<Date | null>(trip, 'approve_at'),
+    deposit_saldo_credited_at: val<Date | null>(trip, 'deposit_saldo_credited_at'),
     created_at: val<Date>(trip, 'created_at'),
     updated_at: val<Date | null>(trip, 'updated_at'),
   };
@@ -241,6 +242,7 @@ export function mapFleetTripListItem(
       ? val<string>(approveByUser, 'name')
       : null,
     approve_at: val<Date | null>(trip, 'approve_at'),
+    deposit_saldo_credited_at: val<Date | null>(trip, 'deposit_saldo_credited_at'),
     plat_kendaraan: platKendaraan,
     created_at: val<Date>(trip, 'created_at'),
   };

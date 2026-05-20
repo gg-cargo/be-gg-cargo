@@ -105,6 +105,7 @@ export class FleetTripDetailDto {
   approve_status: string;
   approve_by_user_id: number | null;
   approve_at: Date | null;
+  deposit_saldo_credited_at: Date | null;
   created_at: Date;
   updated_at?: Date | null;
 }
@@ -129,6 +130,7 @@ export class FleetTripListItemDto {
   approve_by_user_id: number | null;
   approve_by_user_name: string | null;
   approve_at: Date | null;
+  deposit_saldo_credited_at: Date | null;
   plat_kendaraan: string | null;
   created_at: Date;
 }

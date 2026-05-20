@@ -7,8 +7,8 @@ import { OrderPickupDriver } from '../models/order-pickup-driver.model';
 import { OrderHistory } from '../models/order-history.model';
 import { Vendor } from '../models/vendor.model';
 import { Hub } from '../models/hub.model';
-import { FleetEstimate } from '../models/fleet-estimate.model';
 import { FleetTrip } from '../models/fleet-trip.model';
+import { FleetEstimate } from '../models/fleet-estimate.model';
 import { FleetTripWaypoint } from '../models/fleet-trip-waypoint.model';
 import { FleetTripSegment } from '../models/fleet-trip-segment.model';
 import { FleetTripAssignment } from '../models/fleet-trip-assignment.model';
@@ -16,7 +16,9 @@ import { FleetTripLoadingPhoto } from '../models/fleet-trip-loading-photo.model'
 import { User } from '../models/user.model';
 import { FileLog } from '../models/file-log.model';
 import { UsersBank } from '../models/users-bank.model';
+import { Saldo } from '../models/saldo.model';
 import { FleetTripService } from './fleet-trip.service';
+import { FleetSaldoService } from './fleet-saldo.service';
 
 @Module({
   imports: [
@@ -35,11 +37,12 @@ import { FleetTripService } from './fleet-trip.service';
       User,
       FileLog,
       UsersBank,
+      Saldo,
     ]),
   ],
   controllers: [FleetController],
-  providers: [FleetService, FleetTripService],
-  exports: [FleetService, FleetTripService],
+  providers: [FleetService, FleetTripService, FleetSaldoService],
+  exports: [FleetService, FleetTripService, FleetSaldoService],
 })
 export class FleetModule {}
 
