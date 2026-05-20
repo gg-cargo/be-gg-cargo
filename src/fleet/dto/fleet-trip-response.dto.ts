@@ -117,6 +117,7 @@ export class FleetTripListItemDto {
   approve_by_user_id: number | null;
   approve_by_user_name: string | null;
   approve_at: Date | null;
+  plat_kendaraan: string | null;
   created_at: Date;
 }
 

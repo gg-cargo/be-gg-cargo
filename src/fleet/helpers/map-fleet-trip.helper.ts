@@ -179,7 +179,29 @@ export function mapFleetTripToDetail(
   };
 }
 
-export function mapFleetTripListItem(trip: FleetTrip): FleetTripListItemDto {
+export function resolvePlatKendaraanForAssignment(
+  a: FleetTripAssignment | null | undefined,
+  platByDriverId: Record<string, string>,
+): string | null {
+  if (!a) {
+    return null;
+  }
+  const driver1Id = val<number | null>(a, 'driver_1_user_id');
+  const driver2Id = val<number | null>(a, 'driver_2_user_id');
+
+  if (driver1Id != null && platByDriverId[String(driver1Id)]) {
+    return platByDriverId[String(driver1Id)];
+  }
+  if (driver2Id != null && platByDriverId[String(driver2Id)]) {
+    return platByDriverId[String(driver2Id)];
+  }
+  return null;
+}
+
+export function mapFleetTripListItem(
+  trip: FleetTrip,
+  platKendaraan: string | null = null,
+): FleetTripListItemDto {
   const assignmentRow = trip.getDataValue('assignment') as
     | FleetTripAssignment
     | undefined;
@@ -203,6 +225,7 @@ export function mapFleetTripListItem(trip: FleetTrip): FleetTripListItemDto {
       ? val<string>(approveByUser, 'name')
       : null,
     approve_at: val<Date | null>(trip, 'approve_at'),
+    plat_kendaraan: platKendaraan,
     created_at: val<Date>(trip, 'created_at'),
   };
 }

@@ -42,6 +42,7 @@ import {
   mapFleetTripListItem,
   mapFleetTripLoadingPhotos,
   mapFleetTripToDetail,
+  resolvePlatKendaraanForAssignment,
 } from './helpers/map-fleet-trip.helper';
 
 @Injectable()
@@ -360,7 +361,11 @@ export class FleetTripService {
           model: FleetTripAssignment,
           as: 'assignment',
           required: false,
-          attributes: ['assignee_type'],
+          attributes: [
+            'assignee_type',
+            'driver_1_user_id',
+            'driver_2_user_id',
+          ],
         },
         {
           model: User,
@@ -371,6 +376,10 @@ export class FleetTripService {
       ],
     });
 
+    const platByDriverId = await this.loadPlatKendaraanByDriverUserIds(
+      this.collectDriverUserIdsFromTrips(rows),
+    );
+
     return {
       success: true,
       message: 'Daftar fleet trip berhasil diambil',
@@ -378,9 +387,164 @@ export class FleetTripService {
         total: count,
         page,
         limit,
-        items: rows.map((r) => mapFleetTripListItem(r)),
+        items: rows.map((r) => {
+          const assignment = r.getDataValue('assignment') as
+            | FleetTripAssignment
+            | undefined;
+          const plat = resolvePlatKendaraanForAssignment(
+            assignment,
+            platByDriverId,
+          );
+          return mapFleetTripListItem(r, plat);
+        }),
       },
     };
+  }
+
+  private collectDriverUserIdsFromTrips(trips: FleetTrip[]): number[] {
+    const ids = new Set<number>();
+    for (const trip of trips) {
+      const assignment = trip.getDataValue('assignment') as
+        | FleetTripAssignment
+        | undefined;
+      if (!assignment) {
+        continue;
+      }
+      const d1 = assignment.getDataValue('driver_1_user_id') as number | null;
+      const d2 = assignment.getDataValue('driver_2_user_id') as number | null;
+      if (d1 != null) {
+        ids.add(Number(d1));
+      }
+      if (d2 != null) {
+        ids.add(Number(d2));
+      }
+    }
+    return [...ids];
+  }
+
+  /**
+   * Plat dari note kirim (order_delivery_notes.no_polisi) atau orders.truck_id
+   * setelah note kirim dibuat untuk order driver terkait.
+   */
+  private async loadPlatKendaraanByDriverUserIds(
+    userIds: number[],
+  ): Promise<Record<string, string>> {
+    if (userIds.length === 0) {
+      return {};
+    }
+
+    const result: Record<string, string> = {};
+
+    const fromDeliveryNotes = (await this.sequelize.query(
+      `SELECT dn.transporter_id, dn.no_polisi
+       FROM order_delivery_notes dn
+       INNER JOIN (
+         SELECT transporter_id, MAX(id) AS max_id
+         FROM order_delivery_notes
+         WHERE transporter_id IN (:userIds)
+           AND no_polisi IS NOT NULL
+           AND TRIM(no_polisi) <> ''
+         GROUP BY transporter_id
+       ) latest ON latest.max_id = dn.id`,
+      {
+        replacements: { userIds },
+        type: QueryTypes.SELECT,
+      },
+    )) as { transporter_id: number; no_polisi: string }[];
+
+    for (const row of fromDeliveryNotes) {
+      result[String(row.transporter_id)] = String(row.no_polisi).trim();
+    }
+
+    const missingIds = userIds.filter((id) => !result[String(id)]);
+    if (missingIds.length === 0) {
+      return result;
+    }
+
+    const transporterIdStrings = missingIds.map((id) => String(id));
+
+    const fromOrdersTransporter = (await this.sequelize.query(
+      `SELECT o.transporter_id, o.truck_id
+       FROM orders o
+       INNER JOIN (
+         SELECT transporter_id, MAX(id) AS max_id
+         FROM orders
+         WHERE transporter_id IN (:transporterIds)
+           AND truck_id IS NOT NULL
+           AND TRIM(truck_id) <> ''
+         GROUP BY transporter_id
+       ) latest ON latest.max_id = o.id`,
+      {
+        replacements: { transporterIds: transporterIdStrings },
+        type: QueryTypes.SELECT,
+      },
+    )) as { transporter_id: string; truck_id: string }[];
+
+    for (const row of fromOrdersTransporter) {
+      const key = String(row.transporter_id);
+      if (!result[key]) {
+        result[key] = String(row.truck_id).trim();
+      }
+    }
+
+    const stillMissing = missingIds.filter((id) => !result[String(id)]);
+    if (stillMissing.length === 0) {
+      return result;
+    }
+
+    const fromPickupDrivers = (await this.sequelize.query(
+      `SELECT opd.driver_id, o.truck_id
+       FROM orders o
+       INNER JOIN order_pickup_drivers opd ON opd.order_id = o.id
+       INNER JOIN (
+         SELECT opd2.driver_id, MAX(o2.id) AS max_order_id
+         FROM orders o2
+         INNER JOIN order_pickup_drivers opd2 ON opd2.order_id = o2.id
+         WHERE opd2.driver_id IN (:userIds)
+           AND o2.truck_id IS NOT NULL
+           AND TRIM(o2.truck_id) <> ''
+         GROUP BY opd2.driver_id
+       ) latest ON latest.max_order_id = o.id AND latest.driver_id = opd.driver_id`,
+      {
+        replacements: { userIds: stillMissing },
+        type: QueryTypes.SELECT,
+      },
+    )) as { driver_id: number; truck_id: string }[];
+
+    for (const row of fromPickupDrivers) {
+      const key = String(row.driver_id);
+      if (!result[key]) {
+        result[key] = String(row.truck_id).trim();
+      }
+    }
+
+    const stillMissingAfterPickup = stillMissing.filter(
+      (id) => !result[String(id)],
+    );
+    if (stillMissingAfterPickup.length === 0) {
+      return result;
+    }
+
+    const fromTruckList = (await this.sequelize.query(
+      `SELECT driver_id, no_polisi
+       FROM truck_list
+       WHERE driver_id IN (:userIds)
+         AND no_polisi IS NOT NULL
+         AND TRIM(no_polisi) <> ''`,
+      {
+        replacements: { userIds: stillMissingAfterPickup },
+        type: QueryTypes.SELECT,
+      },
+    )) as { driver_id: number; no_polisi: string }[];
+
+    for (const row of fromTruckList) {
+      const key = String(row.driver_id);
+      if (!result[key]) {
+        result[key] = String(row.no_polisi).trim();
+      }
+    }
+
+    return result;
   }
 
   private async findDetailByTrackingNo(
