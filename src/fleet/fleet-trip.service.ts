@@ -575,6 +575,18 @@ export class FleetTripService {
               attributes: ['id', 'name'],
               required: false,
             },
+            {
+              model: Vendor,
+              as: 'vendor',
+              attributes: [
+                'id',
+                'nama_vendor',
+                'pic_nama',
+                'pic_telepon',
+                'pic_email',
+              ],
+              required: false,
+            },
           ],
         },
         {

@@ -62,6 +62,10 @@ export class FleetTripAssignmentResponseDto {
   driver_1_account_no?: string | null;
   driver_2_account_no?: string | null;
   vendor_id?: number | null;
+  vendor_name?: string | null;
+  vendor_pic_nama?: string | null;
+  vendor_pic_telepon?: string | null;
+  vendor_pic_email?: string | null;
 }
 
 export class FleetTripLoadingPhotoDto {

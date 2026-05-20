@@ -63,6 +63,6 @@ export class FleetTripAssignment extends Model<FleetTripAssignment> {
   @BelongsTo(() => User, { foreignKey: 'driver_2_user_id', as: 'driver2' })
   driver2: User;
 
-  @BelongsTo(() => Vendor)
+  @BelongsTo(() => Vendor, { foreignKey: 'vendor_id', as: 'vendor' })
   vendor: Vendor;
 }

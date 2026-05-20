@@ -5,6 +5,7 @@ import { FleetTripAssignment } from '../../models/fleet-trip-assignment.model';
 import { FleetTripLoadingPhoto } from '../../models/fleet-trip-loading-photo.model';
 import { FileLog } from '../../models/file-log.model';
 import { User } from '../../models/user.model';
+import { Vendor } from '../../models/vendor.model';
 import {
   FleetTripDetailDto,
   FleetTripListItemDto,
@@ -69,16 +70,23 @@ export function mapFleetTripAssignment(
       driver_1_account_no: null,
       driver_2_account_no: null,
       vendor_id: null,
+      vendor_name: null,
+      vendor_pic_nama: null,
+      vendor_pic_telepon: null,
+      vendor_pic_email: null,
     };
   }
 
   const driver1 = a.getDataValue('driver1') as User | undefined;
   const driver2 = a.getDataValue('driver2') as User | undefined;
+  const vendor = a.getDataValue('vendor') as Vendor | undefined;
   const driver1UserId = val<number | null>(a, 'driver_1_user_id');
   const driver2UserId = val<number | null>(a, 'driver_2_user_id');
+  const assigneeType = val<string>(a, 'assignee_type');
+  const isVendor = assigneeType === 'vendor';
 
   return {
-    assignee_type: val<string>(a, 'assignee_type'),
+    assignee_type: assigneeType,
     assigned_by_user_id: val<number | null>(a, 'assigned_by_user_id'),
     driver_1_user_id: driver1UserId,
     driver_2_user_id: driver2UserId,
@@ -91,6 +99,11 @@ export function mapFleetTripAssignment(
       ? bankByUserId[String(driver2UserId)] ?? null
       : null,
     vendor_id: val<number | null>(a, 'vendor_id'),
+    vendor_name: isVendor && vendor ? val<string>(vendor, 'nama_vendor') : null,
+    vendor_pic_nama: isVendor && vendor ? val<string>(vendor, 'pic_nama') : null,
+    vendor_pic_telepon:
+      isVendor && vendor ? val<string>(vendor, 'pic_telepon') : null,
+    vendor_pic_email: isVendor && vendor ? val<string>(vendor, 'pic_email') : null,
   };
 }
 
