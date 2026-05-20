@@ -109,6 +109,10 @@ export class FleetTripListItemDto {
   distance_km_total: number;
   grand_total_operational: number;
   assignee_type?: string;
+  approve_status: string;
+  approve_by_user_id: number | null;
+  approve_by_user_name: string | null;
+  approve_at: Date | null;
   created_at: Date;
 }
 

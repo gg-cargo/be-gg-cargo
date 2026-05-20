@@ -4,6 +4,7 @@ import { FleetTripSegment } from '../../models/fleet-trip-segment.model';
 import { FleetTripAssignment } from '../../models/fleet-trip-assignment.model';
 import { FleetTripLoadingPhoto } from '../../models/fleet-trip-loading-photo.model';
 import { FileLog } from '../../models/file-log.model';
+import { User } from '../../models/user.model';
 import {
   FleetTripDetailDto,
   FleetTripListItemDto,
@@ -158,6 +159,7 @@ export function mapFleetTripListItem(trip: FleetTrip): FleetTripListItemDto {
   const assignmentRow = trip.getDataValue('assignment') as
     | FleetTripAssignment
     | undefined;
+  const approveByUser = trip.getDataValue('approveByUser') as User | undefined;
 
   return {
     id: val<number>(trip, 'id'),
@@ -171,6 +173,12 @@ export function mapFleetTripListItem(trip: FleetTrip): FleetTripListItemDto {
     assignee_type: assignmentRow
       ? val<string>(assignmentRow, 'assignee_type')
       : undefined,
+    approve_status: val<string>(trip, 'approve_status') ?? 'pending',
+    approve_by_user_id: val<number | null>(trip, 'approve_by_user_id'),
+    approve_by_user_name: approveByUser
+      ? val<string>(approveByUser, 'name')
+      : null,
+    approve_at: val<Date | null>(trip, 'approve_at'),
     created_at: val<Date>(trip, 'created_at'),
   };
 }

@@ -359,6 +359,12 @@ export class FleetTripService {
           required: false,
           attributes: ['assignee_type'],
         },
+        {
+          model: User,
+          as: 'approveByUser',
+          required: false,
+          attributes: ['id', 'name'],
+        },
       ],
     });
 
