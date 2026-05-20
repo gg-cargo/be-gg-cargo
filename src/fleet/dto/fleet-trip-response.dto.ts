@@ -60,6 +60,22 @@ export class FleetTripAssignmentResponseDto {
   vendor_id?: number | null;
 }
 
+export class FleetTripLoadingPhotoDto {
+  id: number;
+  file_path: string;
+  file_name: string;
+}
+
+export class FleetTripLoadingPhotosDataDto {
+  loading_photos: FleetTripLoadingPhotoDto[];
+}
+
+export class FleetTripLoadingPhotosResponseDto {
+  success: boolean;
+  message: string;
+  data: FleetTripLoadingPhotosDataDto;
+}
+
 export class FleetTripDetailDto {
   id: number;
   tracking_no: string;
@@ -68,6 +84,11 @@ export class FleetTripDetailDto {
   segments: FleetTripSegmentResponseDto[];
   summary: FleetTripSummaryResponseDto;
   assignment: FleetTripAssignmentResponseDto;
+  file_log_ids: number[];
+  loading_photos: FleetTripLoadingPhotoDto[];
+  approve_status: string;
+  approve_by_user_id: number | null;
+  approve_at: Date | null;
   created_at: Date;
   updated_at?: Date | null;
 }

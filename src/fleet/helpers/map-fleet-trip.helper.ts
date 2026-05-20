@@ -2,9 +2,12 @@ import { FleetTrip } from '../../models/fleet-trip.model';
 import { FleetTripWaypoint } from '../../models/fleet-trip-waypoint.model';
 import { FleetTripSegment } from '../../models/fleet-trip-segment.model';
 import { FleetTripAssignment } from '../../models/fleet-trip-assignment.model';
+import { FleetTripLoadingPhoto } from '../../models/fleet-trip-loading-photo.model';
+import { FileLog } from '../../models/file-log.model';
 import {
   FleetTripDetailDto,
   FleetTripListItemDto,
+  FleetTripLoadingPhotoDto,
 } from '../dto/fleet-trip-response.dto';
 
 function val<T>(row: { getDataValue(key: string): unknown }, key: string): T {
@@ -69,6 +72,40 @@ export function mapFleetTripAssignment(a: FleetTripAssignment | null | undefined
   };
 }
 
+export function mapFleetTripLoadingPhotos(
+  photoRows: FleetTripLoadingPhoto[],
+): FleetTripLoadingPhotoDto[] {
+  const sorted = [...photoRows].sort(
+    (a, b) => val<number>(a, 'sort_order') - val<number>(b, 'sort_order'),
+  );
+
+  const loadingPhotos: FleetTripLoadingPhotoDto[] = [];
+
+  for (const row of sorted) {
+    const fileLog = row.getDataValue('fileLog') as FileLog | undefined;
+    if (fileLog) {
+      loadingPhotos.push({
+        id: val<number>(fileLog, 'id'),
+        file_path: val<string>(fileLog, 'file_path'),
+        file_name: val<string>(fileLog, 'file_name'),
+      });
+    }
+  }
+
+  return loadingPhotos;
+}
+
+function mapLoadingPhotos(photoRows: FleetTripLoadingPhoto[]) {
+  const sorted = [...photoRows].sort(
+    (a, b) => val<number>(a, 'sort_order') - val<number>(b, 'sort_order'),
+  );
+  const fileLogIds = sorted.map((row) => val<number>(row, 'file_log_id'));
+  return {
+    file_log_ids: fileLogIds,
+    loading_photos: mapFleetTripLoadingPhotos(photoRows),
+  };
+}
+
 export function mapFleetTripToDetail(trip: FleetTrip): FleetTripDetailDto {
   const waypointRows =
     (trip.getDataValue('waypoints') as FleetTripWaypoint[] | undefined) ?? [];
@@ -77,6 +114,10 @@ export function mapFleetTripToDetail(trip: FleetTrip): FleetTripDetailDto {
   const assignmentRow = trip.getDataValue('assignment') as
     | FleetTripAssignment
     | undefined;
+  const loadingPhotoRows =
+    (trip.getDataValue('loadingPhotos') as FleetTripLoadingPhoto[] | undefined) ??
+    [];
+  const { file_log_ids, loading_photos } = mapLoadingPhotos(loadingPhotoRows);
 
   const supir2 = val<number | null>(trip, 'supir_2_total');
 
@@ -103,6 +144,11 @@ export function mapFleetTripToDetail(trip: FleetTrip): FleetTripDetailDto {
       fuel_type: val<string | null>(trip, 'fuel_type'),
     },
     assignment: mapFleetTripAssignment(assignmentRow),
+    file_log_ids,
+    loading_photos,
+    approve_status: val<string>(trip, 'approve_status') ?? 'pending',
+    approve_by_user_id: val<number | null>(trip, 'approve_by_user_id'),
+    approve_at: val<Date | null>(trip, 'approve_at'),
     created_at: val<Date>(trip, 'created_at'),
     updated_at: val<Date | null>(trip, 'updated_at'),
   };

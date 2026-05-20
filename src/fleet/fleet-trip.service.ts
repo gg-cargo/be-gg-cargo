@@ -12,8 +12,12 @@ import { FleetTrip } from '../models/fleet-trip.model';
 import { FleetTripWaypoint } from '../models/fleet-trip-waypoint.model';
 import { FleetTripSegment } from '../models/fleet-trip-segment.model';
 import { FleetTripAssignment } from '../models/fleet-trip-assignment.model';
+import { FleetTripLoadingPhoto } from '../models/fleet-trip-loading-photo.model';
+import { FileLog } from '../models/file-log.model';
 import { User } from '../models/user.model';
 import { Vendor } from '../models/vendor.model';
+import { UpdateFleetTripLoadingPhotosDto } from './dto/update-fleet-trip-loading-photos.dto';
+import { UpdateFleetTripApproveStatusDto } from './dto/update-fleet-trip-approve-status.dto';
 import {
   CreateFleetTripDto,
   FleetTripAssigneeTypeDto,
@@ -21,6 +25,7 @@ import {
 import {
   FleetTripDetailDto,
   FleetTripListResponseDto,
+  FleetTripLoadingPhotosResponseDto,
   FleetTripResponseDto,
 } from './dto/fleet-trip-response.dto';
 import { ListFleetTripsQueryDto } from './dto/list-fleet-trips-query.dto';
@@ -34,6 +39,7 @@ import {
 } from './helpers/parse-duration-minutes.helper';
 import {
   mapFleetTripListItem,
+  mapFleetTripLoadingPhotos,
   mapFleetTripToDetail,
 } from './helpers/map-fleet-trip.helper';
 
@@ -54,6 +60,10 @@ export class FleetTripService {
     private readonly userModel: typeof User,
     @InjectModel(Vendor)
     private readonly vendorModel: typeof Vendor,
+    @InjectModel(FleetTripLoadingPhoto)
+    private readonly loadingPhotoModel: typeof FleetTripLoadingPhoto,
+    @InjectModel(FileLog)
+    private readonly fileLogModel: typeof FileLog,
     private readonly sequelize: Sequelize,
   ) {}
 
@@ -108,6 +118,7 @@ export class FleetTripService {
           grand_total_operational: summary.grand_total_operational,
           fuel_type: summary.fuel_type?.trim() || null,
           status: 'draft',
+          approve_status: 'pending',
           created_by_user_id: createdByUserId ?? dto.assignment.assigned_by_user_id,
           created_at: new Date(),
         } as any,
@@ -192,6 +203,123 @@ export class FleetTripService {
     }
   }
 
+  async updateLoadingPhotos(
+    trackingNo: string,
+    dto: UpdateFleetTripLoadingPhotosDto,
+  ): Promise<FleetTripLoadingPhotosResponseDto> {
+    const uniqueIds = [...new Set(dto.file_log_ids)];
+
+    const trip = await this.findTripByTrackingNoOrThrow(trackingNo);
+
+    const files = await this.fileLogModel.findAll({
+      where: { id: { [Op.in]: uniqueIds } },
+    });
+    if (files.length !== uniqueIds.length) {
+      const found = new Set(files.map((f) => f.id));
+      const missing = uniqueIds.filter((id) => !found.has(id));
+      throw new BadRequestException(
+        `file_log_id tidak ditemukan: ${missing.join(', ')}`,
+      );
+    }
+
+    const tripId = trip.id;
+    const transaction = await this.sequelize.transaction();
+    try {
+      await this.loadingPhotoModel.destroy({
+        where: { fleet_trip_id: tripId },
+        transaction,
+      });
+
+      await this.loadingPhotoModel.bulkCreate(
+        uniqueIds.map((fileLogId, index) => ({
+          fleet_trip_id: tripId,
+          file_log_id: fileLogId,
+          sort_order: index,
+          created_at: new Date(),
+        })) as any,
+        { transaction },
+      );
+
+      await trip.update(
+        {
+          approve_status: 'pending',
+          approve_by_user_id: null,
+          approve_at: null,
+          updated_at: new Date(),
+        } as any,
+        { transaction },
+      );
+
+      await transaction.commit();
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+
+    this.logger.log(
+      `Loading photos updated: tracking=${trackingNo}, count=${uniqueIds.length}`,
+    );
+
+    return this.buildLoadingPhotosResponse(
+      tripId,
+      'Foto muat berhasil diperbarui',
+    );
+  }
+
+  async getLoadingPhotos(
+    trackingNo: string,
+  ): Promise<FleetTripLoadingPhotosResponseDto> {
+    const trip = await this.findTripByTrackingNoOrThrow(trackingNo);
+    return this.buildLoadingPhotosResponse(
+      trip.id,
+      'Foto muat berhasil diambil',
+    );
+  }
+
+  /**
+   * Ubah approve_status fleet trip (pending → approved / rejected).
+   */
+  async updateApproveStatus(
+    trackingNo: string,
+    dto: UpdateFleetTripApproveStatusDto,
+    approveByUserId: number,
+  ): Promise<FleetTripResponseDto> {
+    const trip = await this.findTripByTrackingNoOrThrow(trackingNo);
+
+    const currentStatus = trip.getDataValue('approve_status');
+    if (currentStatus !== 'pending') {
+      throw new BadRequestException(
+        `Fleet trip sudah berstatus ${currentStatus} dan tidak dapat diubah lagi`,
+      );
+    }
+
+    const approver = await this.userModel.findByPk(approveByUserId);
+    if (!approver) {
+      throw new BadRequestException('User approver tidak ditemukan');
+    }
+
+    const now = new Date();
+    await trip.update({
+      approve_status: dto.approve_status,
+      approve_by_user_id: approveByUserId,
+      approve_at: now,
+      updated_at: now,
+    } as any);
+
+    this.logger.log(
+      `Fleet trip approval diupdate: tracking=${trackingNo}, status=${dto.approve_status}, by=${approveByUserId}`,
+    );
+
+    const statusLabel = dto.approve_status === 'approved' ? 'disetujui' : 'ditolak';
+    const detail = await this.findDetailByTrackingNo(trackingNo);
+
+    return {
+      success: true,
+      message: `Fleet trip berhasil ${statusLabel}`,
+      data: detail,
+    };
+  }
+
   async findByTrackingNo(trackingNo: string): Promise<FleetTripResponseDto> {
     const detail = await this.findDetailByTrackingNo(trackingNo);
     return {
@@ -265,6 +393,20 @@ export class FleetTripService {
           order: [['segment_no', 'ASC']],
         },
         { model: FleetTripAssignment, as: 'assignment', required: false },
+        {
+          model: FleetTripLoadingPhoto,
+          as: 'loadingPhotos',
+          separate: true,
+          order: [['sort_order', 'ASC']],
+          include: [
+            {
+              model: FileLog,
+              as: 'fileLog',
+              attributes: ['id', 'file_path', 'file_name'],
+              required: false,
+            },
+          ],
+        },
       ],
     });
 
@@ -273,6 +415,44 @@ export class FleetTripService {
     }
 
     return mapFleetTripToDetail(trip);
+  }
+
+  private async findTripByTrackingNoOrThrow(
+    trackingNo: string,
+  ): Promise<FleetTrip> {
+    const trip = await this.fleetTripModel.findOne({
+      where: { tracking_no: trackingNo },
+    });
+    if (!trip) {
+      throw new NotFoundException(`Fleet trip ${trackingNo} tidak ditemukan`);
+    }
+    return trip;
+  }
+
+  private async buildLoadingPhotosResponse(
+    tripId: number,
+    message: string,
+  ): Promise<FleetTripLoadingPhotosResponseDto> {
+    const photoRows = await this.loadingPhotoModel.findAll({
+      where: { fleet_trip_id: tripId },
+      order: [['sort_order', 'ASC']],
+      include: [
+        {
+          model: FileLog,
+          as: 'fileLog',
+          attributes: ['id', 'file_path', 'file_name'],
+          required: true,
+        },
+      ],
+    });
+
+    return {
+      success: true,
+      message,
+      data: {
+        loading_photos: mapFleetTripLoadingPhotos(photoRows),
+      },
+    };
   }
 
   private async validateAssignment(dto: CreateFleetTripDto): Promise<void> {

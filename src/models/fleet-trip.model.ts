@@ -12,10 +12,12 @@ import { User } from './user.model';
 import { FleetTripWaypoint } from './fleet-trip-waypoint.model';
 import { FleetTripSegment } from './fleet-trip-segment.model';
 import { FleetTripAssignment } from './fleet-trip-assignment.model';
+import { FleetTripLoadingPhoto } from './fleet-trip-loading-photo.model';
 
 export type FleetTripType = 'one_way' | 'two_way';
 export type FleetTripRoadType = 'non_tol' | 'tol' | 'manual';
 export type FleetTripStatus = 'draft' | 'active' | 'completed' | 'cancelled';
+export type FleetTripApproveStatus = 'pending' | 'approved' | 'rejected';
 
 @Table({
   tableName: 'fleet_trips',
@@ -93,6 +95,20 @@ export class FleetTrip extends Model<FleetTrip> {
   })
   declare status: FleetTripStatus;
 
+  @Column({
+    type: DataType.ENUM('pending', 'approved', 'rejected'),
+    allowNull: false,
+    defaultValue: 'pending',
+  })
+  declare approve_status: FleetTripApproveStatus;
+
+  @ForeignKey(() => User)
+  @Column({ type: DataType.BIGINT.UNSIGNED, allowNull: true })
+  declare approve_by_user_id: number | null;
+
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare approve_at: Date | null;
+
   @ForeignKey(() => User)
   @Column({ type: DataType.BIGINT.UNSIGNED, allowNull: true })
   declare created_by_user_id: number | null;
@@ -125,6 +141,15 @@ export class FleetTrip extends Model<FleetTrip> {
   })
   assignment: FleetTripAssignment;
 
+  @HasMany(() => FleetTripLoadingPhoto, {
+    foreignKey: 'fleet_trip_id',
+    as: 'loadingPhotos',
+  })
+  loadingPhotos: FleetTripLoadingPhoto[];
+
   @BelongsTo(() => User, { foreignKey: 'created_by_user_id', as: 'createdByUser' })
   createdByUser: User;
+
+  @BelongsTo(() => User, { foreignKey: 'approve_by_user_id', as: 'approveByUser' })
+  approveByUser: User;
 }

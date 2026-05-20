@@ -26,8 +26,14 @@ import { ListFleetEstimatesResponseDto } from './dto/fleet-estimate-item.dto';
 import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
 import { FleetTripService } from './fleet-trip.service';
 import { CreateFleetTripDto } from './dto/create-fleet-trip.dto';
-import { FleetTripResponseDto, FleetTripListResponseDto } from './dto/fleet-trip-response.dto';
+import {
+  FleetTripResponseDto,
+  FleetTripListResponseDto,
+  FleetTripLoadingPhotosResponseDto,
+} from './dto/fleet-trip-response.dto';
 import { ListFleetTripsQueryDto } from './dto/list-fleet-trips-query.dto';
+import { UpdateFleetTripLoadingPhotosDto } from './dto/update-fleet-trip-loading-photos.dto';
+import { UpdateFleetTripApproveStatusDto } from './dto/update-fleet-trip-approve-status.dto';
 
 @Controller('fleet')
 export class FleetController {
@@ -134,6 +140,39 @@ export class FleetController {
     @Query() query: ListFleetTripsQueryDto,
   ): Promise<FleetTripListResponseDto> {
     return this.fleetTripService.list(query);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('trips/:trackingNo/loading-photos')
+  async getFleetTripLoadingPhotos(
+    @Param('trackingNo') trackingNo: string,
+  ): Promise<FleetTripLoadingPhotosResponseDto> {
+    return this.fleetTripService.getLoadingPhotos(trackingNo);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('trips/:trackingNo/loading-photos')
+  @HttpCode(HttpStatus.OK)
+  async updateFleetTripLoadingPhotos(
+    @Param('trackingNo') trackingNo: string,
+    @Body() dto: UpdateFleetTripLoadingPhotosDto,
+  ): Promise<FleetTripLoadingPhotosResponseDto> {
+    return this.fleetTripService.updateLoadingPhotos(trackingNo, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('trips/:trackingNo/approve-status')
+  @HttpCode(HttpStatus.OK)
+  async updateFleetTripApproveStatus(
+    @Param('trackingNo') trackingNo: string,
+    @Body() dto: UpdateFleetTripApproveStatusDto,
+    @Request() req: { user?: { id?: number } },
+  ): Promise<FleetTripResponseDto> {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('User tidak terautentikasi');
+    }
+    return this.fleetTripService.updateApproveStatus(trackingNo, dto, userId);
   }
 
   @UseGuards(JwtAuthGuard)

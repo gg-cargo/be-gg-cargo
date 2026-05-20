@@ -12,6 +12,7 @@ import { FleetTrip } from '../models/fleet-trip.model';
 import { FleetTripWaypoint } from '../models/fleet-trip-waypoint.model';
 import { FleetTripSegment } from '../models/fleet-trip-segment.model';
 import { FleetTripAssignment } from '../models/fleet-trip-assignment.model';
+import { FleetTripLoadingPhoto } from '../models/fleet-trip-loading-photo.model';
 import { User } from '../models/user.model';
 import { FileLog } from '../models/file-log.model';
 import { FleetTripService } from './fleet-trip.service';
@@ -29,6 +30,7 @@ import { FleetTripService } from './fleet-trip.service';
       FleetTripWaypoint,
       FleetTripSegment,
       FleetTripAssignment,
+      FleetTripLoadingPhoto,
       User,
       FileLog,
     ]),
