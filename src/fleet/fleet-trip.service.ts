@@ -23,7 +23,6 @@ import {
   CreateFleetTripDto,
   FleetTripAssigneeTypeDto,
 } from './dto/create-fleet-trip.dto';
-import { FleetEstimateTripType } from './dto/fleet-estimate.dto';
 import {
   FleetTripDetailDto,
   FleetTripListResponseDto,
@@ -77,20 +76,6 @@ export class FleetTripService {
     createdByUserId?: number,
   ): Promise<FleetTripResponseDto> {
     await this.validateAssignment(dto);
-
-    const expectedSegments = this.getExpectedSegmentCount(
-      dto.waypoints.length,
-      dto.summary.trip_type,
-    );
-    if (dto.segments.length !== expectedSegments) {
-      const ruleHint =
-        dto.summary.trip_type === FleetEstimateTripType.TWO_WAY
-          ? '2 × (waypoints - 1) untuk pulang-pergi'
-          : 'waypoints - 1';
-      throw new BadRequestException(
-        `Jumlah segments harus ${expectedSegments} (${ruleHint})`,
-      );
-    }
 
     const transaction = await this.sequelize.transaction();
     try {
@@ -687,21 +672,6 @@ export class FleetTripService {
         loading_photos: mapFleetTripLoadingPhotos(photoRows),
       },
     };
-  }
-
-  /**
-   * one_way: N waypoints → N-1 segment
-   * two_way: N waypoints → 2×(N-1) segment (pergi + pulang antar titik berurutan)
-   */
-  private getExpectedSegmentCount(
-    waypointCount: number,
-    tripType: FleetEstimateTripType | string,
-  ): number {
-    const outboundLegs = Math.max(waypointCount - 1, 0);
-    if (tripType === FleetEstimateTripType.TWO_WAY || tripType === 'two_way') {
-      return outboundLegs * 2;
-    }
-    return outboundLegs;
   }
 
   private async validateAssignment(dto: CreateFleetTripDto): Promise<void> {

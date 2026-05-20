@@ -234,7 +234,6 @@ export class CreateFleetTripDto {
   tracking_no?: string;
 
   @IsArray()
-  @ArrayMinSize(2, { message: 'waypoints minimal 2 titik' })
   @ValidateNested({ each: true })
   @Type(() => FleetTripWaypointDto)
   waypoints: FleetTripWaypointDto[];
