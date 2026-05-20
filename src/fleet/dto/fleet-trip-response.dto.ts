@@ -57,6 +57,10 @@ export class FleetTripAssignmentResponseDto {
   assigned_by_user_id: number | null;
   driver_1_user_id?: number | null;
   driver_2_user_id?: number | null;
+  driver_1_name?: string | null;
+  driver_2_name?: string | null;
+  driver_1_account_no?: string | null;
+  driver_2_account_no?: string | null;
   vendor_id?: number | null;
 }
 

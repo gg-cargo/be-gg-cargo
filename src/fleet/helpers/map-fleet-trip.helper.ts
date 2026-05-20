@@ -54,21 +54,42 @@ export function mapFleetTripSegment(s: FleetTripSegment) {
   };
 }
 
-export function mapFleetTripAssignment(a: FleetTripAssignment | null | undefined) {
+export function mapFleetTripAssignment(
+  a: FleetTripAssignment | null | undefined,
+  bankByUserId: Record<string, string> = {},
+) {
   if (!a) {
     return {
       assignee_type: 'mitra',
       assigned_by_user_id: null,
       driver_1_user_id: null,
       driver_2_user_id: null,
+      driver_1_name: null,
+      driver_2_name: null,
+      driver_1_account_no: null,
+      driver_2_account_no: null,
       vendor_id: null,
     };
   }
+
+  const driver1 = a.getDataValue('driver1') as User | undefined;
+  const driver2 = a.getDataValue('driver2') as User | undefined;
+  const driver1UserId = val<number | null>(a, 'driver_1_user_id');
+  const driver2UserId = val<number | null>(a, 'driver_2_user_id');
+
   return {
     assignee_type: val<string>(a, 'assignee_type'),
     assigned_by_user_id: val<number | null>(a, 'assigned_by_user_id'),
-    driver_1_user_id: val<number | null>(a, 'driver_1_user_id'),
-    driver_2_user_id: val<number | null>(a, 'driver_2_user_id'),
+    driver_1_user_id: driver1UserId,
+    driver_2_user_id: driver2UserId,
+    driver_1_name: driver1 ? val<string>(driver1, 'name') : null,
+    driver_2_name: driver2 ? val<string>(driver2, 'name') : null,
+    driver_1_account_no: driver1UserId
+      ? bankByUserId[String(driver1UserId)] ?? null
+      : null,
+    driver_2_account_no: driver2UserId
+      ? bankByUserId[String(driver2UserId)] ?? null
+      : null,
     vendor_id: val<number | null>(a, 'vendor_id'),
   };
 }
@@ -107,7 +128,10 @@ function mapLoadingPhotos(photoRows: FleetTripLoadingPhoto[]) {
   };
 }
 
-export function mapFleetTripToDetail(trip: FleetTrip): FleetTripDetailDto {
+export function mapFleetTripToDetail(
+  trip: FleetTrip,
+  bankByUserId: Record<string, string> = {},
+): FleetTripDetailDto {
   const waypointRows =
     (trip.getDataValue('waypoints') as FleetTripWaypoint[] | undefined) ?? [];
   const segmentRows =
@@ -144,7 +168,7 @@ export function mapFleetTripToDetail(trip: FleetTrip): FleetTripDetailDto {
       grand_total_operational: Number(val(trip, 'grand_total_operational')),
       fuel_type: val<string | null>(trip, 'fuel_type'),
     },
-    assignment: mapFleetTripAssignment(assignmentRow),
+    assignment: mapFleetTripAssignment(assignmentRow, bankByUserId),
     file_log_ids,
     loading_photos,
     approve_status: val<string>(trip, 'approve_status') ?? 'pending',

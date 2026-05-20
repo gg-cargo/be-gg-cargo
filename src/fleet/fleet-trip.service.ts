@@ -14,6 +14,7 @@ import { FleetTripSegment } from '../models/fleet-trip-segment.model';
 import { FleetTripAssignment } from '../models/fleet-trip-assignment.model';
 import { FleetTripLoadingPhoto } from '../models/fleet-trip-loading-photo.model';
 import { FileLog } from '../models/file-log.model';
+import { UsersBank } from '../models/users-bank.model';
 import { User } from '../models/user.model';
 import { Vendor } from '../models/vendor.model';
 import { UpdateFleetTripLoadingPhotosDto } from './dto/update-fleet-trip-loading-photos.dto';
@@ -64,6 +65,8 @@ export class FleetTripService {
     private readonly loadingPhotoModel: typeof FleetTripLoadingPhoto,
     @InjectModel(FileLog)
     private readonly fileLogModel: typeof FileLog,
+    @InjectModel(UsersBank)
+    private readonly usersBankModel: typeof UsersBank,
     private readonly sequelize: Sequelize,
   ) {}
 
@@ -398,7 +401,25 @@ export class FleetTripService {
           separate: true,
           order: [['segment_no', 'ASC']],
         },
-        { model: FleetTripAssignment, as: 'assignment', required: false },
+        {
+          model: FleetTripAssignment,
+          as: 'assignment',
+          required: false,
+          include: [
+            {
+              model: User,
+              as: 'driver1',
+              attributes: ['id', 'name'],
+              required: false,
+            },
+            {
+              model: User,
+              as: 'driver2',
+              attributes: ['id', 'name'],
+              required: false,
+            },
+          ],
+        },
         {
           model: FleetTripLoadingPhoto,
           as: 'loadingPhotos',
@@ -420,7 +441,42 @@ export class FleetTripService {
       throw new NotFoundException(`Fleet trip ${trackingNo} tidak ditemukan`);
     }
 
-    return mapFleetTripToDetail(trip);
+    const bankByUserId = await this.loadDriverBankAccountsByTrip(trip);
+    return mapFleetTripToDetail(trip, bankByUserId);
+  }
+
+  private async loadDriverBankAccountsByTrip(
+    trip: FleetTrip,
+  ): Promise<Record<string, string>> {
+    const assignment = trip.getDataValue('assignment') as
+      | FleetTripAssignment
+      | undefined;
+    if (!assignment) {
+      return {};
+    }
+
+    const userIds = [
+      assignment.getDataValue('driver_1_user_id'),
+      assignment.getDataValue('driver_2_user_id'),
+    ]
+      .filter((id): id is number => id != null)
+      .map((id) => String(id));
+
+    if (userIds.length === 0) {
+      return {};
+    }
+
+    const banks = await this.usersBankModel.findAll({
+      where: { id_user: { [Op.in]: userIds } },
+      attributes: ['id_user', 'nomor_rekening'],
+    });
+
+    return Object.fromEntries(
+      banks.map((b) => [
+        String(b.getDataValue('id_user')),
+        String(b.getDataValue('nomor_rekening')),
+      ]),
+    );
   }
 
   private async findTripByTrackingNoOrThrow(

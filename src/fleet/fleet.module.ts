@@ -15,6 +15,7 @@ import { FleetTripAssignment } from '../models/fleet-trip-assignment.model';
 import { FleetTripLoadingPhoto } from '../models/fleet-trip-loading-photo.model';
 import { User } from '../models/user.model';
 import { FileLog } from '../models/file-log.model';
+import { UsersBank } from '../models/users-bank.model';
 import { FleetTripService } from './fleet-trip.service';
 
 @Module({
@@ -33,6 +34,7 @@ import { FleetTripService } from './fleet-trip.service';
       FleetTripLoadingPhoto,
       User,
       FileLog,
+      UsersBank,
     ]),
   ],
   controllers: [FleetController],
