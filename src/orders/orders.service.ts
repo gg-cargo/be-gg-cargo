@@ -265,21 +265,6 @@ export class OrdersService {
             if (currentStatus === 'Delivered' || currentStatus === 'Out for Delivery') {
                 throw new BadRequestException('Order tidak dapat diubah dari status saat ini');
             }
-            if (currentStatus !== 'In Transit') {
-                if (order.getDataValue('reweight_status') === 1) {
-                    await transaction.commit();
-                    return {
-                        message: 'Order sudah dalam status menunggu pengiriman',
-                        data: {
-                            no_tracking: order.getDataValue('no_tracking'),
-                            status: order.getDataValue('status'),
-                            reweight_status: order.getDataValue('reweight_status'),
-                            hub_dest_id: order.getDataValue('hub_dest_id') ?? null,
-                        }
-                    };
-                }
-                throw new BadRequestException('Order bukan dalam status In Transit');
-            }
 
             const updateData: any = {
                 reweight_status: 1,
