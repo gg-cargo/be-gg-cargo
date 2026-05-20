@@ -646,15 +646,20 @@ export class FleetTripService {
         return [];
       }
       return this.queryNotaKirimRows(
-        `SELECT DISTINCT
+        `SELECT
            dn.no_delivery_note,
            dn.tanggal,
            dn.no_polisi,
            dn.nama_transporter
          FROM order_delivery_notes dn
-         INNER JOIN orders o ON TRIM(o.assign_sj) = dn.no_delivery_note
-         WHERE o.vendor_id = :vendorId
-           ${platFilter ? 'AND TRIM(dn.no_polisi) = :plat' : ''}
+         INNER JOIN (
+           SELECT MAX(dn2.id) AS max_id
+           FROM order_delivery_notes dn2
+           INNER JOIN orders o ON TRIM(o.assign_sj) = dn2.no_delivery_note
+           WHERE o.vendor_id = :vendorId
+             ${platFilter ? 'AND TRIM(dn2.no_polisi) = :plat' : ''}
+           GROUP BY dn2.no_delivery_note
+         ) latest ON latest.max_id = dn.id
          ORDER BY dn.id DESC
          LIMIT 10`,
         platFilter ? { vendorId, plat: platFilter } : { vendorId },
