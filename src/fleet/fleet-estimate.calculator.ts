@@ -1,4 +1,5 @@
 import {
+  FLEET_ESTIMATE_DRIVER_1_FLAT_BELOW_300,
   FLEET_ESTIMATE_DRIVER_1_RATES,
   FLEET_ESTIMATE_DRIVER_2_MIN_KM,
   FLEET_ESTIMATE_DRIVER_2_RATES,
@@ -43,17 +44,32 @@ export interface FleetEstimateResult {
   notes: string[];
 }
 
-function resolveDriver1Tier(effectiveKm: number): {
+function resolveDriver1Compensation(effectiveKm: number): {
   tier: FleetEstimateDriverTier;
   ratePerKm: number;
+  total: number;
 } {
   if (effectiveKm < FLEET_ESTIMATE_TIER_LOW_MAX_KM) {
-    return { tier: 'below_300', ratePerKm: FLEET_ESTIMATE_DRIVER_1_RATES.below_300 };
+    return {
+      tier: 'below_300',
+      ratePerKm: 0,
+      total: FLEET_ESTIMATE_DRIVER_1_FLAT_BELOW_300,
+    };
   }
   if (effectiveKm <= FLEET_ESTIMATE_TIER_MID_MAX_KM) {
-    return { tier: 'from_300_to_800', ratePerKm: FLEET_ESTIMATE_DRIVER_1_RATES.from_300_to_800 };
+    const ratePerKm = FLEET_ESTIMATE_DRIVER_1_RATES.from_300_to_800;
+    return {
+      tier: 'from_300_to_800',
+      ratePerKm,
+      total: Math.round(effectiveKm * ratePerKm),
+    };
   }
-  return { tier: 'above_800', ratePerKm: FLEET_ESTIMATE_DRIVER_1_RATES.above_800 };
+  const ratePerKm = FLEET_ESTIMATE_DRIVER_1_RATES.above_800;
+  return {
+    tier: 'above_800',
+    ratePerKm,
+    total: Math.round(effectiveKm * ratePerKm),
+  };
 }
 
 function resolveDriver2Tier(effectiveKm: number): {
@@ -98,8 +114,8 @@ export function calculateFleetOperationalEstimate(dto: FleetEstimateDto): FleetE
   }
   const fuelConfig = FLEET_ESTIMATE_FUEL_CONFIG[vehicleType];
 
-  const d1 = resolveDriver1Tier(effectiveKm);
-  const supir1Total = Math.round(effectiveKm * d1.ratePerKm);
+  const d1 = resolveDriver1Compensation(effectiveKm);
+  const supir1Total = d1.total;
 
   const d2 = resolveDriver2Tier(effectiveKm);
   const supir2Eligible = effectiveKm > FLEET_ESTIMATE_DRIVER_2_MIN_KM;
@@ -115,6 +131,11 @@ export function calculateFleetOperationalEstimate(dto: FleetEstimateDto): FleetE
   ];
   if (dto.road_type === 'manual') {
     notes.push('Jarak dari input manual; pastikan sesuai hasil peta.');
+  }
+  if (d1.tier === 'below_300') {
+    notes.push(
+      `Upah supir 1: flat Rp ${FLEET_ESTIMATE_DRIVER_1_FLAT_BELOW_300.toLocaleString('id-ID')} (jarak < ${FLEET_ESTIMATE_TIER_LOW_MAX_KM} km) + BBM.`,
+    );
   }
 
   return {
