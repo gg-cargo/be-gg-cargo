@@ -186,15 +186,33 @@ export function mapFleetTripToDetail(
   const { file_log_ids, loading_photos } = mapLoadingPhotos(loadingPhotoRows);
 
   const supir2 = val<number | null>(trip, 'supir_2_total');
-  const supir2Eligible = Boolean(val(trip, 'supir_2_eligible'));
+  const supir2EligibleStored = Boolean(val(trip, 'supir_2_eligible'));
+  const driver2UserId = assignmentRow
+    ? val<number | null>(assignmentRow, 'driver_2_user_id')
+    : null;
+  const hasDriver2 = driver2UserId != null;
+  const supir2EligibleFromCalc = operationalCalc?.supir_2.eligible ?? false;
+  const supir2EligibleResolved =
+    operationalCalc != null
+      ? supir2EligibleFromCalc
+      : supir2EligibleStored;
+
+  /** Tampilkan upah/deposit supir 2 jika ada driver 2, tier jarak eligible, atau nilai tersimpan */
+  const showSupir2Financials =
+    hasDriver2 ||
+    supir2EligibleFromCalc ||
+    supir2EligibleStored ||
+    supir2 != null;
 
   const supir1Deposit = operationalCalc
     ? mapDepositLine(operationalCalc.supir_1.deposit)
     : { rate_per_km: 0, minimum_per_trip: 0, total: 0 };
   const supir2Deposit =
-    operationalCalc && supir2Eligible
+    operationalCalc && showSupir2Financials
       ? mapDepositLine(operationalCalc.supir_2.deposit)
-      : null;
+      : showSupir2Financials
+        ? { rate_per_km: 0, minimum_per_trip: 0, total: 0 }
+        : null;
   const supir1Wage = operationalCalc
     ? mapWageDeposit(
         operationalCalc.supir_1.gross_total,
@@ -207,18 +225,31 @@ export function mapFleetTripToDetail(
         wage_net: Number(val(trip, 'supir_1_total')),
       };
   const supir2Wage =
-    operationalCalc && supir2Eligible
+    operationalCalc && showSupir2Financials
       ? mapWageDeposit(
           operationalCalc.supir_2.gross_total,
           operationalCalc.supir_2.deposit,
           operationalCalc.supir_2.total,
         )
-      : supir2 != null
+      : showSupir2Financials && supir2 != null
         ? {
             gross_total: Number(supir2),
             deposit: supir2Deposit ?? { rate_per_km: 0, minimum_per_trip: 0, total: 0 },
             wage_net: Number(supir2),
           }
+        : showSupir2Financials
+          ? {
+              gross_total: 0,
+              deposit: supir2Deposit ?? { rate_per_km: 0, minimum_per_trip: 0, total: 0 },
+              wage_net: 0,
+            }
+          : null;
+
+  const supir2TotalResolved =
+    operationalCalc && showSupir2Financials
+      ? operationalCalc.supir_2.total
+      : supir2 != null
+        ? Number(supir2)
         : null;
 
   return {
@@ -238,8 +269,10 @@ export function mapFleetTripToDetail(
       estimasi_tol_total: Number(val(trip, 'estimasi_tol_total')),
       estimasi_waktu_tiba: val<string | null>(trip, 'estimasi_waktu_tiba') ?? '',
       supir_1_total: Number(val(trip, 'supir_1_total')),
-      supir_2_total: supir2 != null ? Number(supir2) : null,
-      supir_2_eligible: supir2Eligible,
+      supir_2_total: showSupir2Financials ? supir2TotalResolved : null,
+      supir_2_eligible: showSupir2Financials
+        ? supir2EligibleResolved || hasDriver2
+        : supir2EligibleResolved,
       supir_1_deposit: supir1Deposit,
       supir_2_deposit: supir2Deposit,
       supir_1_wage: supir1Wage,

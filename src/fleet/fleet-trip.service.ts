@@ -43,6 +43,7 @@ import {
   calculateFleetOperationalEstimate,
   resolveFleetTripDistanceKmInput,
 } from './fleet-estimate.calculator';
+import { FLEET_ESTIMATE_DRIVER_2_MIN_KM } from './constants/fleet-estimate.constants';
 import { FleetEstimateRoadType, FleetEstimateTripType } from './dto/fleet-estimate.dto';
 import {
   mapFleetTripListItem,
@@ -96,6 +97,12 @@ export class FleetTripService {
       }
 
       const summary = dto.summary;
+      const assign = dto.assignment;
+      const hasDriver2 = assign.driver_2_user_id != null;
+      const effectiveKm = Number(summary.distance_km_total);
+      const supir2TierEligible =
+        hasDriver2 && effectiveKm > FLEET_ESTIMATE_DRIVER_2_MIN_KM;
+
       const waktuMenit =
         parseDurationToMinutes(summary.estimasi_waktu_tiba) ??
         sumSegmentDurations(dto.segments.map((s) => s.route.estimasi_waktu));
@@ -115,7 +122,7 @@ export class FleetTripService {
           estimasi_waktu_menit: waktuMenit,
           supir_1_total: summary.supir_1_total,
           supir_2_total: summary.supir_2_total ?? null,
-          supir_2_eligible: summary.supir_2_eligible,
+          supir_2_eligible: summary.supir_2_eligible || supir2TierEligible,
           grand_total_operational: summary.grand_total_operational,
           fuel_type: summary.fuel_type?.trim() || null,
           status: 'draft',
@@ -168,7 +175,6 @@ export class FleetTripService {
         { transaction },
       );
 
-      const assign = dto.assignment;
       await this.assignmentModel.create(
         {
           fleet_trip_id: tripId,
