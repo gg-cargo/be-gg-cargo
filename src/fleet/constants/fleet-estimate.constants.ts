@@ -19,6 +19,18 @@ export const FLEET_ESTIMATE_DRIVER_2_RATES = {
 
 export const FLEET_ESTIMATE_DRIVER_2_MIN_KM = 300;
 
+/** Deposit supir 1: Rp/km + minimum per trip (IDR) */
+export const FLEET_ESTIMATE_DRIVER_1_DEPOSIT = {
+  ratePerKm: 39,
+  minimumPerTrip: 7_500,
+} as const;
+
+/** Deposit supir 2: Rp/km + minimum per trip (IDR) */
+export const FLEET_ESTIMATE_DRIVER_2_DEPOSIT = {
+  ratePerKm: 29,
+  minimumPerTrip: 5_000,
+} as const;
+
 /** Konfigurasi BBM per tipe kendaraan */
 export const FLEET_ESTIMATE_FUEL_CONFIG = {
   CDDL: {

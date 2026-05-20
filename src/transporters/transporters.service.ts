@@ -260,7 +260,14 @@ export class TransportersService {
         });
     }
 
-    async listTransportersOrCouriers(role?: string, status?: string, hub_id?: string, page = 1, limit = 10) {
+    async listTransportersOrCouriers(
+        role?: string,
+        status?: string,
+        hub_id?: string,
+        type_transporter?: string,
+        page = 1,
+        limit = 10,
+    ) {
         const where: any = {};
         if (role === '4') where.level = 4;
         else if (role === '8') where.level = 8;
@@ -272,6 +279,10 @@ export class TransportersService {
         if (hub_id != null && hub_id !== '') {
             const hubIdNum = Number(hub_id);
             if (!Number.isNaN(hubIdNum)) where.hub_id = hubIdNum;
+        }
+
+        if (type_transporter != null && type_transporter !== '') {
+            where.type_transporter = this.normalizeTypeTransporter(type_transporter, true);
         }
 
         const offset = (page - 1) * limit;

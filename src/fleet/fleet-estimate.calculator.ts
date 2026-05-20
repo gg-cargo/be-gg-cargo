@@ -1,6 +1,8 @@
 import {
+  FLEET_ESTIMATE_DRIVER_1_DEPOSIT,
   FLEET_ESTIMATE_DRIVER_1_FLAT_BELOW_300,
   FLEET_ESTIMATE_DRIVER_1_RATES,
+  FLEET_ESTIMATE_DRIVER_2_DEPOSIT,
   FLEET_ESTIMATE_DRIVER_2_MIN_KM,
   FLEET_ESTIMATE_DRIVER_2_RATES,
   FLEET_ESTIMATE_FUEL_CONFIG,
@@ -11,9 +13,17 @@ import {
 } from './constants/fleet-estimate.constants';
 import { FleetEstimateDto, FleetEstimateTripType } from './dto/fleet-estimate.dto';
 
+export interface FleetEstimateDriverDepositLine {
+  rate_per_km: number;
+  minimum_per_trip: number;
+  total: number;
+}
+
 export interface FleetEstimateDriverLine {
   rate_per_km: number;
   tier: FleetEstimateDriverTier | null;
+  gross_total: number;
+  deposit: FleetEstimateDriverDepositLine;
   total: number;
 }
 
@@ -85,6 +95,33 @@ function resolveDriver2Tier(effectiveKm: number): {
   return { tier: 'above_800', ratePerKm: FLEET_ESTIMATE_DRIVER_2_RATES.above_800 };
 }
 
+function resolveDriverDeposit(
+  effectiveKm: number,
+  ratePerKm: number,
+  minimumPerTrip: number,
+): number {
+  return Math.max(Math.round(effectiveKm * ratePerKm), minimumPerTrip);
+}
+
+function applyDepositToWage(
+  grossTotal: number,
+  effectiveKm: number,
+  depositConfig: { ratePerKm: number; minimumPerTrip: number },
+): { deposit: FleetEstimateDriverDepositLine; netTotal: number } {
+  const depositTotal =
+    grossTotal > 0
+      ? resolveDriverDeposit(effectiveKm, depositConfig.ratePerKm, depositConfig.minimumPerTrip)
+      : 0;
+  return {
+    deposit: {
+      rate_per_km: depositConfig.ratePerKm,
+      minimum_per_trip: depositConfig.minimumPerTrip,
+      total: depositTotal,
+    },
+    netTotal: Math.max(0, grossTotal - depositTotal),
+  };
+}
+
 export function normalizeFleetVehicleType(raw: string): FleetEstimateVehicleType | null {
   const n = raw.trim().toUpperCase().replace(/\s+/g, '');
   if (n.includes('CDDL') || (n.includes('CDD') && !n.includes('TRAGA'))) {
@@ -115,26 +152,40 @@ export function calculateFleetOperationalEstimate(dto: FleetEstimateDto): FleetE
   const fuelConfig = FLEET_ESTIMATE_FUEL_CONFIG[vehicleType];
 
   const d1 = resolveDriver1Compensation(effectiveKm);
-  const supir1Total = d1.total;
+  const supir1Gross = d1.total;
+  const supir1AfterDeposit = applyDepositToWage(
+    supir1Gross,
+    effectiveKm,
+    FLEET_ESTIMATE_DRIVER_1_DEPOSIT,
+  );
 
   const d2 = resolveDriver2Tier(effectiveKm);
   const supir2Eligible = effectiveKm > FLEET_ESTIMATE_DRIVER_2_MIN_KM;
-  const supir2Total = supir2Eligible ? Math.round(effectiveKm * d2.ratePerKm) : 0;
+  const supir2Gross = supir2Eligible ? Math.round(effectiveKm * d2.ratePerKm) : 0;
+  const supir2AfterDeposit = applyDepositToWage(
+    supir2Gross,
+    effectiveKm,
+    FLEET_ESTIMATE_DRIVER_2_DEPOSIT,
+  );
 
   const bbmTotal = Math.round((effectiveKm / fuelConfig.kmPerLiter) * fuelConfig.pricePerLiter);
 
-  const grandTotal = supir1Total + supir2Total + bbmTotal;
+  const supir1Net = supir1AfterDeposit.netTotal;
+  const supir2Net = supir2AfterDeposit.netTotal;
+  const grandTotal = supir1Net + supir2Net + bbmTotal;
 
   const notes: string[] = [
-    'Perhitungan biaya operasional (supir + BBM). Belum termasuk tol, feri, dan uang makan.',
+    'Perhitungan biaya operasional (upah supir neto setelah deposit + BBM). Belum termasuk tol, feri, dan uang makan.',
     `Jarak efektif: ${effectiveKm} km (${dto.trip_type === FleetEstimateTripType.TWO_WAY ? 'pulang-pergi' : 'satu arah'}).`,
+    `Deposit supir 1: Rp ${FLEET_ESTIMATE_DRIVER_1_DEPOSIT.ratePerKm}/km, min Rp ${FLEET_ESTIMATE_DRIVER_1_DEPOSIT.minimumPerTrip.toLocaleString('id-ID')}/trip.`,
+    `Deposit supir 2: Rp ${FLEET_ESTIMATE_DRIVER_2_DEPOSIT.ratePerKm}/km, min Rp ${FLEET_ESTIMATE_DRIVER_2_DEPOSIT.minimumPerTrip.toLocaleString('id-ID')}/trip (jika ada supir 2).`,
   ];
   if (dto.road_type === 'manual') {
     notes.push('Jarak dari input manual; pastikan sesuai hasil peta.');
   }
   if (d1.tier === 'below_300') {
     notes.push(
-      `Upah supir 1: flat Rp ${FLEET_ESTIMATE_DRIVER_1_FLAT_BELOW_300.toLocaleString('id-ID')} (jarak < ${FLEET_ESTIMATE_TIER_LOW_MAX_KM} km) + BBM.`,
+      `Upah supir 1 bruto: flat Rp ${FLEET_ESTIMATE_DRIVER_1_FLAT_BELOW_300.toLocaleString('id-ID')} (jarak < ${FLEET_ESTIMATE_TIER_LOW_MAX_KM} km); neto setelah deposit.`,
     );
   }
 
@@ -149,13 +200,17 @@ export function calculateFleetOperationalEstimate(dto: FleetEstimateDto): FleetE
     supir_1: {
       rate_per_km: d1.ratePerKm,
       tier: d1.tier,
-      total: supir1Total,
+      gross_total: supir1Gross,
+      deposit: supir1AfterDeposit.deposit,
+      total: supir1Net,
     },
     supir_2: {
       eligible: supir2Eligible,
       rate_per_km: d2.ratePerKm,
       tier: d2.tier,
-      total: supir2Total,
+      gross_total: supir2Gross,
+      deposit: supir2AfterDeposit.deposit,
+      total: supir2Net,
     },
     bbm: {
       fuel_type: fuelConfig.fuelType,
