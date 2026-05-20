@@ -5031,6 +5031,16 @@ export class OrdersService {
                 throw new NotFoundException('Order tidak ditemukan');
             }
 
+            const deliveryNote = await this.orderDeliveryNoteModel.findOne({
+                where: {
+                    no_tracking: {
+                        [Op.like]: `%${noResi}%`,
+                    },
+                },
+                attributes: ['no_delivery_note'],
+                raw: true,
+            });
+
             // 2. Calculate summary metrics from pieces
             const pieces = order.getDataValue('pieces') || [];
             let jumlahKoli = 0;
@@ -5073,7 +5083,10 @@ export class OrdersService {
                         created_at: order.getDataValue('created_at'),
                         updated_at: order.getDataValue('updated_at'),
                         vendor_id: order.getDataValue('vendor_id'),
-                        vendor_tracking_number: order.getDataValue('vendor_tracking_number')
+                        vendor_tracking_number: order.getDataValue('vendor_tracking_number'),
+                        no_delivery_note:
+                            (deliveryNote as { no_delivery_note?: string } | null)
+                                ?.no_delivery_note ?? null,
                     },
                     shipper: {
                         name: order.getDataValue('nama_pengirim'),

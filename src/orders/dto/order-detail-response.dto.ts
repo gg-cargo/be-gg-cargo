@@ -14,6 +14,7 @@ export class OrderDetailResponseDto {
             updated_at: Date;
             vendor_id: number;
             vendor_tracking_number: string;
+            no_delivery_note: string | null;
         };
         shipper: {
             name: string;
