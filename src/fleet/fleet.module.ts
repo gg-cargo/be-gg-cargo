@@ -8,8 +8,13 @@ import { OrderHistory } from '../models/order-history.model';
 import { Vendor } from '../models/vendor.model';
 import { Hub } from '../models/hub.model';
 import { FleetEstimate } from '../models/fleet-estimate.model';
+import { FleetTrip } from '../models/fleet-trip.model';
+import { FleetTripWaypoint } from '../models/fleet-trip-waypoint.model';
+import { FleetTripSegment } from '../models/fleet-trip-segment.model';
+import { FleetTripAssignment } from '../models/fleet-trip-assignment.model';
 import { User } from '../models/user.model';
 import { FileLog } from '../models/file-log.model';
+import { FleetTripService } from './fleet-trip.service';
 
 @Module({
   imports: [
@@ -20,13 +25,17 @@ import { FileLog } from '../models/file-log.model';
       Vendor,
       Hub,
       FleetEstimate,
+      FleetTrip,
+      FleetTripWaypoint,
+      FleetTripSegment,
+      FleetTripAssignment,
       User,
       FileLog,
     ]),
   ],
   controllers: [FleetController],
-  providers: [FleetService],
-  exports: [FleetService],
+  providers: [FleetService, FleetTripService],
+  exports: [FleetService, FleetTripService],
 })
 export class FleetModule {}
 

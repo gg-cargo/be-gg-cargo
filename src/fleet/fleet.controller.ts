@@ -24,10 +24,17 @@ import { UpdateFleetEstimateApprovalDto } from './dto/update-fleet-estimate-appr
 import { ListFleetEstimatesQueryDto } from './dto/list-fleet-estimates-query.dto';
 import { ListFleetEstimatesResponseDto } from './dto/fleet-estimate-item.dto';
 import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
+import { FleetTripService } from './fleet-trip.service';
+import { CreateFleetTripDto } from './dto/create-fleet-trip.dto';
+import { FleetTripResponseDto, FleetTripListResponseDto } from './dto/fleet-trip-response.dto';
+import { ListFleetTripsQueryDto } from './dto/list-fleet-trips-query.dto';
 
 @Controller('fleet')
 export class FleetController {
-  constructor(private readonly fleetService: FleetService) { }
+  constructor(
+    private readonly fleetService: FleetService,
+    private readonly fleetTripService: FleetTripService,
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Get('shipments')
@@ -105,6 +112,36 @@ export class FleetController {
   @HttpCode(HttpStatus.OK)
   async deleteFleetEstimate(@Param('id', ParseIntPipe) id: number) {
     return this.fleetService.deleteFleetEstimate(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('trips')
+  @HttpCode(HttpStatus.CREATED)
+  async createFleetTrip(
+    @Body() dto: CreateFleetTripDto,
+    @Request() req: { user?: { id?: number } },
+  ): Promise<FleetTripResponseDto> {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('User tidak terautentikasi');
+    }
+    return this.fleetTripService.create(dto, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('trips')
+  async listFleetTrips(
+    @Query() query: ListFleetTripsQueryDto,
+  ): Promise<FleetTripListResponseDto> {
+    return this.fleetTripService.list(query);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('trips/:trackingNo')
+  async getFleetTrip(
+    @Param('trackingNo') trackingNo: string,
+  ): Promise<FleetTripResponseDto> {
+    return this.fleetTripService.findByTrackingNo(trackingNo);
   }
 
   @UseGuards(JwtAuthGuard)

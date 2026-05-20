@@ -43,3 +43,7 @@ export * from './order-manifest-inbound.model';
 export * from './order-kendala.model';
 export * from './vendor.model';
 export * from './fleet-estimate.model';
+export * from './fleet-trip.model';
+export * from './fleet-trip-waypoint.model';
+export * from './fleet-trip-segment.model';
+export * from './fleet-trip-assignment.model';

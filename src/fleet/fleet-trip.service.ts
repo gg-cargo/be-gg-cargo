@@ -1,0 +1,341 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectModel } from '@nestjs/sequelize';
+import { Op, QueryTypes, Transaction } from 'sequelize';
+import { Sequelize } from 'sequelize-typescript';
+import { FleetTrip } from '../models/fleet-trip.model';
+import { FleetTripWaypoint } from '../models/fleet-trip-waypoint.model';
+import { FleetTripSegment } from '../models/fleet-trip-segment.model';
+import { FleetTripAssignment } from '../models/fleet-trip-assignment.model';
+import { User } from '../models/user.model';
+import { Vendor } from '../models/vendor.model';
+import {
+  CreateFleetTripDto,
+  FleetTripAssigneeTypeDto,
+} from './dto/create-fleet-trip.dto';
+import {
+  FleetTripDetailDto,
+  FleetTripListResponseDto,
+  FleetTripResponseDto,
+} from './dto/fleet-trip-response.dto';
+import { ListFleetTripsQueryDto } from './dto/list-fleet-trips-query.dto';
+import {
+  buildFleetTrackingNo,
+  fleetTrackingNoPrefixForDate,
+} from './helpers/generate-fleet-tracking-no.helper';
+import {
+  parseDurationToMinutes,
+  sumSegmentDurations,
+} from './helpers/parse-duration-minutes.helper';
+import {
+  mapFleetTripListItem,
+  mapFleetTripToDetail,
+} from './helpers/map-fleet-trip.helper';
+
+@Injectable()
+export class FleetTripService {
+  private readonly logger = new Logger(FleetTripService.name);
+
+  constructor(
+    @InjectModel(FleetTrip)
+    private readonly fleetTripModel: typeof FleetTrip,
+    @InjectModel(FleetTripWaypoint)
+    private readonly waypointModel: typeof FleetTripWaypoint,
+    @InjectModel(FleetTripSegment)
+    private readonly segmentModel: typeof FleetTripSegment,
+    @InjectModel(FleetTripAssignment)
+    private readonly assignmentModel: typeof FleetTripAssignment,
+    @InjectModel(User)
+    private readonly userModel: typeof User,
+    @InjectModel(Vendor)
+    private readonly vendorModel: typeof Vendor,
+    private readonly sequelize: Sequelize,
+  ) {}
+
+  async create(
+    dto: CreateFleetTripDto,
+    createdByUserId?: number,
+  ): Promise<FleetTripResponseDto> {
+    await this.validateAssignment(dto);
+
+    const expectedSegments = dto.waypoints.length - 1;
+    if (dto.segments.length !== expectedSegments) {
+      throw new BadRequestException(
+        `Jumlah segments harus ${expectedSegments} (waypoints - 1)`,
+      );
+    }
+
+    const transaction = await this.sequelize.transaction();
+    try {
+      const trackingNo =
+        dto.tracking_no?.trim() ||
+        (await this.generateUniqueTrackingNo(transaction));
+
+      const existing = await this.fleetTripModel.findOne({
+        where: { tracking_no: trackingNo },
+        transaction,
+      });
+      if (existing) {
+        throw new ConflictException(`tracking_no ${trackingNo} sudah digunakan`);
+      }
+
+      const summary = dto.summary;
+      const waktuMenit =
+        parseDurationToMinutes(summary.estimasi_waktu_tiba) ??
+        sumSegmentDurations(dto.segments.map((s) => s.route.estimasi_waktu));
+
+      const trip = await this.fleetTripModel.create(
+        {
+          tracking_no: trackingNo,
+          trip_type: summary.trip_type,
+          road_type: summary.road_type,
+          kota_asal: summary.kota_asal.trim(),
+          kota_tujuan: summary.kota_tujuan.trim(),
+          vehicle_type: summary.vehicle_type.trim(),
+          distance_km_total: summary.distance_km_total,
+          estimasi_bbm_total: summary.estimasi_bbm_total,
+          estimasi_tol_total: summary.estimasi_tol_total,
+          estimasi_waktu_tiba: summary.estimasi_waktu_tiba,
+          estimasi_waktu_menit: waktuMenit,
+          supir_1_total: summary.supir_1_total,
+          supir_2_total: summary.supir_2_total ?? null,
+          supir_2_eligible: summary.supir_2_eligible,
+          grand_total_operational: summary.grand_total_operational,
+          fuel_type: summary.fuel_type?.trim() || null,
+          status: 'draft',
+          created_by_user_id: createdByUserId ?? dto.assignment.assigned_by_user_id,
+          created_at: new Date(),
+        } as any,
+        { transaction },
+      );
+
+      const tripId = trip.id;
+
+      const sortedWaypoints = [...dto.waypoints].sort(
+        (a, b) => a.sequence - b.sequence,
+      );
+      await this.waypointModel.bulkCreate(
+        sortedWaypoints.map((w) => ({
+          fleet_trip_id: tripId,
+          sequence: w.sequence,
+          label: w.label.trim(),
+          lat: w.lat,
+          lng: w.lng,
+          address: w.address?.trim() || null,
+        })) as any,
+        { transaction },
+      );
+
+      await this.segmentModel.bulkCreate(
+        dto.segments.map((s) => ({
+          fleet_trip_id: tripId,
+          segment_no: s.segment_no,
+          titik_asal: s.titik_asal.trim(),
+          titik_tujuan: s.titik_tujuan.trim(),
+          titik_asal_lat: s.titik_asal_lat,
+          titik_asal_lng: s.titik_asal_lng,
+          titik_tujuan_lat: s.titik_tujuan_lat,
+          titik_tujuan_lng: s.titik_tujuan_lng,
+          road_type: s.road_type,
+          distance_km: s.distance_km,
+          route_variant: s.route.variant,
+          route_jarak_km: s.route.jarak_km,
+          route_estimasi_waktu: s.route.estimasi_waktu,
+          route_biaya_tol_idr: s.route.biaya_tol_idr ?? null,
+          estimate_bbm_total: s.estimate.bbm_total,
+          estimate_fuel_type: s.estimate.fuel_type,
+          estimate_toll_total: s.estimate.toll_total ?? null,
+          estimate_distance_km_effective: s.estimate.distance_km_effective,
+          estimate_grand_total_operational: s.estimate.grand_total_operational,
+        })) as any,
+        { transaction },
+      );
+
+      const assign = dto.assignment;
+      await this.assignmentModel.create(
+        {
+          fleet_trip_id: tripId,
+          assignee_type: assign.assignee_type,
+          assigned_by_user_id: assign.assigned_by_user_id,
+          driver_1_user_id:
+            assign.assignee_type === FleetTripAssigneeTypeDto.MITRA
+              ? assign.driver_1_user_id ?? null
+              : null,
+          driver_2_user_id:
+            assign.assignee_type === FleetTripAssigneeTypeDto.MITRA
+              ? assign.driver_2_user_id ?? null
+              : null,
+          vendor_id:
+            assign.assignee_type === FleetTripAssigneeTypeDto.VENDOR
+              ? assign.vendor_id ?? null
+              : null,
+        } as any,
+        { transaction },
+      );
+
+      await transaction.commit();
+
+      const detail = await this.findDetailByTrackingNo(trackingNo);
+      return {
+        success: true,
+        message: 'Fleet trip berhasil disimpan',
+        data: detail,
+      };
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  }
+
+  async findByTrackingNo(trackingNo: string): Promise<FleetTripResponseDto> {
+    const detail = await this.findDetailByTrackingNo(trackingNo);
+    return {
+      success: true,
+      message: 'Detail fleet trip berhasil diambil',
+      data: detail,
+    };
+  }
+
+  async list(query: ListFleetTripsQueryDto): Promise<FleetTripListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const offset = (page - 1) * limit;
+
+    const where: Record<string, unknown> = {};
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.search?.trim()) {
+      const q = `%${query.search.trim()}%`;
+      where[Op.or as any] = [
+        { tracking_no: { [Op.like]: q } },
+        { kota_asal: { [Op.like]: q } },
+        { kota_tujuan: { [Op.like]: q } },
+      ];
+    }
+
+    const { count, rows } = await this.fleetTripModel.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [['created_at', 'DESC']],
+      include: [
+        {
+          model: FleetTripAssignment,
+          as: 'assignment',
+          required: false,
+          attributes: ['assignee_type'],
+        },
+      ],
+    });
+
+    return {
+      success: true,
+      message: 'Daftar fleet trip berhasil diambil',
+      data: {
+        total: count,
+        page,
+        limit,
+        items: rows.map((r) => mapFleetTripListItem(r)),
+      },
+    };
+  }
+
+  private async findDetailByTrackingNo(
+    trackingNo: string,
+  ): Promise<FleetTripDetailDto> {
+    const trip = await this.fleetTripModel.findOne({
+      where: { tracking_no: trackingNo },
+      include: [
+        {
+          model: FleetTripWaypoint,
+          as: 'waypoints',
+          separate: true,
+          order: [['sequence', 'ASC']],
+        },
+        {
+          model: FleetTripSegment,
+          as: 'segments',
+          separate: true,
+          order: [['segment_no', 'ASC']],
+        },
+        { model: FleetTripAssignment, as: 'assignment', required: false },
+      ],
+    });
+
+    if (!trip) {
+      throw new NotFoundException(`Fleet trip ${trackingNo} tidak ditemukan`);
+    }
+
+    return mapFleetTripToDetail(trip);
+  }
+
+  private async validateAssignment(dto: CreateFleetTripDto): Promise<void> {
+    const a = dto.assignment;
+
+    const assigner = await this.userModel.findByPk(a.assigned_by_user_id);
+    if (!assigner) {
+      throw new BadRequestException('assigned_by_user_id tidak ditemukan');
+    }
+
+    if (a.assignee_type === FleetTripAssigneeTypeDto.MITRA) {
+      if (!a.driver_1_user_id) {
+        throw new BadRequestException(
+          'driver_1_user_id wajib untuk assignee_type mitra',
+        );
+      }
+      const d1 = await this.userModel.findByPk(a.driver_1_user_id);
+      if (!d1) {
+        throw new BadRequestException('driver_1_user_id tidak ditemukan');
+      }
+      if (a.driver_2_user_id) {
+        const d2 = await this.userModel.findByPk(a.driver_2_user_id);
+        if (!d2) {
+          throw new BadRequestException('driver_2_user_id tidak ditemukan');
+        }
+      }
+    } else if (a.assignee_type === FleetTripAssigneeTypeDto.VENDOR) {
+      if (!a.vendor_id) {
+        throw new BadRequestException(
+          'vendor_id wajib untuk assignee_type vendor',
+        );
+      }
+      const vendor = await this.vendorModel.findByPk(a.vendor_id);
+      if (!vendor) {
+        throw new BadRequestException('vendor_id tidak ditemukan');
+      }
+    }
+  }
+
+  private async generateUniqueTrackingNo(
+    transaction?: Transaction,
+  ): Promise<string> {
+    const now = new Date();
+    const prefix = fleetTrackingNoPrefixForDate(now);
+
+    const rows = (await this.sequelize.query(
+      `SELECT MAX(CAST(SUBSTRING(tracking_no, 9) AS UNSIGNED)) AS max_suffix
+       FROM fleet_trips
+       WHERE tracking_no LIKE :prefix`,
+      {
+        replacements: { prefix: `${prefix}%` },
+        type: QueryTypes.SELECT,
+        transaction,
+      },
+    )) as { max_suffix: number | null }[];
+
+    const maxSuffix = rows[0]?.max_suffix ?? 0;
+    const next = Number(maxSuffix) + 1;
+    if (next > 999) {
+      throw new BadRequestException(
+        'Kuota nomor tracking harian habis (maks 999/hari)',
+      );
+    }
+    return buildFleetTrackingNo(now, next);
+  }
+}
