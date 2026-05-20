@@ -122,6 +122,21 @@ function applyDepositToWage(
   };
 }
 
+/** Jarak satu arah dari fleet_trips.distance_km_total + trip_type */
+export function resolveFleetTripDistanceKmInput(trip: {
+  trip_type: string;
+  distance_km_total: number | string;
+}): number {
+  const effectiveKm = Number(trip.distance_km_total);
+  if (!Number.isFinite(effectiveKm) || effectiveKm <= 0) {
+    throw new Error('distance_km_total trip tidak valid');
+  }
+  if (trip.trip_type === 'two_way') {
+    return effectiveKm / 2;
+  }
+  return effectiveKm;
+}
+
 export function normalizeFleetVehicleType(raw: string): FleetEstimateVehicleType | null {
   const n = raw.trim().toUpperCase().replace(/\s+/g, '');
   if (n.includes('CDDL') || (n.includes('CDD') && !n.includes('TRAGA'))) {

@@ -6,11 +6,37 @@ import { FleetTripLoadingPhoto } from '../../models/fleet-trip-loading-photo.mod
 import { FileLog } from '../../models/file-log.model';
 import { User } from '../../models/user.model';
 import {
+  FleetEstimateResult,
+  FleetEstimateDriverDepositLine,
+} from '../fleet-estimate.calculator';
+import {
   FleetTripDetailDto,
+  FleetTripDriverDepositDto,
+  FleetTripDriverWageDepositDto,
   FleetTripListItemDto,
   FleetTripLoadingPhotoDto,
   FleetTripNotaKirimDto,
 } from '../dto/fleet-trip-response.dto';
+
+function mapDepositLine(d: FleetEstimateDriverDepositLine): FleetTripDriverDepositDto {
+  return {
+    rate_per_km: d.rate_per_km,
+    minimum_per_trip: d.minimum_per_trip,
+    total: d.total,
+  };
+}
+
+function mapWageDeposit(
+  gross: number,
+  deposit: FleetEstimateDriverDepositLine,
+  net: number,
+): FleetTripDriverWageDepositDto {
+  return {
+    gross_total: gross,
+    deposit: mapDepositLine(deposit),
+    wage_net: net,
+  };
+}
 
 function val<T>(row: { getDataValue(key: string): unknown }, key: string): T {
   return row.getDataValue(key) as T;
@@ -145,6 +171,7 @@ export function mapFleetTripToDetail(
   trip: FleetTrip,
   bankByUserId: Record<string, string> = {},
   notaKirim: FleetTripNotaKirimDto[] = [],
+  operationalCalc?: FleetEstimateResult | null,
 ): FleetTripDetailDto {
   const waypointRows =
     (trip.getDataValue('waypoints') as FleetTripWaypoint[] | undefined) ?? [];
@@ -159,6 +186,40 @@ export function mapFleetTripToDetail(
   const { file_log_ids, loading_photos } = mapLoadingPhotos(loadingPhotoRows);
 
   const supir2 = val<number | null>(trip, 'supir_2_total');
+  const supir2Eligible = Boolean(val(trip, 'supir_2_eligible'));
+
+  const supir1Deposit = operationalCalc
+    ? mapDepositLine(operationalCalc.supir_1.deposit)
+    : { rate_per_km: 0, minimum_per_trip: 0, total: 0 };
+  const supir2Deposit =
+    operationalCalc && supir2Eligible
+      ? mapDepositLine(operationalCalc.supir_2.deposit)
+      : null;
+  const supir1Wage = operationalCalc
+    ? mapWageDeposit(
+        operationalCalc.supir_1.gross_total,
+        operationalCalc.supir_1.deposit,
+        operationalCalc.supir_1.total,
+      )
+    : {
+        gross_total: Number(val(trip, 'supir_1_total')),
+        deposit: supir1Deposit,
+        wage_net: Number(val(trip, 'supir_1_total')),
+      };
+  const supir2Wage =
+    operationalCalc && supir2Eligible
+      ? mapWageDeposit(
+          operationalCalc.supir_2.gross_total,
+          operationalCalc.supir_2.deposit,
+          operationalCalc.supir_2.total,
+        )
+      : supir2 != null
+        ? {
+            gross_total: Number(supir2),
+            deposit: supir2Deposit ?? { rate_per_km: 0, minimum_per_trip: 0, total: 0 },
+            wage_net: Number(supir2),
+          }
+        : null;
 
   return {
     id: val<number>(trip, 'id'),
@@ -178,7 +239,11 @@ export function mapFleetTripToDetail(
       estimasi_waktu_tiba: val<string | null>(trip, 'estimasi_waktu_tiba') ?? '',
       supir_1_total: Number(val(trip, 'supir_1_total')),
       supir_2_total: supir2 != null ? Number(supir2) : null,
-      supir_2_eligible: Boolean(val(trip, 'supir_2_eligible')),
+      supir_2_eligible: supir2Eligible,
+      supir_1_deposit: supir1Deposit,
+      supir_2_deposit: supir2Deposit,
+      supir_1_wage: supir1Wage,
+      supir_2_wage: supir2Wage,
       grand_total_operational: Number(val(trip, 'grand_total_operational')),
       fuel_type: val<string | null>(trip, 'fuel_type'),
     },

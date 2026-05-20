@@ -15,7 +15,10 @@ import {
   FleetEstimateRoadType,
   FleetEstimateTripType,
 } from './dto/fleet-estimate.dto';
-import { calculateFleetOperationalEstimate } from './fleet-estimate.calculator';
+import {
+  calculateFleetOperationalEstimate,
+  resolveFleetTripDistanceKmInput,
+} from './fleet-estimate.calculator';
 import { CreditFleetDepositSaldoDto } from './dto/credit-fleet-deposit-saldo.dto';
 import {
   CreditFleetDepositSaldoResponseDto,
@@ -131,7 +134,6 @@ export class FleetSaldoService {
       );
     }
 
-    const distanceKmInput = this.resolveDistanceKmInputForCalculator(trip);
     let calc;
     try {
       calc = calculateFleetOperationalEstimate({
@@ -140,7 +142,10 @@ export class FleetSaldoService {
         trip_type: trip.getDataValue('trip_type') as FleetEstimateTripType,
         road_type: trip.getDataValue('road_type') as FleetEstimateRoadType,
         vehicle_type: trip.getDataValue('vehicle_type'),
-        distance_km: distanceKmInput,
+        distance_km: resolveFleetTripDistanceKmInput({
+          trip_type: trip.getDataValue('trip_type'),
+          distance_km_total: trip.getDataValue('distance_km_total'),
+        }),
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Gagal menghitung deposit';
@@ -277,21 +282,6 @@ export class FleetSaldoService {
           : null;
 
     return { driver1UserId, driver2UserId };
-  }
-
-  /**
-   * fleet_trips.distance_km_total = jarak efektif; kalkulator butuh jarak satu arah.
-   */
-  private resolveDistanceKmInputForCalculator(trip: FleetTrip): number {
-    const effectiveKm = Number(trip.getDataValue('distance_km_total'));
-    if (!Number.isFinite(effectiveKm) || effectiveKm <= 0) {
-      throw new BadRequestException('distance_km_total trip tidak valid');
-    }
-    const tripType = trip.getDataValue('trip_type');
-    if (tripType === 'two_way') {
-      return effectiveKm / 2;
-    }
-    return effectiveKm;
   }
 
   private async creditUserSaldo(

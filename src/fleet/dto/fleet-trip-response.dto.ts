@@ -35,6 +35,18 @@ export class FleetTripSegmentResponseDto {
   estimate: FleetTripSegmentEstimateResponseDto;
 }
 
+export class FleetTripDriverDepositDto {
+  rate_per_km: number;
+  minimum_per_trip: number;
+  total: number;
+}
+
+export class FleetTripDriverWageDepositDto {
+  gross_total: number;
+  deposit: FleetTripDriverDepositDto;
+  wage_net: number;
+}
+
 export class FleetTripSummaryResponseDto {
   kota_asal: string;
   kota_tujuan: string;
@@ -48,6 +60,10 @@ export class FleetTripSummaryResponseDto {
   supir_1_total: number;
   supir_2_total?: number | null;
   supir_2_eligible: boolean;
+  supir_1_deposit: FleetTripDriverDepositDto;
+  supir_2_deposit: FleetTripDriverDepositDto | null;
+  supir_1_wage: FleetTripDriverWageDepositDto;
+  supir_2_wage: FleetTripDriverWageDepositDto | null;
   grand_total_operational: number;
   fuel_type?: string | null;
 }

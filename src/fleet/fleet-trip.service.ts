@@ -40,6 +40,11 @@ import {
   sumSegmentDurations,
 } from './helpers/parse-duration-minutes.helper';
 import {
+  calculateFleetOperationalEstimate,
+  resolveFleetTripDistanceKmInput,
+} from './fleet-estimate.calculator';
+import { FleetEstimateRoadType, FleetEstimateTripType } from './dto/fleet-estimate.dto';
+import {
   mapFleetTripListItem,
   mapFleetTripLoadingPhotos,
   mapFleetTripToDetail,
@@ -606,7 +611,31 @@ export class FleetTripService {
       bankByUserId,
     );
     const notaKirim = await this.loadNotaKirimForTrip(trip, platKendaraan);
-    return mapFleetTripToDetail(trip, bankByUserId, notaKirim);
+    const operationalCalc = this.tryCalculateOperationalForTrip(trip);
+    return mapFleetTripToDetail(trip, bankByUserId, notaKirim, operationalCalc);
+  }
+
+  private tryCalculateOperationalForTrip(trip: FleetTrip) {
+    try {
+      return calculateFleetOperationalEstimate({
+        kota_asal: trip.getDataValue('kota_asal'),
+        kota_tujuan: trip.getDataValue('kota_tujuan'),
+        trip_type: trip.getDataValue('trip_type') as FleetEstimateTripType,
+        road_type: trip.getDataValue('road_type') as FleetEstimateRoadType,
+        vehicle_type: trip.getDataValue('vehicle_type'),
+        distance_km: resolveFleetTripDistanceKmInput({
+          trip_type: trip.getDataValue('trip_type'),
+          distance_km_total: trip.getDataValue('distance_km_total'),
+        }),
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Gagal hitung deposit trip ${trip.getDataValue('tracking_no')}: ${
+          err instanceof Error ? err.message : err
+        }`,
+      );
+      return null;
+    }
   }
 
   /**
