@@ -210,20 +210,23 @@ export class FleetTripAssignmentDto {
   @IsNumber()
   assigned_by_user_id: number;
 
-  @ValidateIf((o) => o.assignee_type === FleetTripAssigneeTypeDto.MITRA)
+  @ValidateIf(
+    (o) =>
+      o.assignee_type === FleetTripAssigneeTypeDto.MITRA ||
+      o.assignee_type === FleetTripAssigneeTypeDto.VENDOR,
+  )
   @Type(() => Number)
-  @IsNumber()
+  @IsNumber({}, { message: 'driver_1_user_id harus angka' })
   driver_1_user_id?: number;
 
   @IsOptional()
-  @ValidateIf((o) => o.assignee_type === FleetTripAssigneeTypeDto.MITRA)
   @Type(() => Number)
   @IsNumber()
   driver_2_user_id?: number | null;
 
   @ValidateIf((o) => o.assignee_type === FleetTripAssigneeTypeDto.VENDOR)
   @Type(() => Number)
-  @IsNumber()
+  @IsNumber({}, { message: 'vendor_id harus angka' })
   vendor_id?: number;
 }
 

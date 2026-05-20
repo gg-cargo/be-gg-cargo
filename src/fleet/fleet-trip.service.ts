@@ -171,14 +171,8 @@ export class FleetTripService {
           fleet_trip_id: tripId,
           assignee_type: assign.assignee_type,
           assigned_by_user_id: assign.assigned_by_user_id,
-          driver_1_user_id:
-            assign.assignee_type === FleetTripAssigneeTypeDto.MITRA
-              ? assign.driver_1_user_id ?? null
-              : null,
-          driver_2_user_id:
-            assign.assignee_type === FleetTripAssigneeTypeDto.MITRA
-              ? assign.driver_2_user_id ?? null
-              : null,
+          driver_1_user_id: assign.driver_1_user_id ?? null,
+          driver_2_user_id: assign.driver_2_user_id ?? null,
           vendor_id:
             assign.assignee_type === FleetTripAssigneeTypeDto.VENDOR
               ? assign.vendor_id ?? null
@@ -814,9 +808,24 @@ export class FleetTripService {
           'vendor_id wajib untuk assignee_type vendor',
         );
       }
+      if (!a.driver_1_user_id) {
+        throw new BadRequestException(
+          'driver_1_user_id wajib untuk assignee_type vendor',
+        );
+      }
       const vendor = await this.vendorModel.findByPk(a.vendor_id);
       if (!vendor) {
         throw new BadRequestException('vendor_id tidak ditemukan');
+      }
+      const d1 = await this.userModel.findByPk(a.driver_1_user_id);
+      if (!d1) {
+        throw new BadRequestException('driver_1_user_id tidak ditemukan');
+      }
+      if (a.driver_2_user_id) {
+        const d2 = await this.userModel.findByPk(a.driver_2_user_id);
+        if (!d2) {
+          throw new BadRequestException('driver_2_user_id tidak ditemukan');
+        }
       }
     }
   }

@@ -27,6 +27,7 @@ import { FleetEstimateResponseDto } from './dto/fleet-estimate-response.dto';
 import { FleetTripService } from './fleet-trip.service';
 import { FleetSaldoService } from './fleet-saldo.service';
 import { CreditFleetDepositSaldoResponseDto } from './dto/credit-fleet-deposit-saldo-response.dto';
+import { CreditFleetDepositSaldoDto } from './dto/credit-fleet-deposit-saldo.dto';
 import { CreateFleetTripDto } from './dto/create-fleet-trip.dto';
 import {
   FleetTripResponseDto,
@@ -179,20 +180,22 @@ export class FleetController {
   }
 
   /**
-   * Kredit deposit supir 1 & 2 ke saldo driver (tabel saldo) berdasarkan fleet trip.
+   * Kredit deposit supir 1 & 2 ke saldo driver (tabel saldo). Mitra & vendor.
+   * Trip vendor tanpa driver di assignment: kirim driver_1_user_id (dan opsional driver_2) di body.
    */
   @UseGuards(JwtAuthGuard)
   @Post('trips/:trackingNo/credit-deposit-saldo')
   @HttpCode(HttpStatus.OK)
   async creditFleetTripDepositSaldo(
     @Param('trackingNo') trackingNo: string,
+    @Body() body: CreditFleetDepositSaldoDto,
     @Request() req: { user?: { id?: number } },
   ): Promise<CreditFleetDepositSaldoResponseDto> {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException('User tidak terautentikasi');
     }
-    return this.fleetSaldoService.creditFleetTripDepositSaldo(trackingNo, userId);
+    return this.fleetSaldoService.creditFleetTripDepositSaldo(trackingNo, userId, body);
   }
 
   @UseGuards(JwtAuthGuard)

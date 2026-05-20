@@ -11,11 +11,13 @@ import { FleetTrip } from '../models/fleet-trip.model';
 import { FleetTripAssignment } from '../models/fleet-trip-assignment.model';
 import { Saldo } from '../models/saldo.model';
 import { User } from '../models/user.model';
+import { Vendor } from '../models/vendor.model';
 import {
   FleetEstimateRoadType,
   FleetEstimateTripType,
 } from './dto/fleet-estimate.dto';
 import { calculateFleetOperationalEstimate } from './fleet-estimate.calculator';
+import { CreditFleetDepositSaldoDto } from './dto/credit-fleet-deposit-saldo.dto';
 import {
   CreditFleetDepositSaldoResponseDto,
   FleetDepositSaldoCreditItemDto,
@@ -32,14 +34,17 @@ export class FleetSaldoService {
     private readonly assignmentModel: typeof FleetTripAssignment,
     @InjectModel(Saldo) private readonly saldoModel: typeof Saldo,
     @InjectModel(User) private readonly userModel: typeof User,
+    @InjectModel(Vendor) private readonly vendorModel: typeof Vendor,
   ) {}
 
   /**
    * Kredit deposit supir 1 & 2 (dari kalkulator fleet) ke saldo driver di tabel saldo.
+   * Mendukung assignee mitra dan vendor.
    */
   async creditFleetTripDepositSaldo(
     trackingNo: string,
     actorUserId: number,
+    body?: CreditFleetDepositSaldoDto,
   ): Promise<CreditFleetDepositSaldoResponseDto> {
     const trimmedTracking = trackingNo?.trim();
     if (!trimmedTracking) {
@@ -64,6 +69,11 @@ export class FleetSaldoService {
               attributes: ['id', 'name', 'freeze_saldo', 'kode_referral'],
               required: false,
             },
+            {
+              association: 'vendor',
+              attributes: ['id', 'nama_vendor'],
+              required: false,
+            },
           ],
         },
       ],
@@ -84,16 +94,34 @@ export class FleetSaldoService {
       throw new BadRequestException('Assignment fleet trip tidak ditemukan');
     }
 
-    if (assignment.getDataValue('assignee_type') !== 'mitra') {
-      throw new BadRequestException(
-        'Kredit deposit saldo hanya untuk trip dengan assignee_type mitra',
-      );
+    const assigneeType = assignment.getDataValue('assignee_type');
+    if (assigneeType !== 'mitra' && assigneeType !== 'vendor') {
+      throw new BadRequestException('assignee_type tidak valid');
     }
 
-    const driver1UserId = assignment.getDataValue('driver_1_user_id');
+    if (assigneeType === 'vendor') {
+      const vendorId = assignment.getDataValue('vendor_id');
+      if (!vendorId) {
+        throw new BadRequestException(
+          'vendor_id wajib pada assignment trip vendor',
+        );
+      }
+      const vendor = await this.vendorModel.findByPk(vendorId);
+      if (!vendor) {
+        throw new BadRequestException('vendor_id tidak ditemukan');
+      }
+    }
+
+    const { driver1UserId, driver2UserId } = this.resolveDriverUserIds(
+      assignment,
+      body,
+    );
+
     if (!driver1UserId) {
       throw new BadRequestException(
-        'driver_1_user_id wajib diisi pada assignment trip sebelum kredit deposit',
+        assigneeType === 'vendor'
+          ? 'driver_1_user_id wajib (simpan di assignment atau kirim di body) sebelum kredit deposit'
+          : 'driver_1_user_id wajib diisi pada assignment trip sebelum kredit deposit',
       );
     }
 
@@ -121,15 +149,14 @@ export class FleetSaldoService {
 
     const deposit1 = calc.supir_1.deposit.total;
     if (deposit1 > 0) {
-      creditsPlan.push({ driver_slot: 1, user_id: Number(driver1UserId), amount: deposit1 });
+      creditsPlan.push({ driver_slot: 1, user_id: driver1UserId, amount: deposit1 });
     }
 
-    const driver2UserId = assignment.getDataValue('driver_2_user_id');
     const deposit2 = calc.supir_2.deposit.total;
     if (driver2UserId && deposit2 > 0) {
       creditsPlan.push({
         driver_slot: 2,
-        user_id: Number(driver2UserId),
+        user_id: driver2UserId,
         amount: deposit2,
       });
     }
@@ -165,10 +192,10 @@ export class FleetSaldoService {
 
       for (const plan of creditsPlan) {
         const result = await this.creditUserSaldo(plan.user_id, plan.amount, transaction);
-        const user =
-          plan.driver_slot === 1
-            ? (assignment.getDataValue('driver1') as User | undefined)
-            : (assignment.getDataValue('driver2') as User | undefined);
+        const user = await this.userModel.findByPk(plan.user_id, {
+          attributes: ['id', 'name'],
+          transaction,
+        });
 
         creditResults.push({
           driver_slot: plan.driver_slot,
@@ -187,10 +214,27 @@ export class FleetSaldoService {
         },
         { transaction },
       );
+
+      if (body?.driver_1_user_id != null || body?.driver_2_user_id != null) {
+        const lockedAssignment = await this.assignmentModel.findOne({
+          where: { fleet_trip_id: tripId },
+          lock: transaction.LOCK.UPDATE,
+          transaction,
+        });
+        if (lockedAssignment) {
+          await lockedAssignment.update(
+            {
+              driver_1_user_id: driver1UserId,
+              driver_2_user_id: driver2UserId ?? null,
+            },
+            { transaction },
+          );
+        }
+      }
     });
 
     this.logger.log(
-      `Fleet trip deposit saldo credited: tracking=${trimmedTracking}, trip_id=${tripId}, actor=${actorUserId}, credits=${creditResults.length}`,
+      `Fleet trip deposit saldo credited: tracking=${trimmedTracking}, assignee=${assigneeType}, trip_id=${tripId}, actor=${actorUserId}, credits=${creditResults.length}`,
     );
 
     return {
@@ -203,6 +247,30 @@ export class FleetSaldoService {
         credits: creditResults,
       },
     };
+  }
+
+  private resolveDriverUserIds(
+    assignment: FleetTripAssignment,
+    body?: CreditFleetDepositSaldoDto,
+  ): { driver1UserId: number | null; driver2UserId: number | null } {
+    const fromAssignment1 = assignment.getDataValue('driver_1_user_id');
+    const fromAssignment2 = assignment.getDataValue('driver_2_user_id');
+
+    const driver1UserId =
+      body?.driver_1_user_id != null
+        ? Number(body.driver_1_user_id)
+        : fromAssignment1 != null
+          ? Number(fromAssignment1)
+          : null;
+
+    const driver2UserId =
+      body?.driver_2_user_id != null
+        ? Number(body.driver_2_user_id)
+        : fromAssignment2 != null
+          ? Number(fromAssignment2)
+          : null;
+
+    return { driver1UserId, driver2UserId };
   }
 
   /**
