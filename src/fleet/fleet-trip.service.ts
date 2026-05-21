@@ -612,11 +612,14 @@ export class FleetTripService {
     const assignment = trip.getDataValue('assignment') as
       | FleetTripAssignment
       | undefined;
+    const platByDriverId = await this.loadPlatKendaraanByDriverUserIds(
+      this.collectDriverUserIdsFromTrips([trip]),
+    );
     const platKendaraan = resolvePlatKendaraanForAssignment(
       assignment,
-      bankByUserId,
+      platByDriverId,
     );
-    const notaKirim = await this.loadNotaKirimForTrip(trip, platKendaraan);
+    const notaKirim = await this.loadNotaKirimForTrip(trackingNo, platKendaraan);
     const operationalCalc = this.tryCalculateOperationalForTrip(trip);
     return mapFleetTripToDetail(trip, bankByUserId, notaKirim, operationalCalc);
   }
@@ -645,33 +648,19 @@ export class FleetTripService {
   }
 
   /**
-   * Nota kirim terkait trip: mitra & vendor via transporter_id (users).
+   * Nota kirim terkait trip: cocokkan fleet tracking_no di no_tracking nota
+   * (daftar resi dipisah koma) atau lewat order dengan no_tracking / assign_sj sama.
    */
   private async loadNotaKirimForTrip(
-    trip: FleetTrip,
+    trackingNo: string,
     platKendaraan?: string | null,
   ): Promise<FleetTripNotaKirimDto[]> {
-    const assignment = trip.getDataValue('assignment') as
-      | FleetTripAssignment
-      | undefined;
-    if (!assignment) {
+    const trimmedTracking = trackingNo?.trim();
+    if (!trimmedTracking) {
       return [];
     }
 
-    const assigneeType = assignment.getDataValue('assignee_type');
     const platFilter = platKendaraan?.trim() || null;
-
-    const driverIds = [
-      assigneeType === 'vendor'
-        ? assignment.getDataValue('vendor_id')
-        : null,
-      assignment.getDataValue('driver_1_user_id'),
-      assignment.getDataValue('driver_2_user_id'),
-    ].filter((id): id is number => id != null);
-
-    if (driverIds.length === 0) {
-      return [];
-    }
 
     return this.queryNotaKirimRows(
       `SELECT
@@ -679,12 +668,28 @@ export class FleetTripService {
          tanggal,
          no_polisi,
          nama_transporter
-       FROM order_delivery_notes
-       WHERE transporter_id IN (:driverIds)
-         ${platFilter ? 'AND TRIM(no_polisi) = :plat' : ''}
-       ORDER BY id DESC
+       FROM order_delivery_notes dn
+       WHERE (
+         dn.no_tracking = :trackingNo
+         OR dn.no_tracking LIKE CONCAT(:trackingNo, ',%')
+         OR dn.no_tracking LIKE CONCAT('%,', :trackingNo, ',%')
+         OR dn.no_tracking LIKE CONCAT('%,', :trackingNo)
+         OR dn.no_delivery_note = :trackingNo
+         OR EXISTS (
+           SELECT 1 FROM orders o
+           WHERE o.no_tracking = :trackingNo
+             AND (
+               dn.no_tracking LIKE CONCAT('%', o.no_tracking, '%')
+               OR o.assign_sj = dn.no_delivery_note
+             )
+         )
+       )
+         ${platFilter ? 'AND TRIM(dn.no_polisi) = :plat' : ''}
+       ORDER BY dn.id DESC
        LIMIT 10`,
-      platFilter ? { driverIds, plat: platFilter } : { driverIds },
+      platFilter
+        ? { trackingNo: trimmedTracking, plat: platFilter }
+        : { trackingNo: trimmedTracking },
     );
   }
 
