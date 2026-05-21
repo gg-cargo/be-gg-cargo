@@ -1,5 +1,6 @@
-import { IsArray, ArrayNotEmpty, IsInt, IsOptional, IsString, IsNotEmpty, IsIn, IsDateString } from 'class-validator';
+import { IsArray, ArrayNotEmpty, IsInt, IsOptional, IsString, IsNotEmpty, IsIn, IsDateString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { CustomDeliveryNoteHubDto } from './create-custom-delivery-note.dto';
 
 export class CreateDeliveryNoteDto {
     @IsArray({ message: 'resi_list harus berupa array' })
@@ -7,18 +8,32 @@ export class CreateDeliveryNoteDto {
     @IsString({ each: true, message: 'Setiap resi harus berupa string' })
     resi_list: string[];
 
+    @IsOptional()
     @Type(() => Number)
     @IsInt({ message: 'hub_asal_id harus berupa angka' })
-    hub_asal_id: number;
+    hub_asal_id?: number;
 
+    @IsOptional()
     @Type(() => Number)
     @IsInt({ message: 'hub_tujuan_id harus berupa angka' })
-    hub_tujuan_id: number;
+    hub_tujuan_id?: number;
 
     @IsOptional()
     @Type(() => Number)
     @IsInt({ message: 'hub_transit_id harus berupa angka' })
     hub_transit_id?: number;
+
+    /** Label From di PDF (wajib jika hub_asal_id tidak diisi) */
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => CustomDeliveryNoteHubDto)
+    from_hub?: CustomDeliveryNoteHubDto;
+
+    /** Label To di PDF (wajib jika hub_tujuan_id tidak diisi) */
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => CustomDeliveryNoteHubDto)
+    to_hub?: CustomDeliveryNoteHubDto;
 
     @Type(() => Number)
     @IsInt({ message: 'transporter_id harus berupa angka' })

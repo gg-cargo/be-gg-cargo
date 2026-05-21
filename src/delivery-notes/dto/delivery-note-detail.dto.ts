@@ -8,6 +8,7 @@ export class DeliveryNoteDetailTransporterDto {
 export class DeliveryNoteDetailHubDto {
     id: number;
     nama: string;
+    alamat?: string | null;
 }
 
 export class DeliveryNoteDetailOrderDto {

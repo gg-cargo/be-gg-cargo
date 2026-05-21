@@ -136,15 +136,15 @@ export class OrderDeliveryNote extends Model {
 
     @Column({
         type: DataType.INTEGER,
-        allowNull: false,
+        allowNull: true,
     })
-    hub_id: number;
+    hub_id: number | null;
 
     @Column({
         type: DataType.INTEGER,
-        allowNull: false,
+        allowNull: true,
     })
-    agent_id: number;
+    agent_id: number | null;
 
     @Column({
         type: DataType.INTEGER,
@@ -158,6 +158,30 @@ export class OrderDeliveryNote extends Model {
         allowNull: true,
     })
     hub_bypass: string;
+
+    @Column({
+        type: DataType.STRING(200),
+        allowNull: true,
+    })
+    from_hub_nama: string | null;
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true,
+    })
+    from_hub_alamat: string | null;
+
+    @Column({
+        type: DataType.STRING(200),
+        allowNull: true,
+    })
+    to_hub_nama: string | null;
+
+    @Column({
+        type: DataType.TEXT,
+        allowNull: true,
+    })
+    to_hub_alamat: string | null;
 
     @Column({
         type: DataType.INTEGER,

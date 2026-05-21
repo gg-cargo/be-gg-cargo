@@ -22,6 +22,7 @@ import { InboundConfirmWebDto, InboundConfirmWebResponseDto } from './dto/inboun
 import { ScanPieceDto, ScanPieceResponseDto } from './dto/scan-piece.dto';
 import { NotificationBadgesService } from '../notification-badges/notification-badges.service';
 import { CreateCustomDeliveryNoteDto } from './dto/create-custom-delivery-note.dto';
+import { LayananType } from '../orders/dto/create-order.dto';
 
 @Injectable()
 export class DeliveryNotesService {
@@ -47,6 +48,128 @@ export class DeliveryNotesService {
         const dd = String(date.getDate()).padStart(2, '0');
         const seqStr = String(seq).padStart(3, '0');
         return `${yyyy}${mon}${dd}${hubKode}${seqStr}`;
+    }
+
+    private hasHubId(value: number | undefined | null): value is number {
+        return value != null && !Number.isNaN(Number(value));
+    }
+
+    private isSewaTrukLayanan(layanan: string | null | undefined): boolean {
+        const normalized = (layanan || '').trim().toLowerCase();
+        return (
+            normalized === LayananType.SEWA_TRUK.toLowerCase() ||
+            normalized === 'sewa truck'
+        );
+    }
+
+    private loadHubById(
+        id: number | null | undefined,
+        attributes: string[] = ['nama', 'alamat'],
+    ): Promise<Hub | null> {
+        if (!this.hasHubId(id)) {
+            return Promise.resolve(null);
+        }
+        return this.hubModel.findByPk(id, { attributes, raw: true }) as Promise<Hub | null>;
+    }
+
+    private async resolveHubsForDeliveryNote(dto: CreateDeliveryNoteDto): Promise<{
+        hubAsal: Hub | null;
+        hubTujuan: Hub | null;
+        hubTransit: Hub | null;
+        customHubLabels: ReturnType<DeliveryNotesService['extractCustomHubLabels']>;
+    }> {
+        const customHubLabels = this.extractCustomHubLabels(dto);
+        const hasAsalId = this.hasHubId(dto.hub_asal_id);
+        const hasTujuanId = this.hasHubId(dto.hub_tujuan_id);
+        const hasTransitId = this.hasHubId(dto.hub_transit_id);
+        const hasCustomFrom = !!customHubLabels.from_hub_nama;
+        const hasCustomTo = !!customHubLabels.to_hub_nama;
+
+        if (!hasAsalId && !hasCustomFrom) {
+            throw new BadRequestException(
+                'hub_asal_id atau from_hub.nama wajib diisi',
+            );
+        }
+        if (!hasTujuanId && !hasCustomTo) {
+            throw new BadRequestException(
+                'hub_tujuan_id atau to_hub.nama wajib diisi',
+            );
+        }
+
+        const [hubAsal, hubTujuan, hubTransit] = await Promise.all([
+            hasAsalId ? this.hubModel.findByPk(dto.hub_asal_id) : Promise.resolve(null),
+            hasTujuanId ? this.hubModel.findByPk(dto.hub_tujuan_id) : Promise.resolve(null),
+            hasTransitId ? this.hubModel.findByPk(dto.hub_transit_id) : Promise.resolve(null),
+        ]);
+
+        if (hasAsalId && !hubAsal) {
+            throw new NotFoundException('Hub asal tidak ditemukan');
+        }
+        if (hasTujuanId && !hubTujuan) {
+            throw new NotFoundException('Hub tujuan tidak ditemukan');
+        }
+        if (hasTransitId && !hubTransit) {
+            throw new NotFoundException('Hub transit tidak ditemukan');
+        }
+
+        return { hubAsal, hubTujuan, hubTransit, customHubLabels };
+    }
+
+    private extractCustomHubLabels(dto: CreateDeliveryNoteDto): {
+        from_hub_nama: string | null;
+        from_hub_alamat: string | null;
+        to_hub_nama: string | null;
+        to_hub_alamat: string | null;
+    } {
+        const fromNama = dto.from_hub?.nama?.trim();
+        const toNama = dto.to_hub?.nama?.trim();
+        return {
+            from_hub_nama: fromNama || null,
+            from_hub_alamat: fromNama ? (dto.from_hub?.alamat?.trim() || null) : null,
+            to_hub_nama: toNama || null,
+            to_hub_alamat: toNama ? (dto.to_hub?.alamat?.trim() || null) : null,
+        };
+    }
+
+    /** Hanya field yang dikirim di body update yang di-patch (undefined = tetap pakai nilai lama). */
+    private extractCustomHubLabelsForUpdate(
+        dto: CreateDeliveryNoteDto,
+    ): Record<string, string | null> {
+        const patch: Record<string, string | null> = {};
+        if (dto.from_hub !== undefined) {
+            const fromNama = dto.from_hub?.nama?.trim();
+            patch.from_hub_nama = fromNama || null;
+            patch.from_hub_alamat = fromNama ? (dto.from_hub?.alamat?.trim() || null) : null;
+        }
+        if (dto.to_hub !== undefined) {
+            const toNama = dto.to_hub?.nama?.trim();
+            patch.to_hub_nama = toNama || null;
+            patch.to_hub_alamat = toNama ? (dto.to_hub?.alamat?.trim() || null) : null;
+        }
+        return patch;
+    }
+
+    private resolveHubDisplayForPdf(
+        note: {
+            from_hub_nama?: string | null;
+            from_hub_alamat?: string | null;
+            to_hub_nama?: string | null;
+            to_hub_alamat?: string | null;
+        },
+        hubMaster: { nama?: string; alamat?: string | null } | null,
+        customNama?: string | null,
+        customAlamat?: string | null,
+    ): { nama: string; alamat: string } {
+        if (customNama?.trim()) {
+            return {
+                nama: customNama.trim(),
+                alamat: customAlamat?.trim() || '',
+            };
+        }
+        return {
+            nama: hubMaster?.nama || '-',
+            alamat: hubMaster?.alamat || '',
+        };
     }
 
     private resolveTransportMetadata(dto: CreateDeliveryNoteDto): {
@@ -126,15 +249,8 @@ export class DeliveryNotesService {
         }
         const transportMetadata = this.resolveTransportMetadata(dto);
 
-        // Validasi hubs
-        const [hubAsal, hubTujuan, hubTransit] = await Promise.all([
-            this.hubModel.findByPk(dto.hub_asal_id),
-            this.hubModel.findByPk(dto.hub_tujuan_id),
-            dto.hub_transit_id ? this.hubModel.findByPk(dto.hub_transit_id) : Promise.resolve(null),
-        ]);
-        if (!hubAsal) throw new NotFoundException('Hub asal tidak ditemukan');
-        if (!hubTujuan) throw new NotFoundException('Hub tujuan tidak ditemukan');
-        if (dto.hub_transit_id && !hubTransit) throw new NotFoundException('Hub transit tidak ditemukan');
+        const { hubAsal, hubTujuan, hubTransit, customHubLabels } =
+            await this.resolveHubsForDeliveryNote(dto);
 
         // Validasi transporter_id & ambil nama_transporter
         const transporter = await this.userModel.findByPk(dto.transporter_id, { attributes: ['id', 'name', 'level'], raw: true });
@@ -148,16 +264,17 @@ export class DeliveryNotesService {
         // Ambil orders berdasarkan resi_list
         const orders = await this.orderModel.findAll({
             where: { no_tracking: { [Op.in]: dto.resi_list } },
-            attributes: ['id', 'no_tracking', 'status', 'reweight_status', 'hub_dest_id'],
+            attributes: ['id', 'no_tracking', 'status', 'reweight_status', 'hub_dest_id', 'layanan'],
             raw: true,
         });
         if (orders.length !== dto.resi_list.length) {
             throw new BadRequestException('Terdapat nomor resi yang tidak valid');
         }
 
-        // Validasi hanya order dengan statusOps "Menunggu pengiriman"
+        // Validasi hanya order dengan statusOps "Menunggu pengiriman" (bypass untuk layanan sewa truk)
         // Definisi: reweight_status = 1 dan status bukan 'In Transit' atau 'Delivered'
-        const invalidOrders = orders.filter(
+        const ordersToValidate = orders.filter((o: any) => !this.isSewaTrukLayanan(o.layanan));
+        const invalidOrders = ordersToValidate.filter(
             (o: any) => Number(o.reweight_status) !== 1 || o.status === 'In Transit' || o.status === 'Delivered'
         );
         if (invalidOrders.length > 0) {
@@ -178,15 +295,18 @@ export class DeliveryNotesService {
         });
 
         // Generate nomor nota kirim
-        const hubKode = hubTujuan.getDataValue('kode');
+        const hubKode = hubTujuan?.getDataValue('kode') ?? 'CUS';
         const today = new Date();
-        // Dapatkan sequence dengan menghitung jumlah nota di hari ini dan hub tujuan
-        const seq = await this.orderDeliveryNoteModel.count({
-            where: {
-                hub_id: hubTujuan.getDataValue('id'),
-                created_at: { [Op.gte]: new Date(today.getFullYear(), today.getMonth(), today.getDate()) },
-            },
-        });
+        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const seqWhere: Record<string, unknown> = {
+            created_at: { [Op.gte]: startOfDay },
+        };
+        if (hubTujuan) {
+            seqWhere.hub_id = hubTujuan.getDataValue('id');
+        } else {
+            seqWhere.hub_id = { [Op.is]: null };
+        }
+        const seq = await this.orderDeliveryNoteModel.count({ where: seqWhere });
         const noDeliveryNote = this.generateDeliveryNoteNumber(today, hubKode, seq + 1);
 
         // Buat record delivery note
@@ -222,31 +342,40 @@ export class DeliveryNotesService {
             vessel_name: transportMetadata.vesselName,
             etd: transportMetadata.etd,
             eta: transportMetadata.eta,
-            hub_id: hubTujuan.getDataValue('id'),
-            agent_id: hubAsal.getDataValue('id'),
+            hub_id: hubTujuan?.getDataValue('id') ?? null,
+            agent_id: hubAsal?.getDataValue('id') ?? null,
             status: 0,
             hub_bypass: hubTransit ? String(hubTransit.id) : null,
+            ...customHubLabels,
             created_by: createdByUserId,
-            type: 'HUB',
+            type: hubTujuan || hubAsal ? 'HUB' : 'CUSTOM',
             created_at: new Date(),
         });
 
         // Update orders dan pieces - cek status berdasarkan hub_dest_id vs next_hub
         const orderIds = orders.map((o) => o.id);
-        const nextHubId = dto.hub_transit_id ?? dto.hub_tujuan_id;
+        const nextHubId = this.hasHubId(dto.hub_transit_id)
+            ? dto.hub_transit_id
+            : this.hasHubId(dto.hub_tujuan_id)
+              ? dto.hub_tujuan_id
+              : null;
 
         // Update setiap order dengan status yang sesuai
         for (const order of orders) {
-            const updateData = {
+            const updateData: Record<string, unknown> = {
                 assign_sj: noDeliveryNote,
                 transporter_id: String(dto.transporter_id),
                 truck_id: transportMetadata.noPolisi,
                 status: ORDER_STATUS.IN_TRANSIT,
                 issetManifest_inbound: 0,
                 issetManifest_outbound: 1,
-                current_hub: String(dto.hub_asal_id),
-                next_hub: String(nextHubId),
             };
+            if (this.hasHubId(dto.hub_asal_id)) {
+                updateData.current_hub = String(dto.hub_asal_id);
+            }
+            if (nextHubId != null) {
+                updateData.next_hub = String(nextHubId);
+            }
 
             await this.orderModel.update(updateData, { where: { id: order.id } });
 
@@ -278,9 +407,14 @@ export class DeliveryNotesService {
             toll_total: 0,
             grand_total: 0,
             status: 'scheduled',
-            current_hub: hubAsal.getDataValue('id'),
-            next_hub: nextHubId
+            current_hub: hubAsal?.getDataValue('id') ?? null,
+            next_hub: nextHubId,
         } as any);
+
+        const tujuanLabel =
+            customHubLabels.to_hub_nama ??
+            hubTujuan?.getDataValue('nama') ??
+            'tujuan';
 
         // Insert order_histories untuk setiap order
         const { date, time } = getOrderHistoryDateTime();
@@ -288,7 +422,7 @@ export class DeliveryNotesService {
             await this.orderHistoryModel.create({
                 order_id: order.id,
                 status: 'Delivery Note Created',
-                remark: `Pesanan berangkat ke ${hubTujuan.getDataValue('nama')}`,
+                remark: `Pesanan berangkat ke ${tujuanLabel}`,
                 date: date,
                 time: time,
                 created_by: createdByUserId,
@@ -309,11 +443,23 @@ export class DeliveryNotesService {
         const note = await this.orderDeliveryNoteModel.findOne({ where: { no_delivery_note: noDeliveryNote }, raw: true });
         if (!note) throw new NotFoundException('Delivery note tidak ditemukan');
 
-        // Ambil hub asal (agent_id) dan hub tujuan (hub_id)
+        // Ambil hub asal (agent_id) dan hub tujuan (hub_id); label PDF bisa override custom
         const [fromHub, toHub] = await Promise.all([
-            this.hubModel.findByPk(note.agent_id, { attributes: ['nama', 'alamat'], raw: true }),
-            this.hubModel.findByPk(note.hub_id, { attributes: ['nama', 'alamat'], raw: true }),
+            this.loadHubById(note.agent_id),
+            this.loadHubById(note.hub_id),
         ]);
+        const fromHubPdf = this.resolveHubDisplayForPdf(
+            note as any,
+            fromHub,
+            (note as any).from_hub_nama,
+            (note as any).from_hub_alamat,
+        );
+        const toHubPdf = this.resolveHubDisplayForPdf(
+            note as any,
+            toHub,
+            (note as any).to_hub_nama,
+            (note as any).to_hub_alamat,
+        );
 
         // Ambil daftar resi
         const resiList = (note.no_tracking || '').split(',').map((s: string) => s.trim()).filter(Boolean);
@@ -386,8 +532,8 @@ export class DeliveryNotesService {
 
         const link = await generateDeliveryNotePDF({
             no_delivery_note: note.no_delivery_note,
-            from_hub: fromHub ? { nama: fromHub.nama, alamat: fromHub.alamat } : null,
-            to_hub: toHub ? { nama: toHub.nama, alamat: toHub.alamat } : null,
+            from_hub: fromHubPdf,
+            to_hub: toHubPdf,
             transporter: {
                 nama: note.nama_transporter || '-',
                 jenis_kendaraan: note.jenis_kendaraan || '-',
@@ -594,19 +740,29 @@ export class DeliveryNotesService {
 
         // Ambil data hub asal dan tujuan
         const [hubAsal, hubTujuan, hubTransit] = await Promise.all([
-            this.hubModel.findByPk(deliveryNote.agent_id, {
-                attributes: ['id', 'nama'],
-                raw: true,
-            }),
-            this.hubModel.findByPk(deliveryNote.hub_id, {
-                attributes: ['id', 'nama'],
-                raw: true,
-            }),
-            deliveryNote.hub_bypass ? this.hubModel.findByPk(deliveryNote.hub_bypass, {
-                attributes: ['id', 'nama'],
-                raw: true,
-            }) : Promise.resolve(null),
+            this.loadHubById(deliveryNote.agent_id, ['id', 'nama', 'alamat']),
+            this.loadHubById(deliveryNote.hub_id, ['id', 'nama', 'alamat']),
+            deliveryNote.hub_bypass
+                ? this.hubModel.findByPk(deliveryNote.hub_bypass, {
+                      attributes: ['id', 'nama'],
+                      raw: true,
+                  })
+                : Promise.resolve(null),
         ]);
+
+        const noteRow = deliveryNote as any;
+        const asalDisplay = this.resolveHubDisplayForPdf(
+            noteRow,
+            hubAsal,
+            noteRow.from_hub_nama,
+            noteRow.from_hub_alamat,
+        );
+        const tujuanDisplay = this.resolveHubDisplayForPdf(
+            noteRow,
+            hubTujuan,
+            noteRow.to_hub_nama,
+            noteRow.to_hub_alamat,
+        );
 
         // Ambil daftar resi dan data order
         const resiList = (deliveryNote.no_tracking || '').split(',').map((s: string) => s.trim()).filter(Boolean);
@@ -663,12 +819,14 @@ export class DeliveryNotesService {
                 rute: {
                     asal: hubAsal ? {
                         id: hubAsal.id,
-                        nama: hubAsal.nama,
-                    } : { id: 0, nama: '-' },
+                        nama: asalDisplay.nama,
+                        alamat: asalDisplay.alamat || null,
+                    } : { id: 0, nama: '-', alamat: null },
                     tujuan: hubTujuan ? {
                         id: hubTujuan.id,
-                        nama: hubTujuan.nama,
-                    } : { id: 0, nama: '-' },
+                        nama: tujuanDisplay.nama,
+                        alamat: tujuanDisplay.alamat || null,
+                    } : { id: 0, nama: '-', alamat: null },
                     transit: hubTransit ? {
                         id: hubTransit.id,
                         nama: hubTransit.nama,
@@ -691,15 +849,8 @@ export class DeliveryNotesService {
         const existing = await this.orderDeliveryNoteModel.findOne({ where: whereClause, raw: true });
         if (!existing) throw new NotFoundException('Delivery note tidak ditemukan');
 
-        // Validasi referensi
-        const [hubAsal, hubTujuan, hubTransit] = await Promise.all([
-            this.hubModel.findByPk(dto.hub_asal_id),
-            this.hubModel.findByPk(dto.hub_tujuan_id),
-            dto.hub_transit_id ? this.hubModel.findByPk(dto.hub_transit_id) : Promise.resolve(null),
-        ]);
-        if (!hubAsal) throw new NotFoundException('Hub asal tidak ditemukan');
-        if (!hubTujuan) throw new NotFoundException('Hub tujuan tidak ditemukan');
-        if (dto.hub_transit_id && !hubTransit) throw new NotFoundException('Hub transit tidak ditemukan');
+        const { hubAsal, hubTujuan, hubTransit } =
+            await this.resolveHubsForDeliveryNote(dto);
 
         // const vehicle = await this.truckListModel.findOne({ where: { no_polisi: dto.no_polisi } });
         // if (!vehicle) throw new NotFoundException('Kendaraan dengan no_polisi tersebut tidak ditemukan');
@@ -727,6 +878,8 @@ export class DeliveryNotesService {
             sealString = cleaned.join(',');
         }
 
+        const customHubPatch = this.extractCustomHubLabelsForUpdate(dto);
+
         // Update header delivery note
         await this.orderDeliveryNoteModel.update({
             no_tracking: newResi.join(','),
@@ -742,9 +895,10 @@ export class DeliveryNotesService {
             vessel_name: transportMetadata.vesselName,
             etd: transportMetadata.etd,
             eta: transportMetadata.eta,
-            hub_id: hubTujuan.getDataValue('id'),
-            agent_id: hubAsal.getDataValue('id'),
+            hub_id: hubTujuan?.getDataValue('id') ?? null,
+            agent_id: hubAsal?.getDataValue('id') ?? null,
             hub_bypass: hubTransit ? String(hubTransit.id) : null,
+            ...customHubPatch,
         }, { where: { id: existing.id } });
 
         // Update status truck lama dan baru jika berganti
@@ -758,17 +912,30 @@ export class DeliveryNotesService {
         const removedOrders = await this.orderModel.findAll({ where: { no_tracking: { [Op.in]: removed } }, raw: true });
 
         // Sinkronkan semua orders yang masih ada di nota
+        const nextHubIdUpdate = this.hasHubId(dto.hub_transit_id)
+            ? dto.hub_transit_id
+            : this.hasHubId(dto.hub_tujuan_id)
+              ? dto.hub_tujuan_id
+              : null;
+
         if (currentOrders.length) {
-            await this.orderModel.update({
+            const orderUpdate: Record<string, unknown> = {
                 assign_sj: existing.no_delivery_note,
                 status: ORDER_STATUS.IN_TRANSIT,
                 transporter_id: dto.transporter_id,
                 truck_id: transportMetadata.noPolisi,
                 issetManifest_inbound: 0,
                 issetManifest_outbound: 1,
-                current_hub: String(dto.hub_asal_id),
-                next_hub: String(dto.hub_transit_id ?? dto.hub_tujuan_id),
-            }, { where: { id: { [Op.in]: currentOrders.map((o: any) => o.id) } } });
+            };
+            if (this.hasHubId(dto.hub_asal_id)) {
+                orderUpdate.current_hub = String(dto.hub_asal_id);
+            }
+            if (nextHubIdUpdate != null) {
+                orderUpdate.next_hub = String(nextHubIdUpdate);
+            }
+            await this.orderModel.update(orderUpdate, {
+                where: { id: { [Op.in]: currentOrders.map((o: any) => o.id) } },
+            });
         }
 
         // Lepas orders yang dihapus dari nota
